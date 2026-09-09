@@ -29,7 +29,7 @@ function simulatePass(track, segment, x) {
     obs.y = player.y + player.height / 2 + 10;
   }
 
-  return track.checkPassed(player);
+  return track.checkPassed(player).rewardType;
 }
 
 const results = [];
@@ -104,7 +104,7 @@ check('checkPassed SAFE does not fallback from unknown', () => {
   for (const obs of normal.obstacles) obs.y = player.y + 100;
   const reward = track.checkPassed(player);
   console.warn = original;
-  assert(reward === null, `expected null, got ${reward}`);
+  assert(reward.rewardType === null, `expected null, got ${reward.rewardType}`);
   assert(warns.length > 0, 'expected warning when path is unknown');
 });
 
@@ -120,10 +120,10 @@ check('TWO_PATHS SAFE and RISK rewards', () => {
   const riskReward = simulatePass(track, segment, risk.x + risk.width / 2);
   assert(riskReward === 'RISKY', `RISK pass got ${riskReward}`);
   const again = track.checkPassed(makePlayer(safe.x + safe.width / 2));
-  assert(again === null, 'reward must be granted only once');
+  assert(again.rewardType === null, 'reward must be granted only once');
 });
 
-check('SHORT_RISKY paths match both gaps', () => {
+check('SHORT_RISKY paths match slalom gaps', () => {
   const track = new Track();
   track.addSegment(track.segments[track.segments.length - 1].y - CONFIG.SEGMENT_HEIGHT, 'SHORT_RISKY');
   const segment = track.segments[track.segments.length - 1];
@@ -134,12 +134,14 @@ check('SHORT_RISKY paths match both gaps', () => {
   }
   const short = [...track.segments].reverse().find((segment) => segment.type === 'SHORT_RISKY');
   assert(short, 'SHORT_RISKY was not generated');
-  assert(short.paths.length === 2, `expected 2 paths, got ${short.paths.length}`);
+  assert(short.paths.length === 4, `expected 4 paths, got ${short.paths.length}`);
   assert(short.paths.every((path) => path.type === 'SHORT_RISKY'), 'path type mismatch');
-  const first = short.paths.reduce((a, b) => (a.y > b.y ? a : b));
-  const second = short.paths.reduce((a, b) => (a.y < b.y ? a : b));
-  assert(first.x !== second.x, 'zigzag gaps should differ');
-  const reward = simulatePass(track, short, first.x + first.width / 2);
+  
+  // Проверяем зигзаг
+  assert(short.paths[0].x === CONFIG.TRACK_LEFT, 'Gate 1 should be on the left');
+  assert(Math.abs(short.paths[1].x - (CONFIG.TRACK_RIGHT - short.paths[1].width)) < 1, 'Gate 2 should be on the right');
+  
+  const reward = simulatePass(track, short, short.paths[0].x + short.paths[0].width / 2);
   assert(reward === 'SHORT_RISKY', `got ${reward}`);
 });
 

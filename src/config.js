@@ -21,17 +21,17 @@ export const CONFIG = {
   // Система очков и множителей
   SCORE_BASE_PER_SECOND: 10,
   MULTIPLIER_START: 1,
-  MULTIPLIER_STEP: 0.25,
-  MULTIPLIER_MAX: 10,
 
   // Награды за типы прохождения
   REWARDS: {
-    SAFE: 50,
-    RISKY: 200,
-    SHORT_RISKY: 500
+    SAFE: 10,
+    RISKY: 100,
+    SHORT_RISKY: 250
   },
 
-  // Сложность
+  // Множитель
+  MULTIPLIER_STEP: 0.25,
+  MULTIPLIER_MAX: 5.0,
   DIFFICULTY_GROWTH: 0.05, // Прирост скорости каждые 1000 очков (процент)
   MIN_GAP: 70, // Минимально возможный проход для игрока
   REACHABILITY_MARGIN: 0.75, // Запас при проверке, успеет ли игрок доехать до прохода

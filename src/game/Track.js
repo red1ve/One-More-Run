@@ -156,6 +156,7 @@ export class Track {
       type: segmentType,
       isPassed: false,
       chosenPathType: null,
+      isChoiceSegment: segmentType === 'TWO_PATHS',
       paths: [],
       obstacles: []
     };
@@ -362,7 +363,7 @@ export class Track {
       { x: layout.riskGap2X, width: riskW }
     ]);
 
-    return { obstacles, paths };
+    return { obstacles, paths, isChoiceSegment: true };
   }
 
   createRisky(segmentY) {
@@ -378,32 +379,23 @@ export class Track {
 
   createShortRisky(segmentY) {
     const obsHeight = 40;
-    const sGap = Math.max(CONFIG.MIN_GAP, 90);
-    const firstY = segmentY + 420;
-    const secondY = segmentY + 120;
-    const innerTravel = firstY - secondY;
-
-    const firstPlaced = this.placeReachableGap(sGap, firstY, this.lastGapX);
-    if (firstPlaced.width > sGap + 8) return null;
-
-    const first = { x: firstPlaced.x, width: sGap };
-    const goRight = first.x + first.width / 2 < CONFIG.CANVAS_WIDTH / 2;
-    const desiredSecond = goRight ? CONFIG.TRACK_RIGHT - sGap : CONFIG.TRACK_LEFT;
-    const secondX = this.findFarthestReachableGap(first, sGap, innerTravel, desiredSecond);
-    const second = { x: secondX, width: sGap };
-
-    if (!this.canReach(first, second, innerTravel)) return null;
-
+    const sGap = Math.max(CONFIG.MIN_GAP, 70);
+    const ySteps = [450, 350, 250, 150];
+    const pathYs = ySteps.map((y) => segmentY + y);
+    
+    const paths = [];
     const obstacles = [];
-    this.addWallsAroundGap(obstacles, first.x, sGap, firstY, obsHeight);
-    this.addWallsAroundGap(obstacles, second.x, sGap, secondY, obsHeight);
+    let currentX = (CONFIG.TRACK_LEFT + CONFIG.TRACK_RIGHT) / 2 - sGap / 2;
+    
+    for (let i = 0; i < pathYs.length; i++) {
+      const y = pathYs[i];
+      const gapX = i % 2 === 0 ? CONFIG.TRACK_LEFT : CONFIG.TRACK_RIGHT - sGap;
+      
+      paths.push({ x: gapX, y, width: sGap, height: obsHeight, type: 'SHORT_RISKY' });
+      this.addWallsAroundGap(obstacles, gapX, sGap, y, obsHeight);
+    }
 
-    const paths = [
-      { x: first.x, y: firstY, width: sGap, height: obsHeight, type: 'SHORT_RISKY' },
-      { x: second.x, y: secondY, width: sGap, height: obsHeight, type: 'SHORT_RISKY' }
-    ];
-
-    this.setExits([second]);
+    this.setExits([{ x: paths[paths.length - 1].x, width: sGap }]);
     return { obstacles, paths };
   }
 
@@ -459,7 +451,7 @@ export class Track {
   }
 
   checkPassed(player) {
-    let rewardType = null;
+    let result = { rewardType: null, isIntentional: false };
 
     for (const segment of this.segments) {
       if (segment.isPassed || segment.type === 'EMPTY') continue;
@@ -471,15 +463,16 @@ export class Track {
       segment.isPassed = true;
 
       if (segment.chosenPathType) {
-        if (rewardType === null) {
-          rewardType = segment.chosenPathType;
+        if (result.rewardType === null) {
+          result.rewardType = segment.chosenPathType;
+          result.isIntentional = segment.isChoiceSegment && segment.chosenPathType === 'RISKY';
         }
       } else if (segment.paths.length > 0) {
         console.warn('Track: путь не определён, награда не начислена. type=', segment.type);
       }
     }
 
-    return rewardType;
+    return result;
   }
 
   checkCollision(player) {

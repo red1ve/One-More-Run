@@ -128,6 +128,21 @@ export class Renderer {
     this.ctx.restore();
   }
 
+  drawFloatingRewards(rewards) {
+    this.ctx.save();
+    this.ctx.textAlign = 'center';
+    this.ctx.font = 'bold 24px system-ui, sans-serif';
+
+    rewards.forEach((r) => {
+      const isRisk = r.type === 'RISKY' || r.type === 'SHORT_RISKY';
+      this.ctx.fillStyle = isRisk ? CONFIG.COLORS.RISKY_LABEL : CONFIG.COLORS.SAFE_LABEL;
+      this.ctx.globalAlpha = r.life;
+      this.ctx.fillText(`+${r.value}`, r.x, r.y);
+    });
+
+    this.ctx.restore();
+  }
+
   drawHUD(score, multiplier, bestScore) {
     this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
     this.ctx.font = '20px system-ui, sans-serif';

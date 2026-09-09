@@ -21,12 +21,15 @@ export class Game {
     
     this.state = 'START'; // START, PLAYING, GAMEOVER
     this.score = 0;
+    this.distanceScore = 0;
+    this.pathReward = 0;
     this.bestScore = this.storage.get('bestScore', 0);
     this.multiplier = CONFIG.MULTIPLIER_START;
     
     this.currentSpeed = CONFIG.GAME_SPEED;
     this.lastTime = 0;
     this.isRunning = false;
+    this.floatingRewards = [];
   }
 
   start() {
@@ -34,12 +37,15 @@ export class Game {
     this.isRunning = true;
     this.state = 'PLAYING';
     this.score = 0;
+    this.distanceScore = 0;
+    this.pathReward = 0;
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.currentSpeed = CONFIG.GAME_SPEED;
-    
+    this.floatingRewards = [];
+
     this.player.reset();
     this.track.reset();
-    
+
     this.lastTime = performance.now();
     requestAnimationFrame((t) => this.loop(t));
   }
@@ -85,49 +91,75 @@ export class Game {
     this.player.update(deltaTime);
 
     // Рост сложности (скорости) на основе очков
-    this.currentSpeed = CONFIG.GAME_SPEED * (1 + (this.score / 10000) * CONFIG.DIFFICULTY_GROWTH);
-    
+    this.currentSpeed = CONFIG.GAME_SPEED * (1 + ((this.distanceScore + this.pathReward) / 10000) * CONFIG.DIFFICULTY_GROWTH);
+
     // Обновление трассы
     this.track.update(deltaTime, this.currentSpeed);
 
-    // Начисление очков за время
-    this.score += CONFIG.SCORE_BASE_PER_SECOND * this.multiplier * deltaTime;
+    // Начисление очков за время (не умножается на множитель)
+    this.distanceScore += CONFIG.SCORE_BASE_PER_SECOND * deltaTime;
+    this.score = Math.floor(this.distanceScore + this.pathReward);
+
+    const result = this.track.checkPassed(this.player);
+    if (result.rewardType) {
+      this.applyReward(result.rewardType, result.isIntentional);
+    }
+
+    // Обновление всплывающих очков
+    this.floatingRewards = this.floatingRewards.filter(r => {
+      r.y -= 100 * deltaTime;
+      r.life -= deltaTime;
+      return r.life > 0;
+    });
 
     if (this.track.checkCollision(this.player)) {
       this.gameOver();
       return;
     }
-
-    const rewardType = this.track.checkPassed(this.player);
-    if (rewardType) {
-      this.applyReward(rewardType);
-    }
   }
 
-  applyReward(type) {
+  applyReward(type, isIntentional) {
     if (!Object.prototype.hasOwnProperty.call(CONFIG.REWARDS, type)) {
       console.warn('Game: неизвестный тип награды, пропуск', type);
       return;
     }
 
-    const reward = CONFIG.REWARDS[type];
-    this.score += reward * this.multiplier;
+    const baseReward = CONFIG.REWARDS[type];
+    let finalReward = baseReward;
 
-    if (type === 'RISKY' || type === 'SHORT_RISKY') {
+    if (isIntentional) {
+      finalReward *= this.multiplier;
       this.multiplier = Math.min(this.multiplier + CONFIG.MULTIPLIER_STEP, CONFIG.MULTIPLIER_MAX);
+    } else if (type === 'SHORT_RISKY') {
+      finalReward = baseReward * this.multiplier;
+    } else {
+      // SAFE или Forced RISKY
+      finalReward = baseReward;
     }
+
+    this.pathReward += finalReward;
+    this.score = Math.floor(this.distanceScore + this.pathReward);
+
+    this.floatingRewards.push({
+      x: this.player.x,
+      y: this.player.y - 40,
+      value: Math.floor(finalReward),
+      type: type,
+      life: 1.0
+    });
   }
 
   gameOver() {
     this.state = 'GAMEOVER';
     this.isRunning = false;
-    if (this.score > this.bestScore) {
-      this.bestScore = Math.floor(this.score);
+    const totalScore = Math.floor(this.distanceScore + this.pathReward);
+    if (totalScore > this.bestScore) {
+      this.bestScore = totalScore;
       this.storage.set('bestScore', this.bestScore);
     }
-    console.log('Game Over! Score:', Math.floor(this.score));
+    this.multiplier = CONFIG.MULTIPLIER_START;
+    console.log('Game Over! Score:', totalScore);
   }
-
   restart() {
     this.start();
   }
@@ -137,6 +169,7 @@ export class Game {
     this.renderer.drawTrack();
     this.renderer.drawSegments(this.track.segments);
     this.renderer.drawPlayer(this.player);
+    this.renderer.drawFloatingRewards(this.floatingRewards);
     
     // HUD
     this.renderer.drawHUD(Math.floor(this.score), this.multiplier, this.bestScore);
