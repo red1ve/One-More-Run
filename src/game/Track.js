@@ -210,7 +210,7 @@ export class Track {
     const obsHeight = 40;
     const row1Y = segmentY + 340;
     const row2Y = segmentY + 150;
-    const travelY = this.getTravelTo(row1Y);
+    const travelY = Math.min(this.getTravelTo(row1Y), 220);
     const innerTravel = row1Y - row2Y;
 
     const safeW = CONFIG.SAFE_GAP_WIDTH;
