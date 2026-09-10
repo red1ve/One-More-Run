@@ -10,12 +10,13 @@ import { StorageService } from '../services/StorageService.js';
 import { AudioService } from '../services/AudioService.js';
 
 export class Game {
-  constructor(canvas) {
+  constructor(canvas, platformService = null) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
 
     this.storage = new StorageService();
     this.audio = new AudioService();
+    this.platform = platformService;
     this.renderer = new Renderer(this.ctx);
     this.feel = new GameFeel(this.audio);
     this.keyboardInput = new KeyboardInput();
@@ -41,6 +42,16 @@ export class Game {
     this.isRunning = false;
     this.floatingRewards = [];
     this.isNewBest = false;
+    this.hidden = false;
+    this.platformPaused = false;
+    this.adPaused = false;
+    this.launchPending = false;
+    this.adFinished = false;
+
+    this.platform?.setLifecycleHandlers?.({
+      onPause: () => this.setPlatformPaused(true),
+      onResume: () => this.setPlatformPaused(false)
+    });
   }
 
   unlockAudio() {
@@ -48,7 +59,43 @@ export class Game {
   }
 
   setHidden(hidden) {
-    this.audio.setHidden(hidden);
+    this.hidden = !!hidden;
+    this.audio.setHidden(this.hidden);
+    if (!this.hidden) this.lastTime = performance.now();
+    if (this.hidden && this.launchPending && this.adFinished) {
+      this.launchPending = false;
+    }
+    this.syncGameplayLifecycle?.();
+  }
+
+  setPlatformPaused(paused) {
+    this.platformPaused = !!paused;
+    this.audio.setPlatformPaused(this.platformPaused);
+    if (!this.platformPaused) {
+      this.lastTime = performance.now();
+      if (this.launchPending && this.adFinished && !this.hidden) {
+        this.completePendingLaunch();
+        return;
+      }
+    }
+    this.syncGameplayLifecycle?.();
+  }
+
+  setAdPaused(paused) {
+    this.adPaused = !!paused;
+    this.audio.setAdPaused(this.adPaused);
+    if (!this.adPaused) this.lastTime = performance.now();
+    this.syncGameplayLifecycle?.();
+  }
+
+  isGameplayPaused() {
+    return this.hidden || this.platformPaused || this.adPaused;
+  }
+
+  syncGameplayLifecycle() {
+    this.platform?.setGameplayActive?.(
+      this.state === 'PLAYING' && !this.isGameplayPaused()
+    );
   }
 
   toggleMute() {
@@ -58,7 +105,33 @@ export class Game {
   }
 
   tryLaunch() {
-    if (this.state === 'PLAYING') return false;
+    if (this.state === 'PLAYING' || this.launchPending) return false;
+    if (this.state === 'START' || !this.platform?.shouldShowInterstitial?.()) {
+      this.start();
+      return true;
+    }
+
+    this.launchPending = true;
+    this.adFinished = false;
+    this.setAdPaused(true);
+    this.platform.showInterstitial()
+      .catch(() => ({ attempted: true, wasShown: false }))
+      .then(() => {
+        this.adFinished = true;
+        this.setAdPaused(false);
+        if (this.hidden) {
+          this.launchPending = false;
+        } else if (!this.platformPaused) {
+          this.completePendingLaunch();
+        }
+      });
+    return true;
+  }
+
+  completePendingLaunch() {
+    if (!this.launchPending || this.state !== 'GAMEOVER') return false;
+    this.launchPending = false;
+    this.adFinished = false;
     this.start();
     return true;
   }
@@ -83,6 +156,7 @@ export class Game {
     this.track.reset();
 
     this.lastTime = performance.now();
+    this.syncGameplayLifecycle?.();
     if (!this.isRunning) {
       this.isRunning = true;
       requestAnimationFrame((t) => this.loop(t));
@@ -103,6 +177,8 @@ export class Game {
   }
 
   update(deltaTime) {
+    if (this.isGameplayPaused?.()) return;
+
     if (this.state === 'GAMEOVER') {
       this.feel.update(deltaTime, this.currentSpeed);
       this.updateFloating(deltaTime);
@@ -265,7 +341,11 @@ export class Game {
     if (this.isNewBest) {
       this.bestScore = totalScore;
       this.storage.set('bestScore', this.bestScore);
+      const submission = this.platform?.submitScore?.(totalScore);
+      Promise.resolve(submission).catch(() => {});
     }
+    this.platform?.recordRunCompleted?.();
+    this.syncGameplayLifecycle?.();
     this.feel?.onGameOver(this.player.x, this.player.y);
     if (this.isNewBest) this.feel?.onNewBest?.(this.player.x, this.player.y);
     this.multiplier = CONFIG.MULTIPLIER_START;
@@ -274,7 +354,7 @@ export class Game {
   }
 
   restart() {
-    this.start();
+    return this.tryLaunch();
   }
 
   render() {

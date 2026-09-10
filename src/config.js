@@ -81,6 +81,14 @@ export const CONFIG = {
   COIN_SKIP_MARGIN: 10,
   COIN_ZONE_REPEAT_WEIGHT: 0.18,
 
+  YANDEX: {
+    SDK_URL: '/sdk.js',
+    SDK_LOAD_TIMEOUT_MS: 5000,
+    LEADERBOARD_NAME: 'one_more_run_score',
+    ADS_ENABLED: true,
+    INTERSTITIAL_COOLDOWN_RUNS: 3
+  },
+
   FEEL: {
     PARTICLE_MAX: 80,
     PARTICLE_RISK: 10,

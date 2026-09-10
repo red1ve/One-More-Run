@@ -343,24 +343,17 @@ WATCH AD TO CONTINUE
 
 # 17. Rewarded advertisement
 
-Rewarded advertisement должна быть добровольной.
+Rewarded advertisement не входит в текущий release scope.
 
-После проигрыша игрок может продолжить текущую попытку.
+В Phase 7 не реализуются:
 
-Reward:
+- continue / revive;
+- защита после смерти;
+- награда Score;
+- награда Coins;
+- новые gameplay mechanics ради рекламы.
 
-- восстановление игры;
-- небольшой период защиты;
-- удаление ближайших опасных объектов.
-
-Reward не должен полностью заменять игровой процесс.
-
-Нельзя выдавать награду до подтверждения Yandex SDK о получении reward.
-
-Если реклама не загрузилась:
-
-- игра не должна ломаться;
-- пользователь должен иметь возможность начать новую игру.
+Если осмысленный reward loop появится позже, реклама должна быть добровольной, а награда может выдаваться только после подтверждения Yandex SDK.
 
 ---
 
@@ -377,7 +370,7 @@ Fullscreen advertisement можно показывать после заверш
 
 Перед рекламой игра должна быть остановлена.
 
-После рекламы игра должна корректно возобновляться.
+Phase 7: возможный показ происходит после того, как игрок увидел Game Over и запросил новый забег. После close/no-fill/error запускается ровно один запрошенный run; при скрытой странице автоматический запуск отменяется.
 
 ---
 
@@ -385,9 +378,9 @@ Fullscreen advertisement можно показывать после заверш
 
 Вся интеграция с Yandex Games SDK должна находиться в отдельном модуле.
 
-Создать:
+Реализация:
 
-src/services/yandex.js
+src/services/YandexService.js
 
 Игровая логика не должна напрямую зависеть от глобального объекта SDK.
 
@@ -399,15 +392,9 @@ YandexService.init()
 
 YandexService.showInterstitial()
 
-YandexService.showRewarded()
-
-YandexService.login()
-
 YandexService.submitScore()
 
-YandexService.pause()
-
-YandexService.resume()
+YandexService.setGameplayActive()
 
 Если SDK недоступен во время локальной разработки, игра должна продолжать работать.
 
@@ -483,13 +470,21 @@ LOGIN TO SAVE YOUR RECORD
 
 Техническое имя:
 
-bestScore
+one_more_run_score
 
 После окончания игры:
 
-если пользователь авторизован и новый результат лучше предыдущего результата:
+если новый результат лучше предыдущего локального результата и метод доступен авторизованному пользователю:
 
 отправить score в leaderboard.
+
+Использовать актуальный API:
+
+ysdk.isAvailableMethod('leaderboards.setScore')
+
+ysdk.leaderboards.setScore()
+
+Не использовать устаревший ysdk.getLeaderboards().
 
 Не отправлять бессмысленные промежуточные значения.
 
@@ -968,10 +963,9 @@ npm run build
 - SDK initialization;
 - LoadingAPI.ready();
 - GameplayAPI;
-- authorization;
-- leaderboard;
+- platform pause/resume events;
+- authorized leaderboard submit;
 - fullscreen advertising;
-- rewarded advertising;
 - sound pause;
 - gameplay pause;
 - focus loss;
@@ -979,6 +973,22 @@ npm run build
 - resize;
 - localStorage;
 - language detection.
+
+## Yandex Games Integration — Phase 7
+
+Архитектура:
+
+Game → YandexService → Yandex Games SDK
+
+SDK загружается асинхронно через `/sdk.js`; `YaGames.init()` не блокирует START или standalone gameplay. Состояния сервиса: unavailable, loading, ready, failed.
+
+localStorage остаётся source of truth для немедленного локального сохранения best score, Coins и mute. SDK не является обязательной зависимостью игрового цикла.
+
+Leaderboard получает только новый локальный best через technical name `one_more_run_score`. Ошибки SDK, отсутствие leaderboard и отсутствие авторизации не отменяют локальный NEW BEST.
+
+Fullscreen ad может быть запрошена только перед новым забегом после Game Over, с локальным cooldown в три завершённых run. Во время рекламы gameplay и audio остановлены. Rewarded ad в текущем gameplay не используется.
+
+Подробная настройка и checklist: `docs/yandex-integration.md`.
 
 ---
 
@@ -1120,15 +1130,15 @@ Sound.
 
 ## Phase 7
 
-Mobile controls.
+Yandex Games integration and release foundation.
 
 ## Phase 8
 
-Local storage.
+Developer Console setup and Yandex debug verification.
 
 ## Phase 9
 
-Yandex SDK.
+Localization implementation and platform language.
 
 ## Phase 10
 
@@ -1136,15 +1146,15 @@ Authorization.
 
 ## Phase 11
 
-Leaderboard.
+Leaderboard UI and Console verification, if justified.
 
 ## Phase 12
 
-Advertising.
+Release advertising verification.
 
 ## Phase 13
 
-Localization.
+Final localization QA.
 
 ## Phase 14
 

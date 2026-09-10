@@ -68,18 +68,46 @@ Translated UI strings.
 
 ### Yandex Games SDK
 
-Used for:
+`src/services/YandexService.js` owns:
 
 - advertising;
-- authorization;
-- leaderboards;
-- gameplay events;
-- loading events;
-- localization/environment information.
+- authorized leaderboard score submission;
+- `LoadingAPI.ready()`;
+- `GameplayAPI.start()` / `GameplayAPI.stop()`;
+- `game_api_pause` / `game_api_resume` events;
+- SDK loading, initialization, and standalone fallback.
 
 Yandex-specific logic must remain inside the service layer.
 
-The core game must not directly depend on Yandex SDK.
+The dependency direction is:
+
+```text
+Game
+  ↓
+YandexService
+  ↓
+Yandex Games SDK
+```
+
+`main.js` creates the service and starts `init()` in the background after the first START render. Gameplay never waits for SDK initialization. `Game` only calls the service's platform-neutral methods and never reads `YaGames` or an SDK object.
+
+### Lifecycle
+
+`Game` keeps START / PLAYING / GAMEOVER as gameplay state. Visibility, platform pause, and advertisement pause are independent pause reasons:
+
+- hidden tab freezes gameplay and audio;
+- `game_api_pause` freezes gameplay and audio;
+- an interstitial freezes audio and keeps GAMEOVER visible;
+- resume never changes START or GAMEOVER into PLAYING;
+- a requested post-ad restart starts once after close/resume, unless the page became hidden.
+
+The RAF may continue for rendering, but gameplay updates return early while paused.
+
+### Persistence
+
+`StorageService` remains the immediate persistence and standalone fallback for best score, Coins, and mute. Phase 7 does not add cloud saves or secrets.
+
+See `docs/yandex-integration.md` for SDK setup and Developer Console requirements.
 
 ## Local development
 

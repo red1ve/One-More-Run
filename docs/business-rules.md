@@ -24,13 +24,11 @@ Difficulty may affect:
 
 The difficulty system must never intentionally generate an impossible situation.
 
-## Rewarded continue
+## Rewarded advertising
 
-The player may continue a run by voluntarily watching a rewarded advertisement.
+Rewarded advertising is not part of the current release. There is no continue, revive, score reward, or Coin reward for watching an ad.
 
-The reward is granted only after Yandex SDK confirms the reward.
-
-A player may use the continue mechanic only according to the configured limit for a single run.
+If a real reward loop is designed later, it must be voluntary and granted only after Yandex SDK confirms the reward.
 
 ## Authorization
 
@@ -52,6 +50,6 @@ Advertising must not interrupt active gameplay.
 
 Fullscreen ads are shown only at logical breaks.
 
-Rewarded ads are shown only after the player explicitly chooses the rewarded action.
+The current logical break is a player-requested restart from Game Over. A local cooldown prevents an ad attempt after every run, and Yandex retains its own frequency control.
 
 The game and audio must be paused during advertising.

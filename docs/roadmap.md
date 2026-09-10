@@ -32,13 +32,15 @@ Goal:
 
 Prepare the game for Yandex Games.
 
-- Yandex SDK;
-- LoadingAPI;
-- Gameplay API;
-- authorization;
-- leaderboard;
-- fullscreen ads;
-- rewarded ads.
+- Yandex SDK — DONE;
+- standalone fallback — DONE;
+- LoadingAPI — DONE;
+- Gameplay API and platform pause events — DONE;
+- authorized leaderboard submission — DONE;
+- fullscreen ad lifecycle — DONE;
+- Developer Console setup and platform verification — NEXT;
+- explicit authorization UI — LATER, only if justified;
+- rewarded ads — NOT IN CURRENT SCOPE.
 
 ## Version 0.4 — Polish
 

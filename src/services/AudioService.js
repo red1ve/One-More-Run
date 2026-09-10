@@ -6,6 +6,8 @@ export class AudioService {
     this.unlocked = false;
     this.muted = false;
     this.hidden = false;
+    this.adPaused = false;
+    this.platformPaused = false;
     this.lastPlayed = {};
   }
 
@@ -33,9 +35,23 @@ export class AudioService {
     this.syncContext();
   }
 
+  setAdPaused(paused) {
+    this.adPaused = !!paused;
+    this.syncContext();
+  }
+
+  setPlatformPaused(paused) {
+    this.platformPaused = !!paused;
+    this.syncContext();
+  }
+
   syncContext() {
     if (!this.ctx) return;
-    const shouldRun = this.unlocked && !this.muted && !this.hidden;
+    const shouldRun = this.unlocked
+      && !this.muted
+      && !this.hidden
+      && !this.adPaused
+      && !this.platformPaused;
     if (shouldRun && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     } else if (!shouldRun && this.ctx.state === 'running') {
@@ -44,7 +60,14 @@ export class AudioService {
   }
 
   play(name) {
-    if (!this.unlocked || !this.ctx || this.muted || this.hidden) return false;
+    if (
+      !this.unlocked
+      || !this.ctx
+      || this.muted
+      || this.hidden
+      || this.adPaused
+      || this.platformPaused
+    ) return false;
     const now = this.ctx.currentTime;
     const last = this.lastPlayed[name] || 0;
     if (now - last < CONFIG.FEEL.AUDIO_COOLDOWN && name !== 'gameover' && name !== 'newbest') {
@@ -80,7 +103,7 @@ export class AudioService {
   }
 
   tone(freq, duration, type, volume, delay = 0) {
-    if (!this.ctx || this.muted || this.hidden) return;
+    if (!this.ctx || this.muted || this.hidden || this.adPaused || this.platformPaused) return;
     const t = this.ctx.currentTime + delay;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();

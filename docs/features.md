@@ -63,15 +63,18 @@ Current implementation notes:
 ## Platform
 
 
-| Feature                   | Priority | Status  |
-| ------------------------- | -------- | ------- |
-| Yandex SDK initialization | P0       | PLANNED |
-| LoadingAPI                | P0       | PLANNED |
-| Gameplay API              | P0       | PLANNED |
-| Fullscreen advertising    | P0       | PLANNED |
-| Rewarded advertising      | P0       | PLANNED |
-| Authorization             | P1       | PLANNED |
-| Leaderboard               | P1       | PLANNED |
+| Feature                         | Priority | Status  |
+| ------------------------------- | -------- | ------- |
+| Yandex SDK initialization       | P0       | DONE    |
+| Standalone browser fallback     | P0       | DONE    |
+| LoadingAPI                      | P0       | DONE    |
+| Gameplay API                    | P0       | DONE    |
+| Platform pause/resume events    | P0       | DONE    |
+| Fullscreen advertising wrapper  | P0       | DONE    |
+| Authorized leaderboard submit   | P1       | DONE    |
+| Explicit authorization UI       | P1       | PLANNED |
+| Leaderboard display UI          | P2       | PLANNED |
+| Rewarded advertising            | P3       | PLANNED |
 
 
 ---
@@ -107,7 +110,9 @@ Start / Game Over are canvas overlays, not a separate menu system. Localization 
 | Pause audio on tab hidden      | P0       | DONE    |
 | Unlock after user gesture      | P0       | DONE    |
 | GameFeel / particles           | P1       | DONE    |
-| Pause audio during advertising | P0       | PLANNED |
+| Pause audio during advertising | P0       | DONE    |
 
 
 Web Audio is created once, unlocked by a user gesture, muted via storage key `audioMuted`, and suspended while the tab is hidden.
+
+Yandex integration uses `YandexService` as an optional platform layer. The game remains fully playable when `/sdk.js`, authorization, leaderboards, or ads are unavailable. Rewarded ads have no current gameplay use and are intentionally not connected.

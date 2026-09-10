@@ -1,5 +1,6 @@
 import './style.css';
 import { Game } from './game/Game.js';
+import { YandexService } from './services/YandexService.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('game-canvas');
@@ -8,8 +9,12 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  const game = new Game(canvas);
+  const yandex = new YandexService();
+  const game = new Game(canvas, yandex);
+  game.setHidden(document.visibilityState === 'hidden');
   game.render();
+  yandex.notifyGameReady();
+  yandex.init();
 
   const launchFromGesture = () => {
     game.unlockAudio();
