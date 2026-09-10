@@ -1,4 +1,4 @@
-import { CONFIG } from '../config.js';
+import { CONFIG, getTrackSpeed } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { Player } from './Player.js';
 import { Track } from './Track.js';
@@ -25,8 +25,10 @@ export class Game {
     this.pathReward = 0;
     this.bestScore = this.storage.get('bestScore', 0);
     this.multiplier = CONFIG.MULTIPLIER_START;
+    this.riskStreak = 0;
     
-    this.currentSpeed = CONFIG.GAME_SPEED;
+    this.currentSpeed = CONFIG.TRACK_SPEED_START;
+    this.runTime = 0;
     this.lastTime = 0;
     this.isRunning = false;
     this.floatingRewards = [];
@@ -40,7 +42,9 @@ export class Game {
     this.distanceScore = 0;
     this.pathReward = 0;
     this.multiplier = CONFIG.MULTIPLIER_START;
-    this.currentSpeed = CONFIG.GAME_SPEED;
+    this.riskStreak = 0;
+    this.currentSpeed = CONFIG.TRACK_SPEED_START;
+    this.runTime = 0;
     this.floatingRewards = [];
 
     this.player.reset();
@@ -90,10 +94,9 @@ export class Game {
     this.player.setMoveDirection(moveDirection);
     this.player.update(deltaTime);
 
-    // Рост сложности (скорости) на основе очков
-    this.currentSpeed = CONFIG.GAME_SPEED * (1 + ((this.distanceScore + this.pathReward) / 10000) * CONFIG.DIFFICULTY_GROWTH);
+    this.runTime += deltaTime;
+    this.currentSpeed = getTrackSpeed(this.runTime);
 
-    // Обновление трассы
     this.track.update(deltaTime, this.currentSpeed);
 
     // Начисление очков за время (не умножается на множитель)
@@ -102,7 +105,7 @@ export class Game {
 
     const result = this.track.checkPassed(this.player);
     if (result.rewardType) {
-      this.applyReward(result.rewardType, result.isIntentional);
+      this.applyReward(result.rewardType, result.isIntentional, result.isChoice);
     }
 
     // Обновление всплывающих очков
@@ -118,7 +121,7 @@ export class Game {
     }
   }
 
-  applyReward(type, isIntentional) {
+  applyReward(type, isIntentional, isChoice = false) {
     if (!Object.prototype.hasOwnProperty.call(CONFIG.REWARDS, type)) {
       console.warn('Game: неизвестный тип награды, пропуск', type);
       return;
@@ -128,12 +131,16 @@ export class Game {
     let finalReward = baseReward;
 
     if (isIntentional) {
-      finalReward *= this.multiplier;
-      this.multiplier = Math.min(this.multiplier + CONFIG.MULTIPLIER_STEP, CONFIG.MULTIPLIER_MAX);
-    } else if (type === 'SHORT_RISKY') {
+      this.riskStreak += 1;
       finalReward = baseReward * this.multiplier;
+      if (this.riskStreak >= CONFIG.RISK_STREAK_TO_GROW) {
+        this.multiplier = Math.min(this.multiplier + CONFIG.MULTIPLIER_STEP, CONFIG.MULTIPLIER_MAX);
+      }
+    } else if (isChoice && type === 'SAFE') {
+      this.riskStreak = 0;
+      this.multiplier = CONFIG.MULTIPLIER_START;
+      finalReward = baseReward;
     } else {
-      // SAFE или Forced RISKY
       finalReward = baseReward;
     }
 
@@ -158,6 +165,7 @@ export class Game {
       this.storage.set('bestScore', this.bestScore);
     }
     this.multiplier = CONFIG.MULTIPLIER_START;
+    this.riskStreak = 0;
     console.log('Game Over! Score:', totalScore);
   }
   restart() {
@@ -172,7 +180,7 @@ export class Game {
     this.renderer.drawFloatingRewards(this.floatingRewards);
     
     // HUD
-    this.renderer.drawHUD(Math.floor(this.score), this.multiplier, this.bestScore);
+    this.renderer.drawHUD(Math.floor(this.score), this.multiplier, this.bestScore, this.riskStreak);
 
     if (this.state === 'GAMEOVER') {
       this.renderer.drawGameOver(Math.floor(this.score), this.bestScore);

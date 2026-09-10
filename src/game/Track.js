@@ -7,12 +7,18 @@ export class Track {
     this.speed = CONFIG.GAME_SPEED;
     this.lastExits = [];
     this.lastGapX = CONFIG.CANVAS_WIDTH / 2;
+    this.generatedPlayable = 0;
+    this.breathingSinceChoice = 0;
+    this.choiceCount = 0;
     this.init();
   }
 
   init() {
     this.segments = [];
     this.setExits([{ x: CONFIG.TRACK_LEFT, width: CONFIG.TRACK_WIDTH }]);
+    this.generatedPlayable = 0;
+    this.breathingSinceChoice = 0;
+    this.choiceCount = 0;
     this.addSegment(CONFIG.CANVAS_HEIGHT - this.segmentHeight, 'EMPTY');
     this.addSegment(CONFIG.CANVAS_HEIGHT - this.segmentHeight * 2, 'EMPTY');
     this.addSegment(CONFIG.CANVAS_HEIGHT - this.segmentHeight * 3, 'NORMAL');
@@ -47,6 +53,58 @@ export class Track {
 
   allExitsReach(to, travelY) {
     return this.lastExits.every((from) => this.canReach(from, to, travelY));
+  }
+
+  getFreeTravelTo(gateY, gateHeight) {
+    if (this.segments.length === 0) return this.segmentHeight;
+
+    const prev = this.segments[this.segments.length - 1];
+    let prevTop = prev.y + this.segmentHeight;
+    if (prev.obstacles.length > 0) {
+      prevTop = prev.obstacles.reduce((minY, obs) => Math.min(minY, obs.y), Infinity);
+    } else if (prev.paths.length > 0) {
+      prevTop = prev.paths.reduce((minY, path) => Math.min(minY, path.y), Infinity);
+    }
+
+    const distance = prevTop - gateY;
+    return Math.max(40, distance - CONFIG.PLAYER_HEIGHT - gateHeight);
+  }
+
+  getChoiceWidths() {
+    const speedRatio = this.speed / CONFIG.GAME_SPEED;
+    if (this.choiceCount === 0 || this.generatedPlayable < 5) {
+      return { safe: CONFIG.SAFE_GAP_TUTORIAL, risk: CONFIG.RISKY_GAP_TUTORIAL };
+    }
+    if (speedRatio < 1.25) {
+      return { safe: CONFIG.SAFE_GAP_WIDTH, risk: CONFIG.RISKY_GAP_WIDTH };
+    }
+    return { safe: CONFIG.SAFE_GAP_LATE, risk: CONFIG.RISKY_GAP_LATE };
+  }
+
+  getBreathingWidth() {
+    if (this.generatedPlayable < 4) return CONFIG.BREATHING_GAP_WIDTH;
+    if (this.speed / CONFIG.GAME_SPEED < 1.25) return CONFIG.BREATHING_GAP_WIDTH;
+    return Math.max(CONFIG.RISKY_GAP_LATE + 80, 160);
+  }
+
+  pickSegmentType(requested) {
+    if (requested === 'RISKY' || requested === 'SHORT_RISKY') {
+      return 'NORMAL';
+    }
+    if (requested) return requested;
+
+    const lastType = this.segments.length > 0
+      ? this.segments[this.segments.length - 1].type
+      : 'EMPTY';
+
+    if (lastType === 'EMPTY' || lastType === 'TWO_PATHS') return 'NORMAL';
+
+    const minBreathing = this.choiceCount === 0
+      ? 3
+      : (this.speed > CONFIG.GAME_SPEED * 1.3 ? 1 : 2);
+
+    if (this.breathingSinceChoice < minBreathing) return 'NORMAL';
+    return Math.random() < 0.55 ? 'TWO_PATHS' : 'NORMAL';
   }
 
   getTravelTo(nextObstacleY) {
@@ -138,17 +196,7 @@ export class Track {
   }
 
   addSegment(y, type = null) {
-    const types = ['NORMAL', 'TWO_PATHS', 'RISKY', 'SHORT_RISKY'];
-
-    let segmentType = type;
-    if (!segmentType && this.segments.length > 0) {
-      const lastType = this.segments[this.segments.length - 1].type;
-      if (lastType === 'SHORT_RISKY' || lastType === 'RISKY') {
-        segmentType = Math.random() > 0.5 ? 'NORMAL' : 'TWO_PATHS';
-      }
-    }
-
-    segmentType = segmentType || types[Math.floor(Math.random() * types.length)];
+    let segmentType = this.pickSegmentType(type);
 
     const segment = {
       id: Date.now() + Math.random(),
@@ -165,6 +213,7 @@ export class Track {
     if (!geometry && segmentType !== 'NORMAL' && segmentType !== 'EMPTY') {
       segmentType = 'NORMAL';
       segment.type = 'NORMAL';
+      segment.isChoiceSegment = false;
       geometry = this.createGeometryForType('NORMAL', y);
     }
 
@@ -175,6 +224,15 @@ export class Track {
     segment.obstacles = geometry.obstacles;
     segment.paths = geometry.paths;
     this.segments.push(segment);
+
+    if (segment.type === 'NORMAL') {
+      this.generatedPlayable += 1;
+      this.breathingSinceChoice += 1;
+    } else if (segment.type === 'TWO_PATHS') {
+      this.generatedPlayable += 1;
+      this.choiceCount += 1;
+      this.breathingSinceChoice = 0;
+    }
   }
 
   createGeometryForType(type, segmentY) {
@@ -186,9 +244,8 @@ export class Track {
       case 'TWO_PATHS':
         return this.createTwoPaths(segmentY);
       case 'RISKY':
-        return this.createRisky(segmentY);
       case 'SHORT_RISKY':
-        return this.createShortRisky(segmentY);
+        return this.createNormal(segmentY);
       default:
         return this.createNormal(segmentY);
     }
@@ -198,7 +255,7 @@ export class Track {
     const obsHeight = 40;
     const gapY = segmentY + 300;
     const preferred = this.lastGapX + (Math.random() - 0.5) * 80;
-    const gap = this.placeReachableGap(200, gapY, preferred);
+    const gap = this.placeReachableGap(this.getBreathingWidth(), gapY, preferred);
     const obstacles = [];
 
     this.addWallsAroundGap(obstacles, gap.x, gap.width, gapY, obsHeight);
@@ -208,20 +265,16 @@ export class Track {
   }
 
   createTwoPaths(segmentY) {
-    const obsHeight = 40;
-    const row1Y = segmentY + 340;
-    const row2Y = segmentY + 150;
-    const travelY = Math.min(this.getTravelTo(row1Y), 220);
-    const innerTravel = row1Y - row2Y;
-
-    const safeW = CONFIG.SAFE_GAP_WIDTH;
-    const riskW = CONFIG.RISKY_GAP_WIDTH;
+    const gateH = CONFIG.CHOICE_GATE_HEIGHT;
+    const showH = CONFIG.CHOICE_SHOW_HEIGHT;
     const dividerW = CONFIG.TWO_PATHS_DIVIDER;
-    const riskLaneW = riskW + CONFIG.RISK_LANE_EXTRA;
-    const forkW = safeW + dividerW + riskLaneW;
+    const { safe: safeW, risk: riskW } = this.getChoiceWidths();
+    const forkW = safeW + dividerW + riskW;
 
     if (forkW > CONFIG.TRACK_WIDTH) return null;
 
+    const gateY = segmentY + 200;
+    const travelY = this.getFreeTravelTo(gateY, gateH);
     const minFork = CONFIG.TRACK_LEFT;
     const maxFork = CONFIG.TRACK_RIGHT - forkW;
     const preferredFork = this.lastGapX - forkW / 2;
@@ -230,43 +283,27 @@ export class Track {
 
     const tryLayout = (riskyLeft, forkX) => {
       let safeX;
-      let riskLaneX;
+      let riskX;
       let dividerX;
 
       if (riskyLeft) {
-        riskLaneX = forkX;
-        dividerX = riskLaneX + riskLaneW;
+        riskX = forkX;
+        dividerX = riskX + riskW;
         safeX = dividerX + dividerW;
       } else {
         safeX = forkX;
         dividerX = safeX + safeW;
-        riskLaneX = dividerX + dividerW;
-      }
-
-      const maxOffset = Math.min(
-        riskLaneW - riskW,
-        Math.max(16, Math.floor(this.maxLateral(innerTravel)))
-      );
-      const offset = Math.min(40, maxOffset);
-
-      let riskGap1X = riskLaneX;
-      let riskGap2X = riskLaneX + offset;
-      if (riskGap2X + riskW > riskLaneX + riskLaneW) {
-        riskGap2X = riskLaneX + riskLaneW - riskW;
-        riskGap1X = Math.max(riskLaneX, riskGap2X - offset);
+        riskX = dividerX + dividerW;
       }
 
       const safeGap = { x: safeX, width: safeW };
-      const risk1 = { x: riskGap1X, width: riskW };
-      const risk2 = { x: riskGap2X, width: riskW };
-
+      const riskGap = { x: riskX, width: riskW };
       const reachable = this.lastExits.every((exit) => (
-        this.canReach(exit, safeGap, travelY) && this.canReach(exit, risk1, travelY)
+        this.canReach(exit, safeGap, travelY) && this.canReach(exit, riskGap, travelY)
       ));
       if (!reachable) return null;
-      if (!this.canReach(risk1, risk2, innerTravel)) return null;
 
-      return { safeX, riskLaneX, dividerX, riskGap1X, riskGap2X, riskLaneW };
+      return { safeX, riskX, dividerX };
     };
 
     let layout = null;
@@ -285,82 +322,55 @@ export class Track {
 
     if (!layout) return null;
 
-    const dividerY = row2Y;
-    const dividerH = row1Y + obsHeight - row2Y;
     const obstacles = [];
-    const forkLeft = Math.min(layout.safeX, layout.riskLaneX);
-    const forkRight = Math.max(layout.safeX + safeW, layout.riskLaneX + layout.riskLaneW);
+    const forkLeft = Math.min(layout.safeX, layout.riskX);
+    const forkRight = Math.max(layout.safeX + safeW, layout.riskX + riskW);
 
     if (forkLeft > CONFIG.TRACK_LEFT) {
       obstacles.push({
         x: CONFIG.TRACK_LEFT,
-        y: dividerY,
+        y: gateY,
         width: forkLeft - CONFIG.TRACK_LEFT,
-        height: dividerH
+        height: gateH
       });
     }
     if (forkRight < CONFIG.TRACK_RIGHT) {
       obstacles.push({
         x: forkRight,
-        y: dividerY,
+        y: gateY,
         width: CONFIG.TRACK_RIGHT - forkRight,
-        height: dividerH
+        height: gateH
       });
     }
 
     obstacles.push({
       x: layout.dividerX,
-      y: dividerY,
+      y: gateY,
       width: dividerW,
-      height: dividerH
+      height: gateH
     });
 
-    this.addWallsInRange(
-      obstacles,
-      layout.riskLaneX,
-      layout.riskLaneW,
-      layout.riskGap1X,
-      riskW,
-      row1Y,
-      obsHeight
-    );
-    this.addWallsInRange(
-      obstacles,
-      layout.riskLaneX,
-      layout.riskLaneW,
-      layout.riskGap2X,
-      riskW,
-      row2Y,
-      obsHeight
-    );
-
+    const corridorH = gateH + showH;
     const paths = [
       {
         x: layout.safeX,
-        y: dividerY,
+        y: gateY,
         width: safeW,
-        height: dividerH,
+        height: corridorH,
         type: 'SAFE'
       },
       {
-        x: layout.riskGap1X,
-        y: row1Y,
+        x: layout.riskX,
+        y: gateY,
         width: riskW,
-        height: obsHeight,
-        type: 'RISKY'
-      },
-      {
-        x: layout.riskGap2X,
-        y: row2Y,
-        width: riskW,
-        height: obsHeight,
+        height: corridorH,
         type: 'RISKY'
       }
     ];
 
     this.setExits([
       { x: layout.safeX, width: safeW },
-      { x: layout.riskGap2X, width: riskW }
+      { x: layout.riskX, width: riskW }
     ]);
 
     return { obstacles, paths, isChoiceSegment: true };
@@ -380,22 +390,49 @@ export class Track {
   createShortRisky(segmentY) {
     const obsHeight = 40;
     const sGap = Math.max(CONFIG.MIN_GAP, 70);
-    const ySteps = [450, 350, 250, 150];
-    const pathYs = ySteps.map((y) => segmentY + y);
-    
-    const paths = [];
-    const obstacles = [];
-    let currentX = (CONFIG.TRACK_LEFT + CONFIG.TRACK_RIGHT) / 2 - sGap / 2;
-    
-    for (let i = 0; i < pathYs.length; i++) {
+    const yOffsets = [450, 330, 210, 90];
+    const pathYs = yOffsets.map((offset) => segmentY + offset);
+    const minOffset = 8;
+
+    const firstY = pathYs[0];
+    const firstPlaced = this.placeReachableGap(sGap, firstY, this.lastGapX);
+    if (firstPlaced.width > sGap + 8) return null;
+
+    const gates = [{ x: firstPlaced.x, width: sGap, y: firstY }];
+    let goRight = firstPlaced.x + sGap / 2 < CONFIG.CANVAS_WIDTH / 2;
+    const lockY = CONFIG.PLAYER_HEIGHT + obsHeight;
+
+    for (let i = 1; i < pathYs.length; i++) {
       const y = pathYs[i];
-      const gapX = i % 2 === 0 ? CONFIG.TRACK_LEFT : CONFIG.TRACK_RIGHT - sGap;
-      
-      paths.push({ x: gapX, y, width: sGap, height: obsHeight, type: 'SHORT_RISKY' });
-      this.addWallsAroundGap(obstacles, gapX, sGap, y, obsHeight);
+      const prev = gates[i - 1];
+      const travelY = Math.max(0, prev.y - y - lockY);
+      const desiredX = goRight ? CONFIG.TRACK_RIGHT - sGap : CONFIG.TRACK_LEFT;
+      const gapX = this.findFarthestReachableGap(prev, sGap, travelY, desiredX);
+      const next = { x: gapX, width: sGap, y };
+
+      if (!this.canReach(prev, next, travelY)) break;
+      if (Math.abs(next.x - prev.x) < minOffset) break;
+
+      gates.push(next);
+      goRight = !goRight;
     }
 
-    this.setExits([{ x: paths[paths.length - 1].x, width: sGap }]);
+    if (gates.length < 2) return null;
+
+    const obstacles = [];
+    const paths = gates.map((gate) => {
+      this.addWallsAroundGap(obstacles, gate.x, sGap, gate.y, obsHeight);
+      return {
+        x: gate.x,
+        y: gate.y,
+        width: sGap,
+        height: obsHeight,
+        type: 'SHORT_RISKY'
+      };
+    });
+
+    const lastGate = gates[gates.length - 1];
+    this.setExits([{ x: lastGate.x, width: sGap }]);
     return { obstacles, paths };
   }
 
@@ -451,7 +488,7 @@ export class Track {
   }
 
   checkPassed(player) {
-    let result = { rewardType: null, isIntentional: false };
+    let result = { rewardType: null, isIntentional: false, isChoice: false };
 
     for (const segment of this.segments) {
       if (segment.isPassed || segment.type === 'EMPTY') continue;
@@ -465,6 +502,7 @@ export class Track {
       if (segment.chosenPathType) {
         if (result.rewardType === null) {
           result.rewardType = segment.chosenPathType;
+          result.isChoice = !!segment.isChoiceSegment;
           result.isIntentional = segment.isChoiceSegment && segment.chosenPathType === 'RISKY';
         }
       } else if (segment.paths.length > 0) {

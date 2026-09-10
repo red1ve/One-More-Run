@@ -64,8 +64,7 @@ export class Renderer {
   }
 
   drawObstacles(segment) {
-    const riskySegment = segment.type === 'RISKY' || segment.type === 'SHORT_RISKY';
-    this.ctx.fillStyle = riskySegment ? CONFIG.COLORS.RISKY_OBSTACLE : CONFIG.COLORS.OBSTACLE;
+        this.ctx.fillStyle = CONFIG.COLORS.OBSTACLE;
 
     segment.obstacles.forEach((obs) => {
       this.ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
@@ -143,7 +142,7 @@ export class Renderer {
     this.ctx.restore();
   }
 
-  drawHUD(score, multiplier, bestScore) {
+  drawHUD(score, multiplier, bestScore, riskStreak = 0) {
     this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
     this.ctx.font = '20px system-ui, sans-serif';
     this.ctx.textAlign = 'left';
@@ -151,8 +150,11 @@ export class Renderer {
     this.ctx.fillText(`BEST: ${bestScore}`, 20, 70);
 
     this.ctx.textAlign = 'right';
+    const streakActive = riskStreak > 0;
+    this.ctx.fillStyle = streakActive ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD;
+    this.ctx.fillText(`STREAK ${riskStreak}`, this.width - 20, 40);
     this.ctx.fillStyle = multiplier > 1 ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD;
-    this.ctx.fillText(`X${multiplier.toFixed(1)}`, this.width - 20, 40);
+    this.ctx.fillText(`X${multiplier.toFixed(1)}`, this.width - 20, 70);
   }
 
   drawStartScreen() {

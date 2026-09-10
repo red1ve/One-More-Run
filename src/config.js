@@ -15,7 +15,11 @@ export const CONFIG = {
   PLAYER_START_Y: 840,
 
   // Настройки геймплея
-  GAME_SPEED: 380, // Базовая скорость
+  // Скорость трассы (px/s). Стрейф игрока фиксирован — сложность растёт из-за нехватки времени.
+  TRACK_SPEED_START: 300,
+  TRACK_SPEED_MAX: 720,
+  TRACK_SPEED_TAU: 70,
+  GAME_SPEED: 300,
   SEGMENT_HEIGHT: 600,
   
   // Система очков и множителей
@@ -30,17 +34,24 @@ export const CONFIG = {
   },
 
   // Множитель
-  MULTIPLIER_STEP: 0.25,
+  MULTIPLIER_STEP: 0.5,
   MULTIPLIER_MAX: 5.0,
-  DIFFICULTY_GROWTH: 0.05, // Прирост скорости каждые 1000 очков (процент)
+  RISK_STREAK_TO_GROW: 2,
+  DIFFICULTY_GROWTH: 0.05,
   MIN_GAP: 70, // Минимально возможный проход для игрока
   REACHABILITY_MARGIN: 0.75, // Запас при проверке, успеет ли игрок доехать до прохода
 
-  // Геометрия развилки SAFE / RISK
+  // Геометрия Breathing / Choice
+  BREATHING_GAP_WIDTH: 200,
+  SAFE_GAP_TUTORIAL: 200,
+  RISKY_GAP_TUTORIAL: 80,
   SAFE_GAP_WIDTH: 180,
-  RISKY_GAP_WIDTH: 72,
-  TWO_PATHS_DIVIDER: 20,
-  RISK_LANE_EXTRA: 56,
+  RISKY_GAP_WIDTH: 76,
+  SAFE_GAP_LATE: 160,
+  RISKY_GAP_LATE: 72,
+  TWO_PATHS_DIVIDER: 24,
+  CHOICE_GATE_HEIGHT: 64,
+  CHOICE_SHOW_HEIGHT: 280,
 
   // Цвета
   COLORS: {
@@ -59,3 +70,12 @@ export const CONFIG = {
     UI_ACCENT: '#3a86ff'
   }
 };
+
+// v(t) = max - (max - start) * e^(-t / tau)
+export function getTrackSpeed(runTimeSeconds) {
+  const t = Math.max(0, Number(runTimeSeconds) || 0);
+  const start = CONFIG.TRACK_SPEED_START;
+  const max = CONFIG.TRACK_SPEED_MAX;
+  const tau = CONFIG.TRACK_SPEED_TAU;
+  return max - (max - start) * Math.exp(-t / tau);
+}
