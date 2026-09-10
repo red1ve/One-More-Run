@@ -41,7 +41,7 @@ Core gameplay logic.
 
 ### input/
 
-Keyboard and touch input.
+Keyboard, desktop mouse (left/right half of the canvas), and touch input.
 
 ### rendering/
 

@@ -8,33 +8,36 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Создаем и запускаем инстанс игры
   const game = new Game(canvas);
-  
-  // Начальная отрисовка стартового экрана
   game.render();
-  
-  // Обработка клика для старта
-  canvas.addEventListener('mousedown', () => {
-    if (game.state === 'START') {
-      game.start();
-    }
-  });
 
-  canvas.addEventListener('touchstart', () => {
-    if (game.state === 'START') {
-      game.start();
-    }
-  });
+  const launchFromGesture = () => {
+    game.unlockAudio();
+    game.tryLaunch();
+  };
 
-  // Добавляем возможность перезапуска для тестов (клавиша R)
+  canvas.addEventListener('mousedown', launchFromGesture);
+  canvas.addEventListener('touchstart', launchFromGesture, { passive: true });
+
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyR') {
-      game.restart();
+    if (e.code === 'KeyM') {
+      game.toggleMute();
+      if (game.state === 'START') game.render();
+      return;
+    }
+
+    if (e.repeat) return;
+
+    if (e.code === 'KeyR' || e.code === 'Space' || e.code === 'Enter') {
+      if (e.code === 'Space') e.preventDefault();
+      launchFromGesture();
     }
   });
 
-  // Глобальная обработка ошибок для отладки
+  document.addEventListener('visibilitychange', () => {
+    game.setHidden(document.visibilityState === 'hidden');
+  });
+
   window.addEventListener('error', (event) => {
     console.error('Необработанная ошибка во время выполнения:', event.error || event.message);
   });

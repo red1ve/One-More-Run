@@ -2,42 +2,72 @@ import { CONFIG, getTrackSpeed } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { Player } from './Player.js';
 import { Track } from './Track.js';
+import { GameFeel } from './GameFeel.js';
 import { KeyboardInput } from '../input/KeyboardInput.js';
+import { MouseInput } from '../input/MouseInput.js';
 import { TouchInput } from '../input/TouchInput.js';
 import { StorageService } from '../services/StorageService.js';
+import { AudioService } from '../services/AudioService.js';
 
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    
+
     this.storage = new StorageService();
+    this.audio = new AudioService();
     this.renderer = new Renderer(this.ctx);
+    this.feel = new GameFeel(this.audio);
     this.keyboardInput = new KeyboardInput();
+    this.mouseInput = new MouseInput(this.canvas);
     this.touchInput = new TouchInput(this.canvas);
-    
+    this.audio.setMuted(!!this.storage.get('audioMuted', false));
+
     this.player = new Player();
     this.track = new Track();
-    
-    this.state = 'START'; // START, PLAYING, GAMEOVER
+
+    this.state = 'START';
     this.score = 0;
     this.distanceScore = 0;
     this.pathReward = 0;
     this.bestScore = this.storage.get('bestScore', 0);
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
-    
+    this.coins = this.storage.getCoins();
+
     this.currentSpeed = CONFIG.TRACK_SPEED_START;
     this.runTime = 0;
     this.lastTime = 0;
     this.isRunning = false;
     this.floatingRewards = [];
+    this.isNewBest = false;
+  }
+
+  unlockAudio() {
+    this.audio?.unlock?.();
+  }
+
+  setHidden(hidden) {
+    this.audio.setHidden(hidden);
+  }
+
+  toggleMute() {
+    const muted = this.audio.toggleMuted();
+    this.storage.set('audioMuted', muted);
+    return muted;
+  }
+
+  tryLaunch() {
+    if (this.state === 'PLAYING') return false;
+    this.start();
+    return true;
   }
 
   start() {
-    if (this.isRunning) return;
-    this.isRunning = true;
+    if (this.isRunning && this.state === 'PLAYING') return;
+    this.unlockAudio?.();
     this.state = 'PLAYING';
+    this.isNewBest = false;
     this.score = 0;
     this.distanceScore = 0;
     this.pathReward = 0;
@@ -46,12 +76,17 @@ export class Game {
     this.currentSpeed = CONFIG.TRACK_SPEED_START;
     this.runTime = 0;
     this.floatingRewards = [];
+    this.coins = this.storage.getCoins();
+    this.feel?.reset();
 
     this.player.reset();
     this.track.reset();
 
     this.lastTime = performance.now();
-    requestAnimationFrame((t) => this.loop(t));
+    if (!this.isRunning) {
+      this.isRunning = true;
+      requestAnimationFrame((t) => this.loop(t));
+    }
   }
 
   loop(timestamp) {
@@ -69,18 +104,20 @@ export class Game {
 
   update(deltaTime) {
     if (this.state === 'GAMEOVER') {
-      if (this.keyboardInput.isRestartPressed()) {
-        this.restart();
-      }
+      this.feel.update(deltaTime, this.currentSpeed);
+      this.updateFloating(deltaTime);
       return;
     }
 
     if (this.state !== 'PLAYING') return;
 
-    // Управление
     let moveDirection = 0;
     if (this.keyboardInput.isLeftPressed()) moveDirection = -1;
     else if (this.keyboardInput.isRightPressed()) moveDirection = 1;
+
+    if (moveDirection === 0) {
+      moveDirection = this.mouseInput?.getMoveDirection?.() || 0;
+    }
 
     if (moveDirection === 0) {
       const touchX = this.touchInput.getTouchX();
@@ -97,9 +134,8 @@ export class Game {
     this.runTime += deltaTime;
     this.currentSpeed = getTrackSpeed(this.runTime);
 
-    this.track.update(deltaTime, this.currentSpeed);
+    this.track.update(deltaTime, this.currentSpeed, this.runTime);
 
-    // Начисление очков за время (не умножается на множитель)
     this.distanceScore += CONFIG.SCORE_BASE_PER_SECOND * deltaTime;
     this.score = Math.floor(this.distanceScore + this.pathReward);
 
@@ -108,16 +144,39 @@ export class Game {
       this.applyReward(result.rewardType, result.isIntentional, result.isChoice);
     }
 
-    // Обновление всплывающих очков
-    this.floatingRewards = this.floatingRewards.filter(r => {
-      r.y -= 100 * deltaTime;
-      r.life -= deltaTime;
-      return r.life > 0;
-    });
+    const coinsGained = this.track.collectCoins(this.player);
+    if (coinsGained > 0) {
+      this.applyCoinPickup(coinsGained);
+    }
+
+    this.updateFloating(deltaTime);
+    this.feel.update(deltaTime, this.currentSpeed);
 
     if (this.track.checkCollision(this.player)) {
       this.gameOver();
-      return;
+    }
+  }
+
+  updateFloating(deltaTime) {
+    this.floatingRewards = this.floatingRewards.filter((r) => {
+      r.y -= CONFIG.FEEL.FLOAT_SPEED * deltaTime;
+      r.life -= deltaTime;
+      return r.life > 0;
+    });
+  }
+
+  pushFloat({ x, y, value, type, subtitle = null, life }) {
+    this.floatingRewards.push({
+      x,
+      y,
+      value: Math.floor(value),
+      type,
+      subtitle,
+      life,
+      maxLife: life
+    });
+    if (this.floatingRewards.length > CONFIG.FEEL.FLOAT_MAX) {
+      this.floatingRewards.shift();
     }
   }
 
@@ -129,6 +188,8 @@ export class Game {
 
     const baseReward = CONFIG.REWARDS[type];
     let finalReward = baseReward;
+    const prevMultiplier = this.multiplier;
+    const lostStreak = isChoice && type === 'SAFE' && this.riskStreak > 0;
 
     if (isIntentional) {
       this.riskStreak += 1;
@@ -147,45 +208,110 @@ export class Game {
     this.pathReward += finalReward;
     this.score = Math.floor(this.distanceScore + this.pathReward);
 
-    this.floatingRewards.push({
+    const life = isIntentional ? CONFIG.FEEL.FLOAT_LIFE : CONFIG.FEEL.FLOAT_LIFE * 0.75;
+    const float = {
       x: this.player.x,
       y: this.player.y - 40,
       value: Math.floor(finalReward),
-      type: type,
-      life: 1.0
-    });
+      type,
+      subtitle: lostStreak
+        ? 'STREAK RESET'
+        : (isIntentional && prevMultiplier > 1 ? `x${prevMultiplier.toFixed(1)}` : null),
+      life,
+      maxLife: life
+    };
+    if (typeof this.pushFloat === 'function') this.pushFloat(float);
+    else this.floatingRewards.push(float);
+
+    if (!this.feel) return;
+    if (isIntentional) {
+      this.feel.onRisk({
+        x: this.player.x,
+        y: this.player.y,
+        streak: this.riskStreak,
+        multiplier: this.multiplier,
+        stepped: this.multiplier > prevMultiplier,
+        hitMax: this.multiplier >= CONFIG.MULTIPLIER_MAX && prevMultiplier < CONFIG.MULTIPLIER_MAX
+      });
+    } else if (isChoice && type === 'SAFE') {
+      if (lostStreak) this.feel.onStreakLost(this.player.x, this.player.y);
+      else this.feel.onSafe(this.player.x, this.player.y);
+    }
+  }
+
+  applyCoinPickup(amount) {
+    const gained = Math.floor(Number(amount) || 0);
+    if (gained <= 0) return;
+    this.coins = this.storage.addCoins(gained);
+    const float = {
+      x: this.player.x,
+      y: this.player.y - 36,
+      value: gained,
+      type: 'COIN',
+      subtitle: null,
+      life: CONFIG.FEEL.FLOAT_LIFE_COIN,
+      maxLife: CONFIG.FEEL.FLOAT_LIFE_COIN
+    };
+    if (typeof this.pushFloat === 'function') this.pushFloat(float);
+    else this.floatingRewards.push(float);
+    this.feel?.onCoin(this.player.x, this.player.y);
   }
 
   gameOver() {
     this.state = 'GAMEOVER';
-    this.isRunning = false;
     const totalScore = Math.floor(this.distanceScore + this.pathReward);
-    if (totalScore > this.bestScore) {
+    const previousBest = this.bestScore || 0;
+    this.isNewBest = totalScore > previousBest;
+    if (this.isNewBest) {
       this.bestScore = totalScore;
       this.storage.set('bestScore', this.bestScore);
     }
+    this.feel?.onGameOver(this.player.x, this.player.y);
+    if (this.isNewBest) this.feel?.onNewBest?.(this.player.x, this.player.y);
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
     console.log('Game Over! Score:', totalScore);
   }
+
   restart() {
     this.start();
   }
 
   render() {
+    const speedRatio = (this.currentSpeed - CONFIG.TRACK_SPEED_START)
+      / Math.max(1, CONFIG.TRACK_SPEED_MAX - CONFIG.TRACK_SPEED_START);
+    const shake = this.feel ? this.feel.shakeOffset() : { x: 0, y: 0 };
+
     this.renderer.clear();
-    this.renderer.drawTrack();
+    this.renderer.beginWorld(shake);
+    this.renderer.drawTrack(this.feel?.speedScroll || 0, Math.max(0, speedRatio));
     this.renderer.drawSegments(this.track.segments);
-    this.renderer.drawPlayer(this.player);
+    this.renderer.drawPlayer(this.player, this.feel);
+    this.renderer.drawParticles(this.feel?.particles.particles);
     this.renderer.drawFloatingRewards(this.floatingRewards);
-    
-    // HUD
-    this.renderer.drawHUD(Math.floor(this.score), this.multiplier, this.bestScore, this.riskStreak);
+    this.renderer.endWorld();
+
+    this.renderer.drawFlash(this.feel);
+    this.renderer.drawHUD(
+      Math.floor(this.score),
+      this.multiplier,
+      this.bestScore,
+      this.riskStreak,
+      this.coins,
+      this.feel,
+      this.audio?.muted
+    );
 
     if (this.state === 'GAMEOVER') {
-      this.renderer.drawGameOver(Math.floor(this.score), this.bestScore);
+      this.renderer.drawGameOver(
+        Math.floor(this.distanceScore + this.pathReward),
+        this.bestScore,
+        this.coins,
+        this.feel?.gameOverAge ?? 1,
+        { isNewBest: this.isNewBest, muted: this.audio?.muted }
+      );
     } else if (this.state === 'START') {
-      this.renderer.drawStartScreen();
+      this.renderer.drawStartScreen(this.audio?.muted);
     }
   }
 }
