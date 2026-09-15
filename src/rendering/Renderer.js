@@ -1,10 +1,97 @@
 import { CONFIG, isRiskPathType } from '../config.js';
+import { GardenArt } from './GardenArt.js';
+
+const LOAF_FRONT_URL = new URL('../../assets/characters/loaf-front.svg', import.meta.url).href;
+const LOAF_RUN_URLS = [
+  new URL('../../assets/characters/run/loaf-run-01.svg', import.meta.url).href,
+  new URL('../../assets/characters/run/loaf-run-02.svg', import.meta.url).href,
+  new URL('../../assets/characters/run/loaf-run-03.svg', import.meta.url).href,
+  new URL('../../assets/characters/run/loaf-run-04.svg', import.meta.url).href
+];
 
 export class Renderer {
-  constructor(ctx) {
+  constructor(ctx, options = {}) {
     this.ctx = ctx;
     this.width = CONFIG.CANVAS_WIDTH;
     this.height = CONFIG.CANVAS_HEIGHT;
+    this.playerSprite = null;
+    this.playerSpriteReady = false;
+    this.playerSpriteError = false;
+    this.playerFrontSprite = null;
+    this.playerFrontReady = false;
+    this.runFrames = [];
+    this.loadedKinds = new Set();
+    this.onSpriteReady = options.onSpriteReady || null;
+    this.garden = new GardenArt(ctx, {
+      onReady: () => {
+        if (typeof this.onSpriteReady === 'function') this.onSpriteReady('garden');
+      }
+    });
+    this.loadPlayerSprite(options.imageFactory);
+  }
+
+  markSpriteReady(kind) {
+    if (this.loadedKinds.has(kind)) return;
+    this.loadedKinds.add(kind);
+    if (kind === 'front') this.playerFrontReady = true;
+    else if (kind.startsWith('run-')) {
+      const runReady = LOAF_RUN_URLS.every((_, index) => this.loadedKinds.has(`run-${index}`));
+      if (runReady) {
+        this.playerSpriteReady = true;
+        this.playerSpriteError = false;
+      }
+    }
+    if (typeof this.onSpriteReady === 'function') this.onSpriteReady(kind);
+  }
+
+  bindSpriteImage(image, url, kind) {
+    if (!image) return null;
+    image.decoding = 'async';
+    image.onload = () => this.markSpriteReady(kind);
+    image.onerror = () => {
+      if (kind === 'front') this.playerFrontReady = false;
+      else {
+        this.playerSpriteReady = false;
+        this.playerSpriteError = true;
+        console.error('Renderer: failed to load Loaf run frame', kind);
+      }
+    };
+    image.src = url;
+    if (image.complete && image.naturalWidth > 0) this.markSpriteReady(kind);
+    return image;
+  }
+
+  loadPlayerSprite(imageFactory) {
+    const createImage = imageFactory || (
+      typeof Image === 'function' ? () => new Image() : null
+    );
+    if (!createImage) return;
+
+    this.runFrames = LOAF_RUN_URLS.map((url, index) => (
+      this.bindSpriteImage(createImage(), url, `run-${index}`)
+    ));
+    this.playerSprite = this.runFrames[0] || null;
+    this.playerFrontSprite = this.bindSpriteImage(createImage(), LOAF_FRONT_URL, 'front');
+  }
+
+  runFrameIndex(time) {
+    const count = this.runFrames.length || 1;
+    const fps = CONFIG.FEEL.PLAYER_RUN_FPS;
+    return Math.floor(Math.max(0, time) * fps) % count;
+  }
+
+  spriteLayout(sprite) {
+    const scale = sprite.DRAW_HEIGHT / sprite.SOURCE_HEIGHT;
+    return {
+      x: -sprite.ANCHOR_X * scale,
+      y: -sprite.ANCHOR_Y * scale,
+      width: sprite.SOURCE_WIDTH * scale,
+      height: sprite.DRAW_HEIGHT
+    };
+  }
+
+  playerSpriteLayout() {
+    return this.spriteLayout(CONFIG.VISUAL.LOAF_REAR);
   }
 
   clear() {
@@ -21,49 +108,21 @@ export class Renderer {
     this.ctx.restore();
   }
 
-  drawTrack(speedScroll = 0, speedRatio = 0) {
-    this.ctx.fillStyle = CONFIG.COLORS.TRACK;
-    this.ctx.fillRect(CONFIG.TRACK_LEFT, 0, CONFIG.TRACK_RIGHT - CONFIG.TRACK_LEFT, this.height);
-
-    this.ctx.strokeStyle = CONFIG.COLORS.TRACK_LINES;
-    this.ctx.lineWidth = 4;
-    this.ctx.setLineDash([18, 14]);
-    this.ctx.lineDashOffset = -speedScroll;
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(CONFIG.TRACK_LEFT, 0);
-    this.ctx.lineTo(CONFIG.TRACK_LEFT, this.height);
-    this.ctx.stroke();
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(CONFIG.TRACK_RIGHT, 0);
-    this.ctx.lineTo(CONFIG.TRACK_RIGHT, this.height);
-    this.ctx.stroke();
-    this.ctx.setLineDash([]);
-
-    if (speedRatio > 0.08) this.drawSpeedLines(speedScroll, speedRatio);
+  drawBackdrop(time = 0) {
+    this.garden.drawScreenBackdrop(time);
   }
 
-  drawSpeedLines(speedScroll, speedRatio) {
-    const count = Math.round(CONFIG.FEEL.SPEED_LINE_MAX * Math.min(1, speedRatio));
-    this.ctx.save();
-    this.ctx.strokeStyle = `rgba(255,255,255,${0.04 + speedRatio * 0.08})`;
-    this.ctx.lineWidth = 1;
-    for (let i = 0; i < count; i += 1) {
-      const lane = i % 2 === 0 ? CONFIG.TRACK_LEFT + 18 : CONFIG.TRACK_RIGHT - 18;
-      const y = ((speedScroll * 1.8 + i * 97) % (this.height + 80)) - 40;
-      const len = 18 + speedRatio * 36;
-      this.ctx.beginPath();
-      this.ctx.moveTo(lane, y);
-      this.ctx.lineTo(lane, y + len);
-      this.ctx.stroke();
-    }
-    this.ctx.restore();
+  drawFarWorld(camera) {
+    this.garden.drawFarWorld(camera);
+  }
+
+  drawMainWorld(camera) {
+    this.garden.drawMainWorld(camera);
   }
 
   drawSegments(segments) {
     segments.forEach((segment) => {
-      this.drawPaths(segment);
+      this.drawGateSills(segment);
       this.drawObstacles(segment);
       this.drawPathLabels(segment);
       this.drawCoins(segment);
@@ -74,53 +133,70 @@ export class Renderer {
     return isRiskPathType(type);
   }
 
-  drawPaths(segment) {
-    if (segment.type === 'TWO_PATHS') {
-      const risky = segment.paths.filter((path) => path.type === 'RISKY');
-      if (risky.length > 0) {
-        const x = Math.min(...risky.map((path) => path.x));
-        const right = Math.max(...risky.map((path) => path.x + path.width));
-        const y = Math.min(...risky.map((path) => path.y));
-        const bottom = Math.max(...risky.map((path) => path.y + path.height));
-        this.ctx.fillStyle = CONFIG.COLORS.RISKY_PATH;
-        this.ctx.fillRect(x, y, right - x, bottom - y);
-      }
-    }
+  isChoiceSegment(segment) {
+    return segment.type === 'TWO_PATHS' || segment.type === 'DUAL_RISK' || !!segment.isChoiceSegment;
+  }
 
-    segment.paths.forEach((path) => {
-      this.ctx.fillStyle = this.isRiskyPath(path.type)
-        ? CONFIG.COLORS.RISKY_PATH
-        : CONFIG.COLORS.SAFE_PATH;
-      this.ctx.fillRect(path.x, path.y, path.width, path.height);
+  gateFill(type) {
+    if (type === 'RISKY_HARD') return CONFIG.COLORS.HighRiskClay;
+    if (this.isRiskyPath(type)) return CONFIG.COLORS.RiskApricot;
+    if (type === 'SAFE') return CONFIG.COLORS.PlanterWood;
+    return CONFIG.COLORS.PlanterWood;
+  }
+
+  gateAccent(type) {
+    if (type === 'RISKY_HARD') return CONFIG.COLORS.HighRiskClay;
+    if (this.isRiskyPath(type)) return CONFIG.COLORS.RiskApricot;
+    return CONFIG.COLORS.SafeLawn;
+  }
+
+  pathLabel(type) {
+    if (type === 'RISKY_HARD') return CONFIG.COLORS.HIGH_RISK_LABEL;
+    if (this.isRiskyPath(type)) return CONFIG.COLORS.RISKY_LABEL;
+    return CONFIG.COLORS.SAFE_LABEL;
+  }
+
+  gateHeightForPath(segment, path) {
+    const row = (segment.obstacles || []).find((obs) => (
+      Math.abs(obs.y - path.y) < 12
+    ));
+    if (row) return row.height;
+    return Math.min(path.height, CONFIG.CHOICE_GATE_HEIGHT);
+  }
+
+  pathsOnRow(segment, obs) {
+    return (segment.paths || []).filter((path) => Math.abs(path.y - obs.y) < 12);
+  }
+
+  abuttingPaths(segment, obs) {
+    const epsilon = 2;
+    const row = this.pathsOnRow(segment, obs);
+    return row.filter((path) => (
+      Math.abs(obs.x + obs.width - path.x) < epsilon
+      || Math.abs(obs.x - (path.x + path.width)) < epsilon
+    ));
+  }
+
+  drawGateSills(segment) {
+    if (!this.isChoiceSegment(segment)) return;
+
+    (segment.paths || []).forEach((path) => {
+      const gateH = this.gateHeightForPath(segment, path);
+      this.garden.drawSill(path, gateH, this.gateAccent(path.type));
     });
   }
 
   drawObstacles(segment) {
-    this.ctx.fillStyle = CONFIG.COLORS.OBSTACLE;
-
-    segment.obstacles.forEach((obs) => {
-      this.ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-      this.ctx.strokeStyle = '#000000';
-      this.ctx.lineWidth = 2;
-      this.ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+    const choice = this.isChoiceSegment(segment);
+    (segment.obstacles || []).forEach((obs) => {
+      const neighbors = choice ? this.abuttingPaths(segment, obs) : [];
+      this.garden.drawPlanter(obs, neighbors);
     });
   }
 
   drawCoins(segment) {
     if (!segment.coins) return;
-    segment.coins.forEach((coin) => {
-      if (coin.collected) return;
-      const cx = coin.x + coin.width / 2;
-      const cy = coin.y + coin.height / 2;
-      const radius = Math.min(coin.width, coin.height) / 2;
-      this.ctx.beginPath();
-      this.ctx.fillStyle = CONFIG.COLORS.COIN;
-      this.ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.strokeStyle = '#fff4c2';
-      this.ctx.lineWidth = 2;
-      this.ctx.stroke();
-    });
+    segment.coins.forEach((coin) => this.garden.drawCoin(coin));
   }
 
   drawPathLabels(segment) {
@@ -143,45 +219,71 @@ export class Renderer {
       ));
 
       const isRisk = this.isRiskyPath(type);
-      const title = isRisk ? 'RISK' : 'SAFE';
       const reward = path.baseReward
         ?? CONFIG.REWARDS[type]
         ?? CONFIG.REWARDS[isRisk ? 'RISKY' : 'SAFE'];
+      const gateH = this.gateHeightForPath(segment, path);
       const labelX = path.x + path.width / 2;
-      const labelY = path.y + path.height + 20;
+      const labelY = path.y + gateH + 26;
+      const text = `+${reward}`;
 
       this.ctx.textAlign = 'center';
-      this.ctx.fillStyle = isRisk ? CONFIG.COLORS.RISKY_LABEL : CONFIG.COLORS.SAFE_LABEL;
-      this.ctx.font = 'bold 14px system-ui, sans-serif';
-      this.ctx.fillText(title, labelX, labelY);
-      this.ctx.font = '12px system-ui, sans-serif';
-      this.ctx.fillText(`+${reward}`, labelX, labelY + 16);
+      this.ctx.textBaseline = 'middle';
+      this.ctx.font = 'bold 22px system-ui, sans-serif';
+      const plateW = Math.max(56, this.ctx.measureText ? this.ctx.measureText(text).width + 22 : 60);
+      const plateH = 28;
+      this.garden.plate(labelX - plateW / 2, labelY - plateH / 2, plateW, plateH, 12);
+      this.ctx.fillStyle = this.pathLabel(type);
+      this.ctx.strokeStyle = CONFIG.COLORS.SkyPaper;
+      this.ctx.lineWidth = 3;
+      this.ctx.strokeText(text, labelX, labelY);
+      this.ctx.fillText(text, labelX, labelY);
+      this.ctx.textBaseline = 'alphabetic';
     });
   }
 
   drawPlayer(player, feel = null) {
-    const bob = feel ? Math.sin(feel.time * 9) * CONFIG.FEEL.PLAYER_BOB * (0.35 + (feel.playerPulse || 0)) : 0;
+    const time = feel ? feel.time || 0 : 0;
     const pulse = feel ? feel.playerPulse || 0 : 0;
     const stretchY = 1 + pulse * 0.18;
     const stretchX = 1 - pulse * 0.1;
     const dir = player.moveDirection || 0;
+    const lean = dir * 0.08;
+
+    this.garden.groundShadow(player.x, player.y + 16, 20, 8);
+
+    const cycle = this.runFrameIndex(time);
+    const bob = CONFIG.FEEL.PLAYER_BOB || 1.6;
+    const squash = CONFIG.FEEL.PLAYER_RUN_SQUASH || 0;
+    const even = cycle % 2 === 0;
+    const stride = even ? bob : -bob * 0.45;
 
     this.ctx.save();
-    this.ctx.translate(player.x, player.y + bob);
+    this.ctx.translate(player.x, player.y);
+    this.ctx.translate(0, stride);
     this.ctx.scale(stretchX, stretchY);
-    this.ctx.rotate(dir * 0.08);
+    if (squash) {
+      this.ctx.scale(
+        1 + (even ? -squash * 0.45 : squash * 0.35),
+        1 + (even ? squash : -squash * 0.55)
+      );
+    }
+    this.ctx.rotate(lean);
 
-    this.ctx.fillStyle = CONFIG.COLORS.PLAYER;
-    this.ctx.beginPath();
-    this.ctx.moveTo(0, -player.height / 2);
-    this.ctx.lineTo(-player.width / 2, player.height / 2);
-    this.ctx.lineTo(player.width / 2, player.height / 2);
-    this.ctx.closePath();
-    this.ctx.fill();
-
-    this.ctx.strokeStyle = '#ffffff';
-    this.ctx.lineWidth = 2;
-    this.ctx.stroke();
+    if (this.playerSpriteReady) {
+      const frames = this.runFrames.length ? this.runFrames : [this.playerSprite];
+      const sprite = frames[this.runFrameIndex(time)] || this.playerSprite;
+      if (sprite) {
+        const layout = this.playerSpriteLayout();
+        this.ctx.drawImage(
+          sprite,
+          layout.x,
+          layout.y,
+          layout.width,
+          layout.height
+        );
+      }
+    }
 
     this.ctx.restore();
   }
@@ -231,44 +333,58 @@ export class Renderer {
 
   drawHUD(score, multiplier, bestScore, riskStreak = 0, coins = 0, feel = null, muted = false) {
     const pulse = feel?.hudPulse || { streak: 0, multiplier: 0, coins: 0 };
+    const measure = (text, font) => {
+      this.ctx.font = font;
+      return this.ctx.measureText ? this.ctx.measureText(text).width : String(text).length * 8;
+    };
 
+    this.garden.badge(14, 10, 118, 56, 10);
     this.ctx.textAlign = 'left';
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-    this.ctx.font = 'bold 22px system-ui, sans-serif';
-    this.ctx.fillText(`${score}`, 20, 38);
+    this.ctx.font = 'bold 20px system-ui, sans-serif';
+    this.ctx.fillText(`${score}`, 26, 34);
     this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.font = '12px system-ui, sans-serif';
-    this.ctx.fillText('SCORE', 20, 54);
-    this.ctx.fillText(`BEST ${bestScore}`, 20, 74);
+    this.ctx.font = '10px system-ui, sans-serif';
+    this.ctx.fillText('SCORE', 26, 48);
+    this.ctx.fillText(`BEST ${bestScore}`, 26, 60);
 
     const coinScale = 1 + (pulse.coins || 0) * 0.18;
+    const coinLabel = `COINS ${coins}`;
+    const coinW = Math.max(92, measure(coinLabel, 'bold 14px system-ui, sans-serif') + 22);
+    this.garden.badge(14, 72, coinW, 26, 10);
     this.ctx.save();
-    this.ctx.translate(20, 100);
+    this.ctx.translate(26, 90);
     this.ctx.scale(coinScale, coinScale);
     this.ctx.fillStyle = CONFIG.COLORS.COIN;
-    this.ctx.font = 'bold 16px system-ui, sans-serif';
-    this.ctx.fillText(`COINS ${coins}`, 0, 0);
+    this.ctx.font = 'bold 14px system-ui, sans-serif';
+    this.ctx.fillText(coinLabel, 0, 0);
     this.ctx.restore();
 
     this.ctx.textAlign = 'right';
     const streakActive = riskStreak > 0;
     const streakScale = 1 + (pulse.streak || 0) * 0.22;
+    const streakLabel = `STREAK ${riskStreak}`;
+    const streakW = Math.max(104, measure(streakLabel, 'bold 15px system-ui, sans-serif') + 22);
+    this.garden.badge(this.width - 12 - streakW, 10, streakW, 26, 10);
     this.ctx.save();
-    this.ctx.translate(this.width - 20, 36);
+    this.ctx.translate(this.width - 24, 28);
     this.ctx.scale(streakScale, streakScale);
     this.ctx.fillStyle = streakActive ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD;
-    this.ctx.font = 'bold 18px system-ui, sans-serif';
-    this.ctx.fillText(`STREAK ${riskStreak}`, 0, 0);
+    this.ctx.font = 'bold 15px system-ui, sans-serif';
+    this.ctx.fillText(streakLabel, 0, 0);
     this.ctx.restore();
 
     const maxed = multiplier >= CONFIG.MULTIPLIER_MAX;
     const multScale = 1 + (pulse.multiplier || 0) * (maxed ? 0.32 : 0.2);
+    const multLabel = `SCORE x${multiplier.toFixed(1)}`;
+    const multW = Math.max(118, measure(multLabel, 'bold 18px system-ui, sans-serif') + 22);
+    this.garden.badge(this.width - 12 - multW, 40, multW, 28, 10);
     this.ctx.save();
-    this.ctx.translate(this.width - 20, 70);
+    this.ctx.translate(this.width - 24, 60);
     this.ctx.scale(multScale, multScale);
     this.ctx.fillStyle = maxed ? CONFIG.COLORS.COIN : (multiplier > 1 ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD);
-    this.ctx.font = 'bold 22px system-ui, sans-serif';
-    this.ctx.fillText(`x${multiplier.toFixed(1)}`, 0, 0);
+    this.ctx.font = 'bold 18px system-ui, sans-serif';
+    this.ctx.fillText(multLabel, 0, 0);
     this.ctx.restore();
 
     this.ctx.textAlign = 'left';
@@ -277,32 +393,66 @@ export class Renderer {
     this.ctx.fillText(muted ? 'M MUTED' : 'M SOUND', 20, this.height - 18);
   }
 
-  drawStartScreen(muted = false) {
-    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  drawStartScreen(muted = false, showFirstRunHints = false) {
+    this.ctx.fillStyle = CONFIG.COLORS.OVERLAY;
+    this.ctx.globalAlpha = 0.82;
     this.ctx.fillRect(0, 0, this.width, this.height);
+    this.ctx.globalAlpha = 1;
+
+    const panelH = showFirstRunHints ? 318 : 214;
+    this.garden.plate(this.width / 2 - 214, this.height / 2 - 118, 428, panelH, 16);
+
+    if (this.playerFrontReady && this.playerFrontSprite) {
+      const layout = this.spriteLayout(CONFIG.VISUAL.LOAF_FRONT);
+      this.ctx.drawImage(
+        this.playerFrontSprite,
+        this.width / 2 + layout.x,
+        this.height / 2 - 168 + layout.y,
+        layout.width,
+        layout.height
+      );
+    }
 
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
     this.ctx.textAlign = 'center';
 
     this.ctx.font = 'bold 48px system-ui, sans-serif';
-    this.ctx.fillText('ONE MORE RUN', this.width / 2, this.height / 2 - 40);
+    this.ctx.fillText('ONE MORE RUN', this.width / 2, this.height / 2 - 70);
 
     this.ctx.font = '20px system-ui, sans-serif';
-    this.ctx.fillText('TAP TO START', this.width / 2, this.height / 2 + 28);
+    this.ctx.fillText('TAP TO START', this.width / 2, this.height / 2 + 15);
 
     this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.font = '13px system-ui, sans-serif';
-    this.ctx.fillText('A/D or ←/→  •  TAP LEFT/RIGHT', this.width / 2, this.height / 2 + 62);
+    this.ctx.font = '15px system-ui, sans-serif';
+    this.ctx.fillText('A/D or ←/→  •  TAP LEFT/RIGHT', this.width / 2, this.height / 2 + 50);
 
-    this.ctx.font = '12px system-ui, sans-serif';
-    this.ctx.fillText(muted ? 'M MUTED' : 'M SOUND', this.width / 2, this.height / 2 + 92);
+    if (showFirstRunHints) {
+      this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
+      this.ctx.font = 'bold 15px system-ui, sans-serif';
+      this.ctx.fillText('SAFE = SURVIVE  •  RISK = BIG SCORE', this.width / 2, this.height / 2 + 88);
+      this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
+      this.ctx.font = '14px system-ui, sans-serif';
+      this.ctx.fillText('RISK BUILDS STREAK → SCORE x', this.width / 2, this.height / 2 + 114);
+      this.ctx.fillText('COINS STAY BETWEEN RUNS', this.width / 2, this.height / 2 + 138);
+    }
+
+    this.ctx.font = '13px system-ui, sans-serif';
+    this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
+    this.ctx.fillText(
+      muted ? 'M MUTED' : 'M SOUND',
+      this.width / 2,
+      this.height / 2 + (showFirstRunHints ? 174 : 86)
+    );
   }
 
   drawGameOver(score, bestScore, coins = 0, age = 1, extras = {}) {
     const fade = Math.min(1, age / 0.25);
     const isNewBest = !!extras.isNewBest;
-    this.ctx.fillStyle = `rgba(0, 0, 0,${0.55 + fade * 0.28})`;
+    this.ctx.fillStyle = CONFIG.COLORS.SkyPaper;
+    this.ctx.globalAlpha = 0.58 + fade * 0.18;
     this.ctx.fillRect(0, 0, this.width, this.height);
+    this.ctx.globalAlpha = fade;
+    this.garden.plate(this.width / 2 - 200, this.height / 2 - 168, 400, 340, 16);
 
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
     this.ctx.textAlign = 'center';
@@ -320,6 +470,11 @@ export class Renderer {
       this.ctx.font = 'bold 22px system-ui, sans-serif';
       this.ctx.fillText('NEW BEST', 0, 0);
       this.ctx.restore();
+    } else {
+      const pointsToBest = Math.max(1, bestScore + 1 - score);
+      this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
+      this.ctx.font = 'bold 14px system-ui, sans-serif';
+      this.ctx.fillText(`${pointsToBest} TO NEW BEST`, this.width / 2, this.height / 2 - 78);
     }
 
     this.ctx.font = 'bold 36px system-ui, sans-serif';
@@ -333,11 +488,11 @@ export class Renderer {
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
     this.ctx.fillText(`BEST ${bestScore}`, this.width / 2, this.height / 2 + 28);
     this.ctx.fillStyle = CONFIG.COLORS.COIN;
-    this.ctx.fillText(`COINS ${coins}`, this.width / 2, this.height / 2 + 60);
+    this.ctx.fillText(`COINS ${coins}  •  SAVED`, this.width / 2, this.height / 2 + 60);
 
-    this.ctx.font = '18px system-ui, sans-serif';
-    this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.fillText('TAP OR PRESS R', this.width / 2, this.height / 2 + 118);
+    this.ctx.font = 'bold 19px system-ui, sans-serif';
+    this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
+    this.ctx.fillText('TAP / R TO RESTART', this.width / 2, this.height / 2 + 118);
     this.ctx.font = '12px system-ui, sans-serif';
     this.ctx.fillText(extras.muted ? 'M MUTED' : 'M SOUND', this.width / 2, this.height / 2 + 144);
     this.ctx.globalAlpha = 1;

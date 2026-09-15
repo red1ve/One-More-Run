@@ -81,9 +81,24 @@ export const CONFIG = {
   COIN_SKIP_MARGIN: 10,
   COIN_ZONE_REPEAT_WEIGHT: 0.18,
 
+  // Track geometry variation (presentation/fairness only; no reward changes)
+  PATTERN_GATE_HEIGHT: 40,
+  PATTERN_REPEAT_WEIGHT: 0.25,
+  PATTERN_REVERSE_WEIGHT: 0.45,
+  PATTERN_DOUBLE_UNLOCK_TIME: 60,
+  PATTERN_OFFSET_SHIFT_INTRO: 12,
+  PATTERN_OFFSET_SHIFT_EARLY: 18,
+  PATTERN_OFFSET_SHIFT_MID: 22,
+  PATTERN_OFFSET_SHIFT_LATE: 24,
+  PATTERN_OFFSET_GATE_SHIFT: 12,
+  PATTERN_FUNNEL_EXPAND_NORMAL: 48,
+  PATTERN_FUNNEL_EXPAND_SAFE: 36,
+  PATTERN_FUNNEL_EXPAND_RISK: 16,
+
   YANDEX: {
     SDK_URL: '/sdk.js',
-    SDK_LOAD_TIMEOUT_MS: 5000,
+    DEFAULT_LANGUAGE: 'en',
+    SUPPORTED_LANGUAGES: ['en'],
     LEADERBOARD_NAME: 'one_more_run_score',
     ADS_ENABLED: true,
     INTERSTITIAL_COOLDOWN_RUNS: 3
@@ -113,6 +128,11 @@ export const CONFIG = {
     HUD_PULSE_DURATION: 0.28,
     PLAYER_PULSE_DURATION: 0.18,
     PLAYER_BOB: 1.6,
+    PLAYER_RUN_CYCLE: 9,
+    PLAYER_RUN_FPS: 10,
+    PLAYER_RUN_SQUASH: 0.04,
+    PLAYER_RUN_TWIST: 0.028,
+    MEOW_COOLDOWN: 0.5,
     SPEED_LINE_MAX: 10,
     SPEED_SCROLL_SCALE: 0.35,
     AUDIO_VOLUME: 0.18,
@@ -125,24 +145,102 @@ export const CONFIG = {
     INTENSITY_MAX: 1
   },
 
-  // Цвета
-  COLORS: {
-    BACKGROUND: '#0d0d0d',
-    TRACK: '#161616',
-    TRACK_LINES: '#2d2d2d',
-    PLAYER: '#3a86ff',
-    OBSTACLE: '#ff4d4d',
-    RISKY_OBSTACLE: '#c45c1a',
-    SAFE_PATH: 'rgba(52, 84, 58, 0.55)',
-    RISKY_PATH: 'rgba(122, 72, 28, 0.55)',
-    SAFE_LABEL: '#b7c9b4',
-    RISKY_LABEL: '#e0b48a',
-    UI_TEXT: '#ffffff',
-    UI_HUD: '#7a7a7a',
-    UI_ACCENT: '#3a86ff',
-    COIN: '#e8c547'
-  }
+  // Visual Bible drawing rules (presentation only)
+  VISUAL: {
+    OUTLINE_WIDTH: 4,
+    SHADOW_OFFSET: 5,
+    HEDGE_BAND: 28,
+    PLANTER_LIP: 6,
+    TRACK_SEAM: 2,
+    CAMERA_FOLLOW: 7,
+    CAMERA_LEAD: 32,
+    CAMERA_LAG: 6,
+    CAMERA_FAR: 0.12,
+    SKY_BAND: 272,
+    PATH_INSET_NEAR: 4,
+    PATH_INSET_FAR: 58,
+    LOAF_REAR: {
+      SOURCE_WIDTH: 1024,
+      SOURCE_HEIGHT: 1024,
+      DRAW_HEIGHT: 127,
+      ANCHOR_X: 513,
+      ANCHOR_Y: 797,
+      FLOAT_CLEARANCE: 118
+    },
+    LOAF_FRONT: {
+      SOURCE_WIDTH: 1024,
+      SOURCE_HEIGHT: 1024,
+      DRAW_HEIGHT: 112,
+      ANCHOR_X: 487,
+      ANCHOR_Y: 523
+    }
+  },
+
+  COLORS: bibleColors()
 };
+
+function bibleColors() {
+  const SkyPaper = '#F3E4C7';
+  const GardenSky = '#D5E5EA';
+  const FloorSand = '#E2C992';
+  const HedgeSage = '#6F9A5E';
+  const PlanterWood = '#C4A06A';
+  const CatCream = '#F6E7C8';
+  const CatGinger = '#E39A4F';
+  const SafeLawn = '#A8C98B';
+  const RiskApricot = '#E0A36A';
+  const HighRiskClay = '#C45C32';
+  const CoinAmber = '#E8B84A';
+  const InkBrown = '#4A3428';
+  const ShadowDust = '#C4A97A';
+
+  return {
+    SkyPaper,
+    GardenSky,
+    FloorSand,
+    HedgeSage,
+    PlanterWood,
+    CatCream,
+    CatGinger,
+    SafeLawn,
+    RiskApricot,
+    HighRiskClay,
+    CoinAmber,
+    InkBrown,
+    ShadowDust,
+
+    BACKGROUND: GardenSky,
+    TRACK: FloorSand,
+    TRACK_LINES: InkBrown,
+    PLAYER: CatGinger,
+    OBSTACLE: PlanterWood,
+    RISKY_OBSTACLE: PlanterWood,
+    SAFE_PATH: hexAlpha(SafeLawn, 0.82),
+    RISKY_PATH: hexAlpha(RiskApricot, 0.88),
+    HIGH_RISK_PATH: hexAlpha(HighRiskClay, 0.88),
+    SAFE_LABEL: InkBrown,
+    RISKY_LABEL: CatGinger,
+    HIGH_RISK_LABEL: HighRiskClay,
+    UI_TEXT: InkBrown,
+    UI_HUD: hexAlpha(InkBrown, 0.55),
+    UI_ACCENT: CatGinger,
+    COIN: CoinAmber,
+    OVERLAY: hexAlpha(SkyPaper, 0.78),
+    FLASH_SAFE: hexAlpha(SafeLawn, 0.12),
+    FLASH_RISK: hexAlpha(RiskApricot, 0.16),
+    FLASH_COIN: hexAlpha(CoinAmber, 0.14),
+    FLASH_FAIL: hexAlpha(HighRiskClay, 0.14),
+    FLASH_STREAK_LOSS: hexAlpha(InkBrown, 0.12)
+  };
+}
+
+function hexAlpha(hex, alpha) {
+  const value = hex.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export function isRiskPathType(type) {
   return type === 'RISKY' || type === 'RISKY_EASY' || type === 'RISKY_HARD' || type === 'SHORT_RISKY';

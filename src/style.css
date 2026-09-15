@@ -8,15 +8,13 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
-  background-color: #0d0d0d;
-  color: #f0f0f0;
+  background-color: #D5E5EA;
+  color: #4A3428;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
-  user-select: none;
-  -webkit-user-select: none;
 }
 
 /* Контейнер игры, занимающий весь экран */
@@ -27,6 +25,9 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Адаптивный Canvas с фиксированным соотношением сторон 9:16 */
@@ -36,6 +37,10 @@ canvas {
   max-height: 100%;
   aspect-ratio: 9 / 16;
   object-fit: contain;
-  background-color: #1a1a1a;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  background-color: #D5E5EA;
+  box-shadow: 5px 5px 0 #C4A97A;
 }

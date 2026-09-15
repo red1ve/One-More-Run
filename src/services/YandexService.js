@@ -10,6 +10,8 @@ export class YandexService {
     this.state = 'unavailable';
     this.ysdk = null;
     this.initPromise = null;
+    this.detectedLanguage = this.config.DEFAULT_LANGUAGE;
+    this.language = this.config.DEFAULT_LANGUAGE;
     this.gameReadyRequested = false;
     this.gameReadySent = false;
     this.gameplayActive = false;
@@ -61,6 +63,7 @@ export class YandexService {
 
     try {
       this.ysdk = await YaGames.init();
+      this.detectLanguage();
       this.state = 'ready';
       this.subscribeToPlatformEvents();
       this.flushGameReady();
@@ -74,6 +77,26 @@ export class YandexService {
     }
   }
 
+  detectLanguage() {
+    const sdkLanguage = this.ysdk?.environment?.i18n?.lang;
+    const normalized = typeof sdkLanguage === 'string'
+      ? sdkLanguage.trim().toLowerCase().split('-')[0]
+      : '';
+    this.detectedLanguage = normalized || this.config.DEFAULT_LANGUAGE;
+    this.language = this.config.SUPPORTED_LANGUAGES.includes(this.detectedLanguage)
+      ? this.detectedLanguage
+      : this.config.DEFAULT_LANGUAGE;
+    return this.language;
+  }
+
+  getLanguage() {
+    return this.language;
+  }
+
+  getDetectedLanguage() {
+    return this.detectedLanguage;
+  }
+
   ensureSdkLoaded() {
     if (this.environment.YaGames) return Promise.resolve(true);
     if (!this.document?.createElement || !this.document?.head) return Promise.resolve(false);
@@ -83,7 +106,6 @@ export class YandexService {
       const finish = (loaded) => {
         if (settled) return;
         settled = true;
-        this.environment.clearTimeout?.(timeoutId);
         resolve(loaded && !!this.environment.YaGames);
       };
 
@@ -93,11 +115,6 @@ export class YandexService {
       script.dataset.yandexGamesSdk = 'true';
       script.addEventListener('load', () => finish(true), { once: true });
       script.addEventListener('error', () => finish(false), { once: true });
-
-      const timeoutId = this.environment.setTimeout?.(
-        () => finish(false),
-        this.config.SDK_LOAD_TIMEOUT_MS
-      );
       this.document.head.appendChild(script);
     });
   }

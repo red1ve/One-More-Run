@@ -1,5 +1,6 @@
 import { CONFIG, getTrackSpeed } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
+import { WorldCamera } from '../rendering/WorldCamera.js';
 import { Player } from './Player.js';
 import { Track } from './Track.js';
 import { GameFeel } from './GameFeel.js';
@@ -17,7 +18,11 @@ export class Game {
     this.storage = new StorageService();
     this.audio = new AudioService();
     this.platform = platformService;
-    this.renderer = new Renderer(this.ctx);
+    this.renderer = new Renderer(this.ctx, {
+      onSpriteReady: () => {
+        if (this.state === 'START') this.render();
+      }
+    });
     this.feel = new GameFeel(this.audio);
     this.keyboardInput = new KeyboardInput();
     this.mouseInput = new MouseInput(this.canvas);
@@ -26,6 +31,7 @@ export class Game {
 
     this.player = new Player();
     this.track = new Track();
+    this.camera = new WorldCamera();
 
     this.state = 'START';
     this.score = 0;
@@ -42,6 +48,8 @@ export class Game {
     this.isRunning = false;
     this.floatingRewards = [];
     this.isNewBest = false;
+    this.showFirstRunHints = !this.storage.get('onboardingSeen', false);
+    this.riskHintSeen = !!this.storage.get('riskHintSeen', false);
     this.hidden = false;
     this.platformPaused = false;
     this.adPaused = false;
@@ -139,6 +147,10 @@ export class Game {
   start() {
     if (this.isRunning && this.state === 'PLAYING') return;
     this.unlockAudio?.();
+    if (this.showFirstRunHints) {
+      this.storage.set('onboardingSeen', true);
+      this.showFirstRunHints = false;
+    }
     this.state = 'PLAYING';
     this.isNewBest = false;
     this.score = 0;
@@ -154,6 +166,7 @@ export class Game {
 
     this.player.reset();
     this.track.reset();
+    this.camera?.reset?.();
 
     this.lastTime = performance.now();
     this.syncGameplayLifecycle?.();
@@ -211,6 +224,8 @@ export class Game {
     this.currentSpeed = getTrackSpeed(this.runTime);
 
     this.track.update(deltaTime, this.currentSpeed, this.runTime);
+    this.camera?.advance?.(this.currentSpeed * deltaTime);
+    this.camera?.follow?.(this.player.y, deltaTime, true, this.currentSpeed);
 
     this.distanceScore += CONFIG.SCORE_BASE_PER_SECOND * deltaTime;
     this.score = Math.floor(this.distanceScore + this.pathReward);
@@ -284,15 +299,26 @@ export class Game {
     this.pathReward += finalReward;
     this.score = Math.floor(this.distanceScore + this.pathReward);
 
+    let subtitle = null;
+    if (isIntentional && this.multiplier > prevMultiplier) {
+      subtitle = `STREAK ${this.riskStreak} • SCORE x${this.multiplier.toFixed(1)}`;
+    } else if (isIntentional && !this.riskHintSeen) {
+      subtitle = 'RISK BUILDS STREAK';
+      this.riskHintSeen = true;
+      this.storage?.set?.('riskHintSeen', true);
+    } else if (isIntentional && prevMultiplier > 1) {
+      subtitle = `SCORE x${prevMultiplier.toFixed(1)}`;
+    } else if (lostStreak) {
+      subtitle = 'STREAK RESET';
+    }
+
     const life = isIntentional ? CONFIG.FEEL.FLOAT_LIFE : CONFIG.FEEL.FLOAT_LIFE * 0.75;
     const float = {
       x: this.player.x,
-      y: this.player.y - 40,
+      y: this.player.y - CONFIG.VISUAL.LOAF_REAR.FLOAT_CLEARANCE,
       value: Math.floor(finalReward),
       type,
-      subtitle: lostStreak
-        ? 'STREAK RESET'
-        : (isIntentional && prevMultiplier > 1 ? `x${prevMultiplier.toFixed(1)}` : null),
+      subtitle,
       life,
       maxLife: life
     };
@@ -321,7 +347,7 @@ export class Game {
     this.coins = this.storage.addCoins(gained);
     const float = {
       x: this.player.x,
-      y: this.player.y - 36,
+      y: this.player.y - CONFIG.VISUAL.LOAF_REAR.FLOAT_CLEARANCE,
       value: gained,
       type: 'COIN',
       subtitle: null,
@@ -358,13 +384,14 @@ export class Game {
   }
 
   render() {
-    const speedRatio = (this.currentSpeed - CONFIG.TRACK_SPEED_START)
-      / Math.max(1, CONFIG.TRACK_SPEED_MAX - CONFIG.TRACK_SPEED_START);
-    const shake = this.feel ? this.feel.shakeOffset() : { x: 0, y: 0 };
+    const camera = this.camera;
+    const time = this.feel?.time || 0;
 
     this.renderer.clear();
-    this.renderer.beginWorld(shake);
-    this.renderer.drawTrack(this.feel?.speedScroll || 0, Math.max(0, speedRatio));
+    this.renderer.drawBackdrop(time);
+    this.renderer.drawFarWorld(camera);
+    this.renderer.beginWorld({ x: 0, y: camera ? camera.gameplayShift() : 0 });
+    this.renderer.drawMainWorld(camera);
     this.renderer.drawSegments(this.track.segments);
     this.renderer.drawPlayer(this.player, this.feel);
     this.renderer.drawParticles(this.feel?.particles.particles);
@@ -391,7 +418,7 @@ export class Game {
         { isNewBest: this.isNewBest, muted: this.audio?.muted }
       );
     } else if (this.state === 'START') {
-      this.renderer.drawStartScreen(this.audio?.muted);
+      this.renderer.drawStartScreen(this.audio?.muted, this.showFirstRunHints);
     }
   }
 }
