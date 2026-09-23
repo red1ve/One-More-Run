@@ -3,6 +3,7 @@ import {
   projectWorldToScreen,
   sampleRoadRibbon,
   screenYForWorld,
+  unifiedDepthSample,
   unifiedDepthZones,
   worldYForScreen
 } from '../src/rendering/VisualProjector.js';
@@ -125,7 +126,134 @@ for (const speed of speeds) {
   console.log(`  ${String(speed).padStart(3)}  ${parts.join('   ')}`);
 }
 
+// PASS B.4 — straight near sand edge (constant slope continuation, still widening)
+const nearWidth = zones.NEAR.roadWidth;
+const nearLeft = zones.NEAR.roadLeft;
+const nearRight = zones.NEAR.roadRight;
+const nearOffsets = [-100, -75, -50, -25, 0, 25, 50, 75, 100, 150];
+const nearRows = nearOffsets.map((offset) => {
+  const screen = playerScreen + offset;
+  const sample = unifiedDepthSample(screen, shift, height);
+  return {
+    offset,
+    screen,
+    left: sample.roadLeft,
+    right: sample.roadRight,
+    width: sample.roadWidth,
+    s: sample.s
+  };
+});
+const bottomSample = unifiedDepthSample(height, shift, height);
+
+console.log('');
+console.log('near edge  offset  screenY    left    right   width      s   dL/dY   dR/dY');
+const slopesL = [];
+const slopesR = [];
+for (let i = 0; i < nearRows.length; i += 1) {
+  const row = nearRows[i];
+  let dL = '';
+  let dR = '';
+  if (i > 0) {
+    const prev = nearRows[i - 1];
+    const dy = row.screen - prev.screen;
+    const slopeL = (row.left - prev.left) / dy;
+    const slopeR = (row.right - prev.right) / dy;
+    slopesL.push(slopeL);
+    slopesR.push(slopeR);
+    dL = slopeL.toFixed(4);
+    dR = slopeR.toFixed(4);
+  }
+  console.log(
+    `  ${String(row.offset).padStart(4)}  ${row.screen.toFixed(1).padStart(7)}  ${row.left.toFixed(2).padStart(7)}  ${row.right.toFixed(2).padStart(7)}  ${row.width.toFixed(2).padStart(7)}  ${row.s.toFixed(3)}  ${dL.padStart(7)}  ${dR.padStart(7)}`
+  );
+}
+
+const playerRow = nearRows.find((row) => row.offset === 0);
+if (!playerRow) fail('missing player edge sample');
+if (Math.abs(playerRow.width - 328.6) > 2.5) {
+  fail(`player sand width ${playerRow.width} != ~328.6`);
+}
+if (Math.abs(playerRow.s - 1) > 0.001) fail(`player s ${playerRow.s}`);
+
+// Below the join (player-100), sand edges must be linear: constant Δx/Δy.
+const joinOffset = -100;
+const linearRows = nearRows.filter((row) => row.offset >= joinOffset);
+for (let i = 1; i < linearRows.length; i += 1) {
+  const a = linearRows[i - 1];
+  const b = linearRows[i];
+  const dy = b.screen - a.screen;
+  const slopeL = (b.left - a.left) / dy;
+  const slopeR = (b.right - a.right) / dy;
+  if (i > 1) {
+    const p = linearRows[i - 2];
+    const prevDy = a.screen - p.screen;
+    const prevL = (a.left - p.left) / prevDy;
+    const prevR = (a.right - p.right) / prevDy;
+    if (Math.abs(slopeL - prevL) > 0.0008) {
+      fail(`left slope drift ${prevL.toFixed(5)} -> ${slopeL.toFixed(5)} at +${b.offset}`);
+    }
+    if (Math.abs(slopeR - prevR) > 0.0008) {
+      fail(`right slope drift ${prevR.toFixed(5)} -> ${slopeR.toFixed(5)} at +${b.offset}`);
+    }
+  }
+  // Must keep widening (left moves out, right moves out)
+  if (!(b.width > a.width + 0.05)) {
+    fail(`road did not widen from ${a.offset} to ${b.offset}`);
+  }
+  if (!(b.left < a.left - 0.02) || !(b.right > a.right + 0.02)) {
+    fail(`edges did not expand outward from ${a.offset} to ${b.offset}`);
+  }
+}
+
+if (!(bottomSample.roadWidth > playerRow.width + 8)) {
+  fail(`bottom width ${bottomSample.roadWidth} did not expand past player ${playerRow.width}`);
+}
+if (bottomSample.roadWidth > playerRow.width + 120) {
+  fail(`bottom width ${bottomSample.roadWidth} widened too much from player ${playerRow.width}`);
+}
+
+// Depth/s stays flat at/below the cat even while edges widen.
+for (const row of nearRows) {
+  if (row.offset < 0) continue;
+  if (Math.abs(row.s - 1) > 0.001) fail(`s drifted below player at +${row.offset}: ${row.s}`);
+}
+
 const ribbon = sampleRoadRibbon(shift, { height, pad: 56 });
+const playerRibbon = ribbon.find((sample) => Math.abs(sample.screenY - playerScreen) < 0.6);
+if (!playerRibbon) fail('ribbon missing playerScreen sample');
+console.log('');
+console.log('ribbon sand edge around player');
+for (const sample of ribbon) {
+  if (sample.screenY + 0.05 < playerScreen - 110) continue;
+  console.log(
+    `  sy ${sample.screenY.toFixed(1).padStart(7)}  L ${sample.roadLeft.toFixed(2)}  R ${sample.roadRight.toFixed(2)}  W ${sample.roadWidth.toFixed(2)}  s ${sample.s.toFixed(3)}`
+  );
+}
+
+if (Math.abs(zones.FAR.roadWidth - farWidth) > 1) {
+  fail(`FAR width moved ${zones.FAR.roadWidth}`);
+}
+if (Math.abs(zones.MID.roadWidth - 209.7) > 1.5) {
+  fail(`MID width moved ${zones.MID.roadWidth}`);
+}
+if (Math.abs(nearWidth - 328.6) > 2.5) {
+  fail(`NEAR width moved ${nearWidth}`);
+}
+
+console.log(
+  `player sand L ${nearLeft.toFixed(2)}  R ${nearRight.toFixed(2)}  W ${nearWidth.toFixed(2)}`
+);
+console.log(
+  `bottom sand  L ${bottomSample.roadLeft.toFixed(2)}  R ${bottomSample.roadRight.toFixed(2)}  W ${bottomSample.roadWidth.toFixed(2)}  (ΔW ${(bottomSample.roadWidth - playerRow.width).toFixed(2)})`
+);
+if (slopesL.length) {
+  const meanL = slopesL.reduce((a, b) => a + b, 0) / slopesL.length;
+  const meanR = slopesR.reduce((a, b) => a + b, 0) / slopesR.length;
+  const spanL = Math.max(...slopesL) - Math.min(...slopesL);
+  const spanR = Math.max(...slopesR) - Math.min(...slopesR);
+  console.log(`edge slope mean L ${meanL.toFixed(4)}  R ${meanR.toFixed(4)}  span L ${spanL.toFixed(4)}  R ${spanR.toFixed(4)}`);
+}
+
 let prevDraw = -Infinity;
 let prevTexel = 0;
 console.log('');

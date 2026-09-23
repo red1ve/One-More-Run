@@ -58,6 +58,11 @@ function widthEase(t) {
   return x * (0.72 + 0.28 * x);
 }
 
+function widthEaseDeriv(t) {
+  const x = clamp(t, 0, 1);
+  return 0.72 + 0.56 * x;
+}
+
 function gameplayRoadAt(linearScreenY, height) {
   const inset = pathInsetAt(linearScreenY, height);
   const left = CONFIG.TRACK_LEFT + inset;
@@ -69,6 +74,57 @@ function gameplayRoadAt(linearScreenY, height) {
     width: Math.max(8, right - left),
     center: (left + right) * 0.5
   };
+}
+
+function nearSpan(shift) {
+  const vanishY = corridorHorizonY();
+  const nearScreenY = CONFIG.PLAYER_START_Y + shift;
+  return {
+    vanishY,
+    nearScreenY,
+    span: Math.max(1, nearScreenY - vanishY)
+  };
+}
+
+/** Perspective ribbon width used by depth/s. Flat at/below the cat so s stays 1. */
+function perspectiveWidthAt(screenY, shift, height, cfg) {
+  const { vanishY, nearScreenY, span } = nearSpan(shift);
+  const nearW = gameplayRoadAt(nearScreenY, height).width;
+  const farW = cfg.farRoadWidth;
+  if (screenY >= nearScreenY) return nearW;
+  const t = clamp((screenY - vanishY) / span, 0, 1);
+  return farW + (nearW - farW) * widthEase(t);
+}
+
+function perspectiveWidthDeriv(screenY, shift, height, cfg) {
+  const { vanishY, nearScreenY, span } = nearSpan(shift);
+  const nearW = gameplayRoadAt(nearScreenY, height).width;
+  const farW = cfg.farRoadWidth;
+  const t = screenY >= nearScreenY ? 1 : clamp((screenY - vanishY) / span, 0, 1);
+  return (nearW - farW) * widthEaseDeriv(t) / span;
+}
+
+function visualRoadWidth(screenY, shift, height, cfg) {
+  return perspectiveWidthAt(screenY, shift, height, cfg);
+}
+
+/**
+ * Drawn sand-edge width. FAR→MID keep the perspective ease. From a join
+ * just above the cat, continue with the join tangent so left/right edges
+ * stay nearly straight while the road keeps widening — no fixed width,
+ * no hard corner, no reverse taper.
+ */
+function visualEdgeWidth(screenY, shift, height, cfg) {
+  const { nearScreenY } = nearSpan(shift);
+  const joinY = nearScreenY - 100;
+
+  if (screenY <= joinY) {
+    return perspectiveWidthAt(screenY, shift, height, cfg);
+  }
+
+  const w0 = perspectiveWidthAt(joinY, shift, height, cfg);
+  const m0 = perspectiveWidthDeriv(joinY, shift, height, cfg);
+  return w0 + m0 * (screenY - joinY);
 }
 
 function playerAnchor(shift) {
@@ -201,18 +257,6 @@ export function screenYForWorld(worldY, shift = 0, height = CONFIG.CANVAS_HEIGHT
   return map.screens[hit.lo] + (map.screens[hit.hi] - map.screens[hit.lo]) * hit.u;
 }
 
-function visualRoadWidth(screenY, shift, height, cfg) {
-  const vanishY = corridorHorizonY();
-  const nearScreenY = CONFIG.PLAYER_START_Y + shift;
-  const nearRoad = gameplayRoadAt(nearScreenY, height);
-  const farW = cfg.farRoadWidth;
-  if (screenY >= nearScreenY) {
-    return gameplayRoadAt(screenY, height).width;
-  }
-  const t = clamp((screenY - vanishY) / Math.max(1, nearScreenY - vanishY), 0, 1);
-  return farW + (nearRoad.width - farW) * widthEase(t);
-}
-
 export function projectWorldToScreen(
   worldX,
   worldY,
@@ -228,11 +272,13 @@ export function projectWorldToScreen(
   const drawY = screenY - shift;
   const t = clamp((screenY - vanishY) / Math.max(1, height - vanishY), 0, 1);
   const gameplay = gameplayRoadAt(screenY, height);
-  const roadWidth = depth.width;
+  // Drawn sand edges can keep expanding with a straight near slope.
+  // Depth/s stays on visualRoadWidth (flat at/below the cat).
+  const roadWidth = visualEdgeWidth(screenY, shift, height, cfg);
   const roadCenter = vanishX;
   const roadLeft = roadCenter - roadWidth * 0.5;
   const roadRight = roadCenter + roadWidth * 0.5;
-  const xScale = roadWidth / gameplay.width;
+  const xScale = roadWidth / Math.max(1, gameplay.width);
   const screenX = vanishX + (worldX - vanishX) * xScale;
   const readStart = readZoneStartWorldY() + shift;
   const inReadZone = screenY >= readStart;
@@ -299,13 +345,19 @@ export function sampleRoadRibbon(shift = 0, options = {}) {
   const pad = options.pad == null ? 56 : options.pad;
   const top = corridorHorizonY();
   const bottom = height + pad;
-  const samples = [];
+  const playerScreen = CONFIG.PLAYER_START_Y + shift;
+  const screens = [];
   for (let i = 0; i <= sections; i += 1) {
-    const screen = top + ((bottom - top) * i) / sections;
-    const worldY = worldYForScreen(screen, shift, height);
-    samples.push(projectWorldToScreen(CONFIG.CANVAS_WIDTH * 0.5, worldY, shift, height));
+    screens.push(top + ((bottom - top) * i) / sections);
   }
-  return samples;
+  if (!screens.some((screen) => Math.abs(screen - playerScreen) < 0.5)) {
+    screens.push(playerScreen);
+    screens.sort((a, b) => a - b);
+  }
+  return screens.map((screen) => {
+    const worldY = worldYForScreen(screen, shift, height);
+    return projectWorldToScreen(CONFIG.CANVAS_WIDTH * 0.5, worldY, shift, height);
+  });
 }
 
 export function unifiedDepthSample(screenY, shift = 0, height = CONFIG.CANVAS_HEIGHT) {

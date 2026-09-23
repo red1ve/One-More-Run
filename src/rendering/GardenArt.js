@@ -10,8 +10,6 @@ import {
   projectWorldToScreen,
   sampleRoadRibbon,
   worldYForScreen,
-  unifiedDepthZones,
-  depthDebugEnabled,
   crestYAt as projectorCrestYAt,
   horizonOcclusion
 } from './VisualProjector.js';
@@ -942,7 +940,6 @@ export class GardenArt {
     this.drawGardenBorders(camera);
     this.drawCrestLandform();
     this.collectAndDrawWorld(camera, segments, playerY);
-    this.drawDepthProbe();
   }
 
   depthProbeWorldY(progress) {
@@ -1085,181 +1082,7 @@ export class GardenArt {
   }
 
   drawDepthProbe() {
-    if (!depthDebugEnabled()) return;
-    const progress = this.lastProgress || 0;
-    const probe = this.depthProbeWorldY(progress);
-    const sand = probe.projected;
-    const tree = this.projectWorld(sand.roadCenter - 70, probe.worldY);
-    const post = this.projectWorld(sand.roadCenter + 70, probe.worldY);
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const prev = this._depthClock;
-    let screenSpeed = this._depthScreenSpeed;
-    if (prev && now > prev.t) {
-      const dt = (now - prev.t) / 1000;
-      if (dt >= 1 / 120 && dt <= 0.25) {
-        screenSpeed = (sand.screenY - prev.screenY) / dt;
-        this._depthScreenSpeed = screenSpeed;
-        this._depthWorldSpeed = (probe.worldY - prev.worldY) / dt;
-      }
-    }
-    this._depthClock = { t: now, screenY: sand.screenY, worldY: probe.worldY };
-    const tile = Math.max(1, CONFIG.VISUAL.PATH_SAND_TILE || 2600);
-    const sandItem = this.pathSandItem();
-    const texH = sandItem?.image?.naturalHeight || 1152;
-    const planted = probe.planted;
-    const uvV = (((planted % tile) + tile) % tile) / tile;
-    const texel = sand.yJacobian * tile / texH;
-    const rows = [
-      { name: 'SAND', p: sand },
-      { name: 'M-TREE', p: tree },
-      { name: 'M-FENCE', p: post }
-    ];
-    const worldSpeed = this._depthWorldSpeed || 0;
-    const live = this.liveDepthSample(progress, worldSpeed, now);
-    const cohort = this.liveDepthCohort(live);
-    const anchor = live.TREE || live.FENCE || live.GATEWAY;
-    let xLock = null;
-    if (anchor) {
-      const left = this.projectWorld(this.width * 0.5 - 90, anchor.worldY);
-      const right = this.projectWorld(this.width * 0.5 + 90, anchor.worldY);
-      xLock = {
-        worldY: anchor.worldY,
-        screenY: left.screenY,
-        s: left.s,
-        scale: left.scale,
-        dScreen: Math.abs(left.screenY - right.screenY),
-        dS: Math.abs(left.s - right.s),
-        dScale: Math.abs(left.scale - right.scale),
-        spriteScreen: Math.abs(anchor.screenY - left.screenY),
-        spriteS: Math.abs(anchor.s - left.s)
-      };
-    }
-    this._depthProbe = {
-      planted,
-      uvV,
-      texel,
-      screenSpeed: screenSpeed || 0,
-      worldSpeed,
-      rows: rows.map((row) => ({
-        name: row.name,
-        worldY: row.p.worldY,
-        planted,
-        s: row.p.s,
-        screenY: row.p.screenY,
-        scale: row.p.scale,
-        speed: screenSpeed || 0,
-        roadWidth: row.p.roadWidth,
-        uvV,
-        yJacobian: row.p.yJacobian
-      })),
-      live,
-      cohort,
-      xLock
-    };
-    if (typeof window !== 'undefined') window.__omrDepth = this._depthProbe;
-    this.paintDepthProbeMarkers(sand, tree, post);
-    this.paintDepthProbeReadout(this._depthProbe, texH);
-  }
-
-  paintDepthProbeMarkers(sand, tree, post) {
-    const ctx = this.ctx;
-    const s = Math.max(0.08, sand.s);
-    const ground = sand.drawY;
-    const markR = Math.max(4, 18 * s);
-    ctx.save();
-    ctx.fillStyle = this.c.InkBrown;
-    ctx.globalAlpha = 0.9;
-    this.oval(sand.roadCenter, ground, markR, Math.max(3, markR * 0.45));
-    ctx.restore();
-
-    const treeH = this.catH() * (CONFIG.VISUAL.TREE_NEAR_CAT || 2.48) * s;
-    const treeItem = this.pick('trees', 3);
-    if (treeItem && this.isReady(treeItem)) {
-      const size = this.spriteSize(treeItem, treeH);
-      this.drawSprite(treeItem, tree.roadLeft - size.width * 0.15, ground, size.width, size.height, {
-        grounded: true,
-        alpha: 1
-      });
-    } else {
-      ctx.save();
-      ctx.fillStyle = this.c.HedgeSage;
-      ctx.fillRect(tree.roadLeft - 8 * s, ground - treeH, 16 * s, treeH);
-      ctx.restore();
-    }
-
-    const postH = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT || 0.98) * s;
-    const kit = this.ensureFenceKit();
-    const postW = Math.max(4, postH * 0.18);
-    const postX = post.roadRight - postW;
-    if (kit) {
-      this.blitModule(kit.image, kit.post, postX, ground - postH, postW, postH, 1);
-    } else {
-      ctx.save();
-      ctx.fillStyle = this.c.PlanterWood;
-      ctx.fillRect(postX, ground - postH, postW, postH);
-      ctx.restore();
-    }
-  }
-
-  paintDepthProbeReadout(probe, texH) {
-    const ctx = this.ctx;
-    const shift = this.lastShift || 0;
-    const zones = unifiedDepthZones(shift, this.height);
-    const tile = Math.max(1, CONFIG.VISUAL.PATH_SAND_TILE || 2600);
-    const zoneLine = (name, sample) => {
-      const texel = sample.yJacobian * tile / texH;
-      return `${name} s ${sample.s.toFixed(2)}  j ${sample.yJacobian.toFixed(2)}  w ${Math.round(sample.roadWidth)}  tex ${texel.toFixed(2)}`;
-    };
-    const lines = [
-      'UNIFIED DEPTH',
-      zoneLine('FAR', zones.FAR),
-      zoneLine('MID', zones.MID),
-      zoneLine('NEAR', zones.NEAR),
-      `uvV ${probe.uvV.toFixed(3)}  planted ${probe.planted.toFixed(0)}`
-    ];
-    probe.rows.forEach((row) => {
-      lines.push(
-        `${row.name} y ${row.worldY.toFixed(0)} sy ${row.screenY.toFixed(1)} s ${row.s.toFixed(2)} sc ${row.scale.toFixed(2)} v ${row.speed.toFixed(0)}`
-      );
-    });
-    lines.push('LIVE');
-    ['TREE', 'FENCE', 'GATEWAY'].forEach((name) => {
-      const row = probe.live?.[name];
-      if (!row) {
-        lines.push(`${name} --`);
-        return;
-      }
-      const id = row.id ? ` ${row.id}` : '';
-      lines.push(
-        `${name}${id} y ${row.worldY.toFixed(0)} sy ${row.screenY.toFixed(1)} s ${row.s.toFixed(2)} sc ${row.scale.toFixed(2)} v ${row.speed.toFixed(0)}`
-      );
-    });
-    if (probe.cohort && probe.cohort.n >= 2) {
-      lines.push(
-        `SAME n${probe.cohort.n} dY ${probe.cohort.dY.toFixed(1)} dSy ${probe.cohort.dSy.toFixed(2)} dS ${probe.cohort.dS.toFixed(3)}`
-      );
-    }
-    const x = 12;
-    const y = 188 - shift;
-    const width = 348;
-    const lineH = 13;
-    const height = 10 + lines.length * lineH;
-    ctx.save();
-    ctx.fillStyle = this.c.SkyPaper;
-    ctx.globalAlpha = 0.92;
-    ctx.fillRect(x, y, width, height);
-    ctx.strokeStyle = this.c.InkBrown;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, width, height);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = this.c.InkBrown;
-    ctx.font = '11px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    lines.forEach((line, index) => {
-      ctx.fillText(line, x + 6, y + 5 + index * lineH);
-    });
-    ctx.restore();
+    // PASS B.4: no on-canvas UNIFIED DEPTH overlay in game view.
   }
 
   resetWorldProps() {
@@ -2612,19 +2435,26 @@ export class GardenArt {
         if (!item || !this.isReady(item)) return;
         const size = this.spriteSize(item, h);
         if (size.width < 3 || size.height < 3) return;
+        const drawW = size.width * (role === 'smallBush' ? 0.82 : 1);
+        const half = drawW * 0.5;
+        // Keep road-edge foliage off the sand ribbon so near-scale bushes
+        // do not fake an inward taper of the visible sand edge.
+        const placedX = side < 0
+          ? Math.min(x, path - half - 1)
+          : Math.max(x, path + half + 1);
         const groundY = projected.drawY + (role === 'grass' ? 5 : 3);
-        if (this.spriteOffscreen(x, groundY, size.width, size.height)) return;
+        if (this.spriteOffscreen(placedX, groundY, drawW, size.height)) return;
         const prop = this.allocProp();
         prop.kind = 'sprite';
         prop.role = 'edge';
         prop.item = item;
-        prop.x = x;
+        prop.x = placedX;
         prop.groundY = groundY;
         prop.screenY = projected.screenY;
         prop.worldY = y;
         prop.s = projected.s;
         prop.scale = projected.s;
-        prop.w = size.width * (role === 'smallBush' ? 0.82 : 1);
+        prop.w = drawW;
         prop.h = size.height;
         prop.alpha = 1;
         prop.flip = hash01(slot + 8) > 0.5;
