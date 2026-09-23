@@ -36,6 +36,7 @@ Prepare the game for Yandex Games.
 - standalone fallback — DONE;
 - LoadingAPI — DONE;
 - Gameplay API and platform pause events — DONE;
+- automatic SDK language detection — DONE (English UI fallback);
 - authorized leaderboard submission — DONE;
 - fullscreen ad lifecycle — DONE;
 - Developer Console setup and platform verification — NEXT;
@@ -51,8 +52,11 @@ Make the game look and feel finished.
 - visual polish;
 - animations;
 - sound polish;
-- localization;
-- UX improvements;
+- retention and clarity polish — DONE;
+- first-run onboarding without a tutorial mode — DONE;
+- procedural track variety (OFFSET, FUNNEL, OFFSET_GATE, DOUBLE_GATE) — DONE;
+- localization — PLANNED;
+- further UX improvements only when supported by playtest data;
 - performance optimization.
 
 ## Version 1.0 — Release

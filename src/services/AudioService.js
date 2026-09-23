@@ -1,5 +1,7 @@
 import { CONFIG } from '../config.js';
 
+const MEOW_URL = new URL('../../assets/audio/meow.ogg', import.meta.url).href;
+
 export class AudioService {
   constructor() {
     this.ctx = null;
@@ -9,6 +11,38 @@ export class AudioService {
     this.adPaused = false;
     this.platformPaused = false;
     this.lastPlayed = {};
+    this.meowBuffer = null;
+    this.meowBytes = null;
+    this.meowFailed = false;
+    this.meowWarned = false;
+    this.meowLoadStarted = false;
+  }
+
+  ensureMeowLoaded() {
+    if (this.meowLoadStarted || this.meowFailed) return;
+    this.meowLoadStarted = true;
+    if (typeof fetch !== 'function') {
+      this.failMeow('fetch unavailable');
+      return;
+    }
+    fetch(MEOW_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error(`meow ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then((bytes) => {
+        this.meowBytes = bytes;
+        this.decodeMeow();
+      })
+      .catch(() => this.failMeow('missing or unreadable meow asset'));
+  }
+
+  failMeow(reason) {
+    this.meowFailed = true;
+    if (!this.meowWarned) {
+      this.meowWarned = true;
+      console.warn(`AudioService: RISK meow disabled (${reason})`);
+    }
   }
 
   unlock() {
@@ -17,7 +51,20 @@ export class AudioService {
     if (!this.ctx) this.ctx = new Ctx();
     this.unlocked = true;
     this.syncContext();
+    this.ensureMeowLoaded();
+    this.decodeMeow();
     return true;
+  }
+
+  decodeMeow() {
+    if (this.meowFailed || this.meowBuffer || !this.ctx || !this.meowBytes) return;
+    if (typeof this.ctx.decodeAudioData !== 'function') return;
+    const copy = this.meowBytes.slice(0);
+    Promise.resolve(this.ctx.decodeAudioData(copy))
+      .then((buffer) => {
+        this.meowBuffer = buffer;
+      })
+      .catch(() => this.failMeow('could not decode meow asset'));
   }
 
   setMuted(muted) {
@@ -59,16 +106,22 @@ export class AudioService {
     }
   }
 
+  canPlay() {
+    return !!(
+      this.unlocked
+      && this.ctx
+      && !this.muted
+      && !this.hidden
+      && !this.adPaused
+      && !this.platformPaused
+    );
+  }
+
   play(name) {
-    if (
-      !this.unlocked
-      || !this.ctx
-      || this.muted
-      || this.hidden
-      || this.adPaused
-      || this.platformPaused
-    ) return false;
+    if (!this.canPlay()) return false;
     const now = this.ctx.currentTime;
+    if (name === 'meow') return this.playMeow(now);
+
     const last = this.lastPlayed[name] || 0;
     if (now - last < CONFIG.FEEL.AUDIO_COOLDOWN && name !== 'gameover' && name !== 'newbest') {
       return false;
@@ -100,6 +153,34 @@ export class AudioService {
       this.tone(140, 0.28, 'sine', 0.45, 0.08);
     }
     return true;
+  }
+
+  playMeow(now) {
+    if (
+      this.lastPlayed.meow !== undefined
+      && now - this.lastPlayed.meow < CONFIG.FEEL.MEOW_COOLDOWN
+    ) return false;
+    this.ensureMeowLoaded();
+    this.decodeMeow();
+    if (this.meowFailed) return false;
+    if (!this.meowBuffer || typeof this.ctx.createBufferSource !== 'function') return false;
+
+    try {
+      const source = this.ctx.createBufferSource();
+      const gain = this.ctx.createGain();
+      source.buffer = this.meowBuffer;
+      source.playbackRate.value = 0.97 + Math.random() * 0.06;
+      const amp = CONFIG.FEEL.AUDIO_VOLUME * (0.85 + Math.random() * 0.12);
+      gain.gain.setValueAtTime(Math.max(0.001, amp), now);
+      source.connect(gain);
+      gain.connect(this.ctx.destination);
+      source.start(now);
+      this.lastPlayed.meow = now;
+      return true;
+    } catch (error) {
+      this.failMeow(error.message || 'meow playback failed');
+      return false;
+    }
   }
 
   tone(freq, duration, type, volume, delay = 0) {

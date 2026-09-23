@@ -31,8 +31,9 @@ export class WorldCamera {
     this.y += (target - this.y) * t;
 
     const screenY = py - this.progress - this.y;
-    const minY = focus - 4;
-    const maxY = this.focusY + CONFIG.VISUAL.CAMERA_LAG;
+    const band = Math.max(6, CONFIG.VISUAL.CAMERA_LAG);
+    const minY = focus - Math.min(6, band * 0.4);
+    const maxY = focus + band;
     if (screenY < minY) this.y = py - this.progress - minY;
     if (screenY > maxY) this.y = py - this.progress - maxY;
   }

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corridor King — character preview</title>
+  <style>
+    :root {
+      --sky: #F3E4C7;
+      --floor: #E2C992;
+      --cream: #F6E7C8;
+      --ginger: #E39A4F;
+      --ink: #4A3428;
+      --shadow: #C4A97A;
+      --hedge: #6F9A5E;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--sky);
+      font-family: system-ui, sans-serif;
+    }
+
+    main {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 8px; font-size: 28px; }
+    h2 { margin-bottom: 8px; font-size: 20px; }
+    h3 {
+      margin-bottom: 8px;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .intro, .note {
+      max-width: 780px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .banner {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border: 2px solid var(--ink);
+      background: var(--cream);
+    }
+
+    .card {
+      margin-bottom: 18px;
+      padding: 16px;
+      background: var(--cream);
+      border: 4px solid var(--ink);
+      border-radius: 12px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr 0.7fr 0.7fr;
+      gap: 10px;
+    }
+
+    .view {
+      min-width: 0;
+      padding: 10px;
+      text-align: center;
+      background: var(--floor);
+      border: 2px solid var(--ink);
+    }
+
+    .stage {
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: var(--sky);
+    }
+
+    .view img,
+    .view svg {
+      width: 141px;
+      height: 159px;
+    }
+
+    .rear .stage { min-height: 250px; }
+    .rear img,
+    .rear svg {
+      width: 188px;
+      height: 212px;
+    }
+
+    .inspect {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .inspect .stage {
+      min-height: 340px;
+      background: var(--sky);
+    }
+
+    .inspect img {
+      width: min(282px, 100%);
+      height: auto;
+      aspect-ratio: 188 / 212;
+    }
+
+    .tiny .stage { min-height: 140px; background: var(--floor); }
+    .tiny img,
+    .tiny svg { width: 40px; height: 45px; }
+    .tiny.px48 img,
+    .tiny.px48 svg { width: 48px; height: 54px; }
+
+    .corridor {
+      position: relative;
+      display: grid;
+      place-items: center;
+      height: 96px;
+      width: 100%;
+      background: var(--floor);
+    }
+
+    .corridor::before,
+    .corridor::after {
+      position: absolute;
+      top: 0;
+      width: 12px;
+      height: 100%;
+      background: var(--hedge);
+      content: "";
+    }
+
+    .corridor::before { left: 0; }
+    .corridor::after { right: 0; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+      font-size: 12px;
+    }
+
+    .swatch {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch::before {
+      width: 16px;
+      height: 16px;
+      content: "";
+      background: var(--swatch);
+      border: 2px solid var(--ink);
+    }
+
+    .sil img,
+    .sil svg {
+      filter: brightness(0) saturate(100%);
+      opacity: 0.92;
+    }
+
+    @media (max-width: 900px) {
+      .row { grid-template-columns: 1fr 1fr; }
+      .rear { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="banner">Asset preview only — not wired into the game</div>
+    <header class="intro">
+      <h1>Corridor King — production SVGs</h1>
+      <p>Split from <code>assets/characters/vectorized-cat.svg</code>, recolored to CatCream / CatGinger / InkBrown / ShadowDust. Rear gameplay has a smooth back, a ginger saddle, and one fluffy tail from the rump. The question-mark hook over the spine is gone. Front is for UI. Sit is for Game Over.</p>
+    </header>
+
+    <section class="card">
+      <h2>Rear / Front / Sit</h2>
+      <p class="note">Judge the rear first. There must be only one tail, attached low. Then check 40 px and 48 px on sand.</p>
+      <div class="row">
+        <article class="view rear">
+          <h3>Rear gameplay</h3>
+          <div class="stage"><img src="../../assets/characters/cat-rear.svg" alt="Corridor King rear"></div>
+        </article>
+        <article class="view">
+          <h3>Front / UI</h3>
+          <div class="stage"><img src="../../assets/characters/cat-front.svg" alt="Corridor King front"></div>
+        </article>
+        <article class="view">
+          <h3>Sit / Game Over</h3>
+          <div class="stage"><img src="../../assets/characters/cat-sit.svg" alt="Corridor King sit"></div>
+        </article>
+        <article class="view tiny">
+          <h3>40 px rear</h3>
+          <div class="stage">
+            <div class="corridor"><img src="../../assets/characters/cat-rear.svg" alt="Rear at 40 pixels"></div>
+          </div>
+        </article>
+        <article class="view tiny px48">
+          <h3>48 px rear</h3>
+          <div class="stage">
+            <div class="corridor"><img src="../../assets/characters/cat-rear.svg" alt="Rear at 48 pixels"></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Large inspect</h2>
+      <p class="note">Rear must read as a smooth cream back, a ginger saddle, and one low fluffy tail. No hook on the spine.</p>
+      <div class="inspect">
+        <article class="view">
+          <h3>Rear ×1.5</h3>
+          <div class="stage"><img src="../../assets/characters/cat-rear.svg" alt="Rear large"></div>
+        </article>
+        <article class="view">
+          <h3>Front ×1.5</h3>
+          <div class="stage"><img src="../../assets/characters/cat-front.svg" alt="Front large"></div>
+        </article>
+        <article class="view">
+          <h3>Sit ×1.5</h3>
+          <div class="stage"><img src="../../assets/characters/cat-sit.svg" alt="Sit large"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Silhouette and small UI</h2>
+      <div class="row">
+        <article class="view rear sil">
+          <h3>Rear silhouette</h3>
+          <div class="stage"><img src="../../assets/characters/cat-rear.svg" alt="Rear silhouette"></div>
+        </article>
+        <article class="view sil">
+          <h3>Front silhouette</h3>
+          <div class="stage"><img src="../../assets/characters/cat-front.svg" alt="Front silhouette"></div>
+        </article>
+        <article class="view sil">
+          <h3>Sit silhouette</h3>
+          <div class="stage"><img src="../../assets/characters/cat-sit.svg" alt="Sit silhouette"></div>
+        </article>
+        <article class="view tiny">
+          <h3>40 px front</h3>
+          <div class="stage"><img src="../../assets/characters/cat-front.svg" alt="Front at 40 pixels"></div>
+        </article>
+        <article class="view tiny px48">
+          <h3>48 px sit</h3>
+          <div class="stage"><img src="../../assets/characters/cat-sit.svg" alt="Sit at 48 pixels"></div>
+        </article>
+      </div>
+      <div class="legend">
+        <span class="swatch" style="--swatch:var(--cream)">CatCream</span>
+        <span class="swatch" style="--swatch:var(--ginger)">CatGinger</span>
+        <span class="swatch" style="--swatch:var(--ink)">InkBrown</span>
+        <span class="swatch" style="--swatch:var(--shadow)">ShadowDust</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

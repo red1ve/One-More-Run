@@ -39,6 +39,10 @@ src/
 
 Core gameplay logic.
 
+`Track` keeps semantic segment types (`NORMAL`, `TWO_PATHS`, `DUAL_RISK`) separate from geometric pattern metadata. Non-straight patterns are authored as ordered gate rows and compiled into the same `paths` and `obstacles` rectangles used by rendering and collision.
+
+Full-route reachability propagates valid player-center intervals through every row using current track speed, player speed, player width, and the existing safety margin. Invalid patterns fall back to straight geometry without changing segment rewards or Choice semantics.
+
 ### input/
 
 Keyboard, desktop mouse (left/right half of the canvas), and touch input.
@@ -75,6 +79,7 @@ Translated UI strings.
 - `LoadingAPI.ready()`;
 - `GameplayAPI.start()` / `GameplayAPI.stop()`;
 - `game_api_pause` / `game_api_resume` events;
+- launch-time `environment.i18n.lang` detection with English fallback;
 - SDK loading, initialization, and standalone fallback.
 
 Yandex-specific logic must remain inside the service layer.
@@ -89,7 +94,7 @@ YandexService
 Yandex Games SDK
 ```
 
-`main.js` creates the service and starts `init()` in the background after the first START render. Gameplay never waits for SDK initialization. `Game` only calls the service's platform-neutral methods and never reads `YaGames` or an SDK object.
+`main.js` creates the service and starts `init()` in the background after input setup and the first START render. Gameplay never waits for SDK initialization. `Game` only calls the service's platform-neutral methods and never reads `YaGames` or an SDK object.
 
 ### Lifecycle
 

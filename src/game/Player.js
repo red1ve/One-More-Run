@@ -15,14 +15,18 @@ export class Player {
     this.moveDirection = dir;
   }
 
-  update(deltaTime) {
+  update(deltaTime, bounds = null) {
     if (this.moveDirection !== 0) {
       this.x += this.moveDirection * this.speed * deltaTime;
     }
 
     const halfWidth = this.width / 2;
-    const minX = CONFIG.TRACK_LEFT + halfWidth;
-    const maxX = CONFIG.TRACK_RIGHT - halfWidth;
+    const minX = bounds && Number.isFinite(bounds.minX)
+      ? bounds.minX
+      : CONFIG.TRACK_LEFT + halfWidth;
+    const maxX = bounds && Number.isFinite(bounds.maxX)
+      ? bounds.maxX
+      : CONFIG.TRACK_RIGHT - halfWidth;
 
     if (this.x < minX) this.x = minX;
     if (this.x > maxX) this.x = maxX;

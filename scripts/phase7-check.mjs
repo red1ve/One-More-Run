@@ -3,6 +3,7 @@ import { CONFIG } from '../src/config.js';
 import { Game } from '../src/game/Game.js';
 import { AudioService } from '../src/services/AudioService.js';
 import { YandexService } from '../src/services/YandexService.js';
+import { TouchInput } from '../src/input/TouchInput.js';
 
 const results = [];
 
@@ -26,7 +27,6 @@ function silentLogger() {
 function makeConfig(overrides = {}) {
   return {
     ...CONFIG.YANDEX,
-    SDK_LOAD_TIMEOUT_MS: 1,
     ...overrides
   };
 }
@@ -60,8 +60,106 @@ await check('standalone mode works without YaGames or document', async () => {
   assert(await service.init() === false);
   assert(service.state === 'unavailable');
   assert(service.isReady() === false);
+  assert(service.getDetectedLanguage() === 'en');
+  assert(service.getLanguage() === 'en');
   assert(await service.submitScore(100) === false);
   assert((await service.showInterstitial()).attempted === false);
+});
+
+await check('SDK language en selects the English UI', async () => {
+  const sdk = makeReadySdk({ environment: { i18n: { lang: 'en' } } });
+  const service = new YandexService({
+    environment: { YaGames: { init: async () => sdk } },
+    config: makeConfig(),
+    logger: silentLogger()
+  });
+  await service.init();
+  assert(service.getDetectedLanguage() === 'en');
+  assert(service.getLanguage() === 'en');
+});
+
+await check('SDK language ru is detected with honest English fallback', async () => {
+  const sdk = makeReadySdk({ environment: { i18n: { lang: 'ru' } } });
+  const service = new YandexService({
+    environment: { YaGames: { init: async () => sdk } },
+    config: makeConfig(),
+    logger: silentLogger()
+  });
+  await service.init();
+  assert(service.getDetectedLanguage() === 'ru');
+  assert(service.getLanguage() === 'en', 'Russian UI is not implemented yet');
+});
+
+await check('unknown SDK language falls back to English', async () => {
+  const sdk = makeReadySdk({ environment: { i18n: { lang: 'tr' } } });
+  const service = new YandexService({
+    environment: { YaGames: { init: async () => sdk } },
+    config: makeConfig(),
+    logger: silentLogger()
+  });
+  await service.init();
+  assert(service.getDetectedLanguage() === 'tr');
+  assert(service.getLanguage() === 'en');
+});
+
+await check('language detection happens before pending gameplay starts', async () => {
+  const order = [];
+  const sdk = makeReadySdk({
+    environment: {
+      i18n: {
+        get lang() {
+          order.push('language');
+          return 'ru';
+        }
+      }
+    },
+    features: {
+      LoadingAPI: { ready() {} },
+      GameplayAPI: {
+        start() { order.push('start'); },
+        stop() {}
+      }
+    }
+  });
+  const service = new YandexService({
+    environment: { YaGames: { init: async () => sdk } },
+    config: makeConfig(),
+    logger: silentLogger()
+  });
+  service.setGameplayActive(true);
+  await service.init();
+  assert(order.join(',') === 'language,start', `startup order: ${order.join(',')}`);
+});
+
+await check('slow SDK loading stays pending and initializes when the script arrives', async () => {
+  const listeners = {};
+  const environment = {};
+  const sdk = makeReadySdk({ environment: { i18n: { lang: 'en' } } });
+  const document = {
+    createElement() {
+      return {
+        dataset: {},
+        addEventListener(name, callback) {
+          listeners[name] = callback;
+        }
+      };
+    },
+    head: { appendChild() {} }
+  };
+  const service = new YandexService({
+    environment,
+    document,
+    config: makeConfig(),
+    logger: silentLogger()
+  });
+  const initialization = service.init();
+  assert(service.state === 'loading');
+  await Promise.resolve();
+  assert(service.state === 'loading', 'slow SDK must not fail on an arbitrary timer');
+  environment.YaGames = { init: async () => sdk };
+  listeners.load();
+  assert(await initialization === true);
+  assert(service.state === 'ready');
 });
 
 await check('SDK initialization is asynchronous and runs once', async () => {
@@ -95,6 +193,27 @@ await check('SDK initialization is asynchronous and runs once', async () => {
   assert(readyCalls === 1, `LoadingAPI.ready called ${readyCalls} times`);
   service.notifyGameReady();
   assert(readyCalls === 1, 'LoadingAPI.ready must only run once');
+});
+
+await check('Game Ready is not sent before the START UI is ready', async () => {
+  let readyCalls = 0;
+  const sdk = makeReadySdk({
+    environment: { i18n: { lang: 'en' } },
+    features: {
+      LoadingAPI: { ready() { readyCalls += 1; } },
+      GameplayAPI: { start() {}, stop() {} }
+    }
+  });
+  const service = new YandexService({
+    environment: { YaGames: { init: async () => sdk } },
+    config: makeConfig(),
+    logger: silentLogger()
+  });
+  await service.init();
+  assert(readyCalls === 0, 'ready must wait for the first completed render');
+  service.notifyGameReady();
+  service.notifyGameReady();
+  assert(readyCalls === 1, `ready called ${readyCalls} times`);
 });
 
 await check('SDK initialization errors stay contained', async () => {
@@ -371,6 +490,62 @@ await check('ad restart waits for platform resume without duplicating run', asyn
   assert(game.started === 1, 'resume must not duplicate the run');
 });
 
+await check('all simultaneous pause reasons must clear before gameplay resumes', async () => {
+  const events = [];
+  const sdk = makeReadySdk({
+    environment: { i18n: { lang: 'en' } },
+    features: {
+      LoadingAPI: { ready() {} },
+      GameplayAPI: {
+        start() { events.push('start'); },
+        stop() { events.push('stop'); }
+      }
+    }
+  });
+  const service = new YandexService({
+    environment: { YaGames: { init: async () => sdk } },
+    config: makeConfig(),
+    logger: silentLogger()
+  });
+  await service.init();
+  events.length = 0;
+
+  const game = {
+    state: 'PLAYING',
+    hidden: false,
+    platformPaused: false,
+    adPaused: false,
+    launchPending: false,
+    adFinished: false,
+    lastTime: 0,
+    platform: service,
+    audio: {
+      setHidden() {},
+      setPlatformPaused() {},
+      setAdPaused() {}
+    },
+    isGameplayPaused: Game.prototype.isGameplayPaused,
+    syncGameplayLifecycle: Game.prototype.syncGameplayLifecycle
+  };
+
+  game.syncGameplayLifecycle();
+  Game.prototype.setHidden.call(game, true);
+  Game.prototype.setPlatformPaused.call(game, true);
+  Game.prototype.setHidden.call(game, false);
+  assert(game.isGameplayPaused(), 'platform pause must still block gameplay');
+  Game.prototype.setPlatformPaused.call(game, false);
+  Game.prototype.setAdPaused.call(game, true);
+  Game.prototype.setHidden.call(game, true);
+  Game.prototype.setAdPaused.call(game, false);
+  assert(game.isGameplayPaused(), 'hidden pause must still block gameplay');
+  Game.prototype.setHidden.call(game, false);
+
+  assert(
+    events.join(',') === 'start,stop,start,stop,start',
+    `GameplayAPI events: ${events.join(',')}`
+  );
+});
+
 await check('visibility and ad pause freeze gameplay and audio', () => {
   const audio = new AudioService();
   audio.unlocked = true;
@@ -382,6 +557,7 @@ await check('visibility and ad pause freeze gameplay and audio', () => {
   };
   audio.setAdPaused(true);
   assert(audio.play('risk') === false);
+  assert(audio.play('meow') === false);
   audio.setAdPaused(false);
   audio.setPlatformPaused(true);
   assert(audio.play('coin') === false);
@@ -417,6 +593,34 @@ await check('visibility resume never auto-starts START or GAMEOVER', () => {
     Game.prototype.setHidden.call(game, false);
     assert(game.state === state);
   }
+});
+
+await check('resized touch coordinates stay in logical canvas space', () => {
+  let width = 270;
+  const touch = Object.create(TouchInput.prototype);
+  touch.canvas = {
+    width: 540,
+    getBoundingClientRect() {
+      return { left: 10, width };
+    }
+  };
+
+  assert(touch.touchLogicalX({ clientX: 145 }) === 270);
+  width = 135;
+  assert(touch.touchLogicalX({ clientX: 77.5 }) === 270);
+  width = 0;
+  assert(touch.touchLogicalX({ clientX: 10 }) === null);
+});
+
+await check('game area has scoped context-menu and long-press protection', () => {
+  const main = fs.readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert(main.includes("gameArea.addEventListener('contextmenu'"));
+  assert(main.includes('event.preventDefault()'));
+  assert(css.includes('touch-action: none'));
+  assert(css.includes('-webkit-touch-callout: none'));
+  assert(html.includes('<html lang="en">'), 'document must not claim untranslated Russian UI');
 });
 
 await check('production service contains no deprecated leaderboard API', () => {

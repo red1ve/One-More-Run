@@ -26,7 +26,7 @@ export class GameFeel {
     this.shakeTime = 0;
     this.shakeDuration = CONFIG.FEEL.SHAKE_DURATION;
     this.flash = 0;
-    this.flashColor = 'rgba(255, 180, 80, 0.18)';
+    this.flashColor = CONFIG.COLORS.FLASH_RISK;
     this.hudPulse = { streak: 0, multiplier: 0, coins: 0 };
     this.playerPulse = 0;
     this.speedScroll = 0;
@@ -77,7 +77,7 @@ export class GameFeel {
       x,
       y,
       count: CONFIG.FEEL.PARTICLE_SAFE,
-      color: CONFIG.COLORS.SAFE_LABEL,
+      color: CONFIG.COLORS.HedgeSage,
       speed: 40,
       life: 0.28,
       size: 2
@@ -95,14 +95,15 @@ export class GameFeel {
       x,
       y,
       count: Math.round(count * (0.6 + intensity * 0.5)),
-      color: hitMax ? '#ffe08a' : CONFIG.COLORS.RISKY_LABEL,
+      color: hitMax ? CONFIG.COLORS.CoinAmber : CONFIG.COLORS.RISKY_LABEL,
       speed: 70 + intensity * 50,
       life: 0.32 + intensity * 0.12,
       size: 3
     });
     this.playerPulse = 0.7 + intensity * 0.3;
     this.hudPulse.streak = 1;
-    this.triggerFlash('rgba(224, 180, 138, 0.16)', intensity);
+    this.triggerFlash(CONFIG.COLORS.FLASH_RISK, intensity);
+    this.audio?.play('meow');
 
     if (hitMax) {
       this.triggerShake(CONFIG.FEEL.SHAKE_MAX_MULT, CONFIG.FEEL.SHAKE_DURATION_MAX);
@@ -114,10 +115,8 @@ export class GameFeel {
       this.audio?.play('streak');
     } else if (streak >= 3) {
       this.triggerShake(CONFIG.FEEL.SHAKE_STREAK * 0.7, CONFIG.FEEL.SHAKE_DURATION);
-      this.audio?.play('risk');
     } else {
       this.triggerShake(CONFIG.FEEL.SHAKE_RISK, CONFIG.FEEL.SHAKE_DURATION);
-      this.audio?.play('risk');
     }
   }
 
@@ -150,7 +149,7 @@ export class GameFeel {
     this.hudPulse.streak = 1;
     this.hudPulse.multiplier = 0.85;
     this.playerPulse = 0.45;
-    this.triggerFlash('rgba(180, 190, 200, 0.12)', CONFIG.FEEL.INTENSITY_STREAK_LOSS);
+    this.triggerFlash(CONFIG.COLORS.FLASH_STREAK_LOSS, CONFIG.FEEL.INTENSITY_STREAK_LOSS);
     this.triggerShake(CONFIG.FEEL.SHAKE_STREAK_LOSS, CONFIG.FEEL.SHAKE_DURATION);
     this.audio?.play('streaklost');
   }
@@ -166,7 +165,7 @@ export class GameFeel {
       size: 2.6
     });
     this.hudPulse.multiplier = 1;
-    this.triggerFlash('rgba(232, 197, 71, 0.14)', 0.7);
+    this.triggerFlash(CONFIG.COLORS.FLASH_COIN, 0.7);
     this.audio?.play('newbest');
   }
 
@@ -177,13 +176,13 @@ export class GameFeel {
       x,
       y,
       count: CONFIG.FEEL.PARTICLE_GAMEOVER,
-      color: CONFIG.COLORS.OBSTACLE,
+      color: CONFIG.COLORS.HighRiskClay,
       speed: 90,
       life: 0.45,
       size: 3.2
     });
     this.triggerShake(CONFIG.FEEL.SHAKE_GAMEOVER, CONFIG.FEEL.SHAKE_DURATION_MAX);
-    this.triggerFlash('rgba(255, 70, 70, 0.2)', 1);
+    this.triggerFlash(CONFIG.COLORS.FLASH_FAIL, 1);
     this.audio?.play('gameover');
   }
 }

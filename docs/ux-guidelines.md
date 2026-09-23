@@ -93,6 +93,20 @@ Interactive elements must have sufficient touch area.
 
 The interface must not cover important gameplay information.
 
+## Retention and clarity
+
+The first START screen may briefly explain:
+
+- SAFE favors survival;
+- RISK favors score and builds streak;
+- Coins remain between runs.
+
+These hints disappear after the first run. During gameplay, the first RISK may provide one short contextual streak hint; multiplier growth then uses compact score-multiplier feedback.
+
+Choice rewards (`+10`, `+100`, `+150`, `+250`) must remain readable at speed. SAFE/RISK words are not shown on every Choice during play. DUAL_RISK distinguishes the narrower, higher-value branch with `+250` and a deeper clay gate, without changing geometry or rewards.
+
+Game Over shows either `NEW BEST` or the exact points needed to beat the stored best. Restart remains the only primary action; there is no revive, shop, or rewarded-ad CTA.
+
 ## No emoji
 
 Do not use emoji anywhere in the game UI.

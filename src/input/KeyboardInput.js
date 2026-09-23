@@ -12,24 +12,31 @@ export class KeyboardInput {
       this.keys[e.key] = false;
       this.keys[e.code] = false;
     });
+    window.addEventListener('blur', () => {
+      this.keys = {};
+    });
   }
 
   isLeftPressed() {
-    return (
-      this.keys['a'] || 
-      this.keys['A'] || 
-      this.keys['KeyA'] || 
+    return !!(
+      this.keys['a'] ||
+      this.keys['A'] ||
+      this.keys['KeyA'] ||
       this.keys['ArrowLeft']
     );
   }
 
   isRightPressed() {
-    return (
-      this.keys['d'] || 
-      this.keys['D'] || 
-      this.keys['KeyD'] || 
+    return !!(
+      this.keys['d'] ||
+      this.keys['D'] ||
+      this.keys['KeyD'] ||
       this.keys['ArrowRight']
     );
+  }
+
+  reset() {
+    this.keys = {};
   }
 
   isRestartPressed() {

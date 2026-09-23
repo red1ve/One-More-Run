@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "openai-gpt-image-mcp": {
+      "command": "node",
+      "args": [
+        "C:/Users/seinf3ld/openai-gpt-image-mcp/dist/index.js"
+      ]
+    }
+  }
+}

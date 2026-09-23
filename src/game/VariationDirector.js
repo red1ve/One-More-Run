@@ -12,6 +12,10 @@ export class VariationDirector {
     this.lastHadCoin = false;
     this.lastForkBias = null;
     this.forcedForkBias = null;
+    this.lastPattern = 'STRAIGHT';
+    this.forcedPattern = null;
+    this.lastDriftDirection = 0;
+    this.forcedDriftDirection = 0;
   }
 
   observe(segment, runTime) {
@@ -24,6 +28,7 @@ export class VariationDirector {
     }
 
     this.lastHadCoin = Array.isArray(segment.coins) && segment.coins.length > 0;
+    this.lastPattern = segment.pattern || 'STRAIGHT';
   }
 
   secondsSinceChoice(runTime, breathingSinceChoice, speed) {
@@ -86,6 +91,69 @@ export class VariationDirector {
       }
     }
     this.lastForkBias = picked;
+    return picked;
+  }
+
+  choosePattern({ runTime, segmentType, lastType }) {
+    if (this.forcedPattern) return this.forcedPattern;
+
+    let weights;
+    if (segmentType === 'DUAL_RISK') {
+      weights = { STRAIGHT: 0.76, OFFSET_GATE: 0.24 };
+    } else if (segmentType === 'TWO_PATHS') {
+      if (runTime < 30) {
+        weights = { STRAIGHT: 0.8, OFFSET: 0.08, FUNNEL: 0.06, OFFSET_GATE: 0.06 };
+      } else if (runTime < 60) {
+        weights = { STRAIGHT: 0.55, OFFSET: 0.16, FUNNEL: 0.14, OFFSET_GATE: 0.15 };
+      } else if (runTime < 120) {
+        weights = { STRAIGHT: 0.45, OFFSET: 0.18, FUNNEL: 0.17, OFFSET_GATE: 0.2 };
+      } else {
+        weights = { STRAIGHT: 0.4, OFFSET: 0.2, FUNNEL: 0.18, OFFSET_GATE: 0.22 };
+      }
+    } else if (lastType === 'TWO_PATHS' || lastType === 'DUAL_RISK') {
+      weights = { STRAIGHT: 0.72, OFFSET: 0.12, FUNNEL: 0.08, OFFSET_GATE: 0.08 };
+    } else if (runTime < 30) {
+      weights = { STRAIGHT: 0.72, OFFSET: 0.13, FUNNEL: 0.08, OFFSET_GATE: 0.07 };
+    } else if (runTime < 60) {
+      weights = { STRAIGHT: 0.45, OFFSET: 0.2, FUNNEL: 0.17, OFFSET_GATE: 0.18 };
+    } else if (runTime < 120) {
+      weights = { STRAIGHT: 0.32, OFFSET: 0.2, FUNNEL: 0.19, OFFSET_GATE: 0.17, DOUBLE_GATE: 0.12 };
+    } else {
+      weights = { STRAIGHT: 0.25, OFFSET: 0.2, FUNNEL: 0.2, OFFSET_GATE: 0.18, DOUBLE_GATE: 0.17 };
+    }
+
+    if (runTime < CONFIG.PATTERN_DOUBLE_UNLOCK_TIME) delete weights.DOUBLE_GATE;
+    if (this.lastPattern !== 'STRAIGHT' && weights[this.lastPattern] !== undefined) {
+      weights[this.lastPattern] *= this.lastPattern === 'DOUBLE_GATE'
+        ? 0
+        : CONFIG.PATTERN_REPEAT_WEIGHT;
+    }
+
+    return this.pickWeightedPattern(weights);
+  }
+
+  pickWeightedPattern(weights) {
+    const entries = Object.entries(weights).filter(([, weight]) => weight > 0);
+    const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+    let roll = Math.random() * total;
+    for (const [pattern, weight] of entries) {
+      roll -= weight;
+      if (roll <= 0) return pattern;
+    }
+    return entries[entries.length - 1]?.[0] || 'STRAIGHT';
+  }
+
+  pickDriftDirection() {
+    if (this.forcedDriftDirection) return Math.sign(this.forcedDriftDirection);
+
+    const same = this.lastDriftDirection || (Math.random() < 0.5 ? -1 : 1);
+    const opposite = -same;
+    const repeatWeight = 1;
+    const reverseWeight = CONFIG.PATTERN_REVERSE_WEIGHT;
+    const picked = Math.random() * (repeatWeight + reverseWeight) < repeatWeight
+      ? same
+      : opposite;
+    this.lastDriftDirection = picked;
     return picked;
   }
 

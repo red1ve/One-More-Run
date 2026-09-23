@@ -11,10 +11,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const yandex = new YandexService();
   const game = new Game(canvas, yandex);
+  const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');
-  game.render();
-  yandex.notifyGameReady();
-  yandex.init();
 
   const launchFromGesture = () => {
     game.unlockAudio();
@@ -23,6 +21,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   canvas.addEventListener('mousedown', launchFromGesture);
   canvas.addEventListener('touchstart', launchFromGesture, { passive: true });
+  gameArea.addEventListener('contextmenu', (event) => event.preventDefault());
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyM') {
@@ -45,5 +44,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   window.addEventListener('error', (event) => {
     console.error('Необработанная ошибка во время выполнения:', event.error || event.message);
+  });
+
+  game.render();
+  yandex.notifyGameReady();
+  yandex.init().then(() => {
+    document.documentElement.lang = yandex.getLanguage();
   });
 });

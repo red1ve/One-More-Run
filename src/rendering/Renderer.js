@@ -120,12 +120,18 @@ export class Renderer {
     this.garden.drawMainWorld(camera);
   }
 
+  drawWorld(camera, segments = [], playerY = CONFIG.PLAYER_START_Y) {
+    this.garden.drawMainWorld(camera, segments, playerY);
+  }
+
+  drawDeferredWorld() {
+    this.garden.drawDeferredWorld();
+  }
+
   drawSegments(segments) {
     segments.forEach((segment) => {
       this.drawGateSills(segment);
-      this.drawObstacles(segment);
       this.drawPathLabels(segment);
-      this.drawCoins(segment);
     });
   }
 
@@ -188,9 +194,16 @@ export class Renderer {
 
   drawObstacles(segment) {
     const choice = this.isChoiceSegment(segment);
+    const family = segment.visualObstacleType || this.garden.obstacleFamilyFor(segment);
+    const familySeed = segment.visualObstacleSeed
+      || Math.abs(Math.round((segment.id || 1) * 13 + String(segment.type || '').length * 7));
+    const classScale = Number.isFinite(segment.visualObstacleScale)
+      ? segment.visualObstacleScale
+      : 1;
+    const sprite = this.garden.obstacleSpriteFor(segment);
     (segment.obstacles || []).forEach((obs) => {
       const neighbors = choice ? this.abuttingPaths(segment, obs) : [];
-      this.garden.drawPlanter(obs, neighbors);
+      this.garden.drawPlanter(obs, neighbors, family, familySeed, classScale, sprite);
     });
   }
 
@@ -223,8 +236,13 @@ export class Renderer {
         ?? CONFIG.REWARDS[type]
         ?? CONFIG.REWARDS[isRisk ? 'RISKY' : 'SAFE'];
       const gateH = this.gateHeightForPath(segment, path);
-      const labelX = path.x + path.width / 2;
-      const labelY = path.y + gateH + 26;
+      const vis = this.garden.projectTrackRect(path.x, path.y, path.width, gateH);
+      if (!vis) return;
+      const revealH = this.garden.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08)
+        * (vis.uniformScale || 1);
+      if (!this.garden.isWorldObjectFullyVisible(vis.x + vis.width / 2, vis.groundY, revealH)) return;
+      const labelX = vis.x + vis.width / 2;
+      const labelY = vis.y + vis.height + 22;
       const text = `+${reward}`;
 
       this.ctx.textAlign = 'center';
@@ -338,25 +356,25 @@ export class Renderer {
       return this.ctx.measureText ? this.ctx.measureText(text).width : String(text).length * 8;
     };
 
-    this.garden.badge(14, 10, 118, 56, 10);
+    this.garden.badge(12, 8, 96, 44, 10);
     this.ctx.textAlign = 'left';
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-    this.ctx.font = 'bold 20px system-ui, sans-serif';
-    this.ctx.fillText(`${score}`, 26, 34);
+    this.ctx.font = 'bold 18px system-ui, sans-serif';
+    this.ctx.fillText(`${score}`, 22, 28);
     this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.font = '10px system-ui, sans-serif';
-    this.ctx.fillText('SCORE', 26, 48);
-    this.ctx.fillText(`BEST ${bestScore}`, 26, 60);
+    this.ctx.font = '9px system-ui, sans-serif';
+    this.ctx.fillText('SCORE', 22, 40);
+    this.ctx.fillText(`BEST ${bestScore}`, 22, 50);
 
     const coinScale = 1 + (pulse.coins || 0) * 0.18;
     const coinLabel = `COINS ${coins}`;
-    const coinW = Math.max(92, measure(coinLabel, 'bold 14px system-ui, sans-serif') + 22);
-    this.garden.badge(14, 72, coinW, 26, 10);
+    const coinW = Math.max(86, measure(coinLabel, 'bold 13px system-ui, sans-serif') + 18);
+    this.garden.badge(12, 56, coinW, 22, 10);
     this.ctx.save();
-    this.ctx.translate(26, 90);
+    this.ctx.translate(22, 71);
     this.ctx.scale(coinScale, coinScale);
     this.ctx.fillStyle = CONFIG.COLORS.COIN;
-    this.ctx.font = 'bold 14px system-ui, sans-serif';
+    this.ctx.font = 'bold 13px system-ui, sans-serif';
     this.ctx.fillText(coinLabel, 0, 0);
     this.ctx.restore();
 
@@ -364,26 +382,26 @@ export class Renderer {
     const streakActive = riskStreak > 0;
     const streakScale = 1 + (pulse.streak || 0) * 0.22;
     const streakLabel = `STREAK ${riskStreak}`;
-    const streakW = Math.max(104, measure(streakLabel, 'bold 15px system-ui, sans-serif') + 22);
-    this.garden.badge(this.width - 12 - streakW, 10, streakW, 26, 10);
+    const streakW = Math.max(96, measure(streakLabel, 'bold 14px system-ui, sans-serif') + 18);
+    this.garden.badge(this.width - 10 - streakW, 8, streakW, 22, 10);
     this.ctx.save();
-    this.ctx.translate(this.width - 24, 28);
+    this.ctx.translate(this.width - 20, 24);
     this.ctx.scale(streakScale, streakScale);
     this.ctx.fillStyle = streakActive ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD;
-    this.ctx.font = 'bold 15px system-ui, sans-serif';
+    this.ctx.font = 'bold 14px system-ui, sans-serif';
     this.ctx.fillText(streakLabel, 0, 0);
     this.ctx.restore();
 
     const maxed = multiplier >= CONFIG.MULTIPLIER_MAX;
     const multScale = 1 + (pulse.multiplier || 0) * (maxed ? 0.32 : 0.2);
     const multLabel = `SCORE x${multiplier.toFixed(1)}`;
-    const multW = Math.max(118, measure(multLabel, 'bold 18px system-ui, sans-serif') + 22);
-    this.garden.badge(this.width - 12 - multW, 40, multW, 28, 10);
+    const multW = Math.max(108, measure(multLabel, 'bold 16px system-ui, sans-serif') + 18);
+    this.garden.badge(this.width - 10 - multW, 34, multW, 24, 10);
     this.ctx.save();
-    this.ctx.translate(this.width - 24, 60);
+    this.ctx.translate(this.width - 20, 51);
     this.ctx.scale(multScale, multScale);
     this.ctx.fillStyle = maxed ? CONFIG.COLORS.COIN : (multiplier > 1 ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD);
-    this.ctx.font = 'bold 18px system-ui, sans-serif';
+    this.ctx.font = 'bold 16px system-ui, sans-serif';
     this.ctx.fillText(multLabel, 0, 0);
     this.ctx.restore();
 

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+  width="188" height="212" viewBox="0 0 47 53"
+  role="img" aria-labelledby="title desc" shape-rendering="geometricPrecision">
+  <title id="title">Loaf rear tail overlay</title>
+  <desc id="desc">Central fluffy ginger plume for the rear gameplay sprite. Same viewBox as loaf-rear.svg.</desc>
+  <metadata>
+    One More Run Master Cat tail overlay; pivot 20.5,33.6;
+    transparent background; no body.
+  </metadata>
+
+  <g id="shadow" fill="#C4A97A" transform="translate(5 5)">
+    <path d="
+      M20.5 32.2
+      C17.2 32.5 14.8 34.8 14.2 37.6
+      C13.6 40.0 14.2 41.8 13.6 43.0
+      C14.6 42.8 15.6 43.6 16.2 44.6
+      C17.2 46.0 18.6 46.4 20.2 46.2
+      C21.6 46.0 22.6 45.0 23.6 45.6
+      C25.0 44.8 26.6 43.2 27.0 40.4
+      C27.4 37.2 24.8 32.6 20.5 32.2 Z"/>
+  </g>
+
+  <g id="tail">
+    <path id="tail-fill" fill="#E39A4F" d="
+      M20.5 32.2
+      C17.2 32.5 14.8 34.8 14.2 37.6
+      C13.6 40.0 14.2 41.8 13.6 43.0
+      C14.6 42.8 15.6 43.6 16.2 44.6
+      C17.2 46.0 18.6 46.4 20.2 46.2
+      C21.6 46.0 22.6 45.0 23.6 45.6
+      C25.0 44.8 26.6 43.2 27.0 40.4
+      C27.4 37.2 24.8 32.6 20.5 32.2 Z"/>
+    <path id="tail-outline" fill="none" stroke="#4A3428" stroke-width="4"
+      stroke-linecap="round" stroke-linejoin="round" d="
+      M20.5 32.2
+      C17.2 32.5 14.8 34.8 14.2 37.6
+      C13.6 40.0 14.2 41.8 13.6 43.0
+      C14.6 42.8 15.6 43.6 16.2 44.6
+      C17.2 46.0 18.6 46.4 20.2 46.2
+      C21.6 46.0 22.6 45.0 23.6 45.6
+      C25.0 44.8 26.6 43.2 27.0 40.4
+      C27.4 37.2 24.8 32.6 20.5 32.2 Z"/>
+  </g>
+</svg>

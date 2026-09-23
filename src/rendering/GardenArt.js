@@ -1,13 +1,17 @@
-import { CONFIG, isRiskPathType } from '../config.js';
+import { CONFIG } from '../config.js';
 import { getGardenSheets } from './gardenAssets.js';
 import {
   corridorHorizonY,
-  corridorNearT,
   hedgeBorderWidth,
-  pathInsetAt,
-  sandShoulderWidth,
-  worldDepth
+  sandShoulderWidth
 } from '../game/Corridor.js';
+import {
+  projectTrackX,
+  projectWorldToScreen,
+  sampleRoadRibbon,
+  crestYAt as projectorCrestYAt,
+  horizonOcclusion
+} from './VisualProjector.js';
 
 function parseHex(hex) {
   const value = String(hex || '').replace('#', '');
@@ -86,60 +90,39 @@ const GATE_RIGHT_POST_SRC = { sx: 890, sy: 70, sw: 96, sh: 938 };
 const GATE_BEAM_SRC = { sx: 128, sy: 14, sw: 768, sh: 210 };
 
 const LANE_U = {
-  inner: 0.12,
-  mid: 0.42,
-  outer: 0.82
+  inner: 0.10,
+  mid: 0.40,
+  outer: 0.86
 };
+
+const VIEW_CULL_MARGIN = 56;
+const VIEW_WALK_PAD = 400;
 
 const GROUP_LAYOUTS = {
   A: [
     { role: 'tree', lane: 'outer', dy: 0 },
-    { role: 'largeBush', lane: 'mid', dy: 12 },
-    { role: 'smallBush', lane: 'inner', dy: 18 },
-    { role: 'flower', lane: 'inner', dy: 22, ju: 0.14 },
-    { role: 'grass', lane: 'inner', dy: 26, ju: -0.1 },
-    { role: 'grass', lane: 'mid', dy: 20, ju: 0.08 }
+    { role: 'largeBush', lane: 'mid', dy: 16 },
+    { role: 'grass', lane: 'inner', dy: 22 }
   ],
   B: [
-    { role: 'sapling', lane: 'outer', dy: 2 },
-    { role: 'largeBush', lane: 'mid', dy: 8 },
-    { role: 'flower', lane: 'inner', dy: 16 },
-    { role: 'grass', lane: 'inner', dy: 22, ju: 0.12 }
+    { role: 'sapling', lane: 'outer', dy: 4 },
+    { role: 'largeBush', lane: 'mid', dy: 10 },
+    { role: 'grass', lane: 'inner', dy: 18 }
   ],
   C: [
-    { role: 'largeBush', lane: 'mid', dy: 0 },
-    { role: 'smallBush', lane: 'inner', dy: 10 },
-    { role: 'flower', lane: 'inner', dy: 16, ju: 0.1 },
-    { role: 'grass', lane: 'inner', dy: 20 },
-    { role: 'sapling', lane: 'outer', dy: 6 }
+    { role: 'largeBush', lane: 'mid', dy: 2 },
+    { role: 'grass', lane: 'inner', dy: 16 },
+    { role: 'flower', lane: 'inner', dy: 20, ju: 0.1 }
   ],
   D: [
-    { role: 'grass', lane: 'inner', dy: 10 },
-    { role: 'flower', lane: 'mid', dy: 8 },
-    { role: 'smallBush', lane: 'mid', dy: 4 },
-    { role: 'grass', lane: 'inner', dy: 18, ju: 0.16 }
+    { role: 'smallBush', lane: 'mid', dy: 6 },
+    { role: 'grass', lane: 'inner', dy: 16 }
   ],
   E: [
     { role: 'tree', lane: 'outer', dy: 0 },
-    { role: 'largeBush', lane: 'mid', dy: 10 },
-    { role: 'smallBush', lane: 'mid', dy: 16, ju: 0.1 },
-    { role: 'grass', lane: 'inner', dy: 16 },
-    { role: 'flower', lane: 'inner', dy: 12, ju: -0.08 }
+    { role: 'smallBush', lane: 'mid', dy: 14, ju: 0.08 },
+    { role: 'grass', lane: 'inner', dy: 18 }
   ]
-};
-
-const ROLE_REVEAL = {
-  tree: 36,
-  sapling: 22,
-  largeBush: 48,
-  smallBush: 28,
-  flower: 14,
-  grass: 10,
-  mass: 120,
-  arch: 52,
-  hedge: 8,
-  planter: 0,
-  coin: 36
 };
 
 const ROLE_LAYER = {
@@ -149,6 +132,7 @@ const ROLE_LAYER = {
   largeBush: 2,
   smallBush: 2,
   hedge: 3,
+  edge: 4,
   flower: 4,
   grass: 4,
   arch: 5,
@@ -399,11 +383,11 @@ export class GardenArt {
   }
 
   massPeriod(side) {
-    return side < 0 ? 620 : 790;
+    return side < 0 ? 680 : 820;
   }
 
   massShows(slot, side) {
-    return hash01(slot * 8.17 + side * 4.3) > 0.74;
+    return hash01(slot * 8.17 + side * 4.3) > 0.78;
   }
 
   nearSideMass(side, y, progress) {
@@ -415,8 +399,8 @@ export class GardenArt {
   }
 
   gardenZone(slot, side) {
-    const left = ['D', 'B', 'C', 'A', 'D', 'E', 'A'];
-    const right = ['D', 'B', 'C', 'A', 'B', 'D', 'A'];
+    const left = ['A', 'D', 'C', 'E', 'D', 'C', 'B'];
+    const right = ['C', 'E', 'D', 'B', 'D', 'A', 'C'];
     const cycle = side < 0 ? left : right;
     const index = ((slot % cycle.length) + cycle.length) % cycle.length;
     return cycle[index];
@@ -427,8 +411,9 @@ export class GardenArt {
     const progress = cam.progress || 0;
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const step = Math.max(8, period);
-    const yMin = -Math.abs(shift) - step * 2;
-    const yMax = this.height + Math.abs(shift) + step * 2;
+    const visPad = VIEW_WALK_PAD;
+    const yMin = -Math.abs(shift) - visPad;
+    const yMax = this.height + Math.abs(shift) + visPad;
     const start = Math.floor((yMin - progress) / step) - 1;
     const end = Math.ceil((yMax - progress) / step) + 1;
     for (let slot = start; slot <= end; slot += 1) {
@@ -558,12 +543,17 @@ export class GardenArt {
 
   crestLayout() {
     const horizon = this.horizonY();
-    const cx = this.width * 0.5;
-    const peak = horizon + 8;
-    const foot = horizon + 54;
-    const key = `${this.width}|${horizon}|throat`;
+    const vis = CONFIG.VISUAL.PROJECTOR || {};
+    const key = `${this.width}|${horizon}|${vis.CREST_PEAK}|${vis.CREST_SIDE}|${vis.CREST_ASYM}`;
     if (this._crestLayout && this._crestLayoutKey === key) return this._crestLayout;
     this._crestLayoutKey = key;
+    let peak = Infinity;
+    let foot = -Infinity;
+    for (let x = 0; x <= this.width; x += 24) {
+      const y = projectorCrestYAt(x, this.width);
+      if (y < peak) peak = y;
+      if (y > foot) foot = y;
+    }
     this._crestLayout = {
       hasSprite: false,
       item: null,
@@ -571,10 +561,10 @@ export class GardenArt {
       destX: 0,
       destY: peak,
       destW: this.width,
-      destH: foot - peak,
+      destH: Math.max(8, foot - peak),
       peak,
       foot,
-      cx
+      cx: this.width * 0.5
     };
     return this._crestLayout;
   }
@@ -587,32 +577,40 @@ export class GardenArt {
     return this.crestLayout().foot;
   }
 
-  crestYAt() {
-    return this.crestPeakScreenY();
+  crestYAt(screenX = this.width * 0.5) {
+    return projectorCrestYAt(screenX, this.width);
   }
 
-  throatTaper(screenY) {
-    const tip = this.crestPeakScreenY();
-    const start = this.horizonY() + 268;
+  throatTaper() {
+    return 0;
+  }
+
+  horizonBlend(screenY) {
+    const start = this.horizonY() + 96;
+    const tip = this.horizonY() - 4;
     if (screenY >= start) return 0;
     if (screenY <= tip) return 1;
     return this.smoothstep((start - screenY) / Math.max(1, start - tip));
   }
 
+  projectWorld(worldX, worldY) {
+    return projectWorldToScreen(worldX, worldY, this.lastShift || 0, this.height);
+  }
+
+  roadAt(worldY) {
+    return this.projectWorld(this.width * 0.5, worldY);
+  }
+
   pathVisualInset(screenY) {
-    const base = this.pathInset(screenY);
-    const t = this.throatTaper(screenY);
-    const minHalf = 9;
-    const maxInset = CONFIG.TRACK_WIDTH * 0.5 - minHalf;
-    return base + (maxInset - base) * t;
+    return this.roadAt(screenY - (this.lastShift || 0)).inset;
   }
 
-  pathLeftVisual(gameplayY, shift) {
-    return CONFIG.TRACK_LEFT + this.pathVisualInset(gameplayY + shift);
+  pathLeftVisual(gameplayY, shift = this.lastShift || 0) {
+    return projectWorldToScreen(this.width * 0.5, gameplayY, shift, this.height).roadLeft;
   }
 
-  pathRightVisual(gameplayY, shift) {
-    return CONFIG.TRACK_RIGHT - this.pathVisualInset(gameplayY + shift);
+  pathRightVisual(gameplayY, shift = this.lastShift || 0) {
+    return projectWorldToScreen(this.width * 0.5, gameplayY, shift, this.height).roadRight;
   }
 
   roadEntryScreenY() {
@@ -629,11 +627,20 @@ export class GardenArt {
   }
 
   nearT(screenY) {
-    return corridorNearT(screenY, this.height);
+    return this.worldDepthAt(screenY).t;
   }
 
   worldDepthAt(screenY) {
-    return worldDepth(screenY, this.height);
+    const projected = this.projectWorld(this.width * 0.5, screenY - (this.lastShift || 0));
+    return {
+      t: projected.t,
+      z: 1 / Math.max(0.001, projected.scale),
+      scale: projected.scale,
+      alpha: projected.alpha,
+      contrast: projected.contrast,
+      screenY: projected.screenY,
+      horizon: projected.vanishY
+    };
   }
 
   depthEase(screenY) {
@@ -657,61 +664,133 @@ export class GardenArt {
   }
 
   projectWorldProp(worldX, worldY) {
-    const shift = this.lastShift || 0;
-    const screenY = worldY + shift;
-    const depth = this.worldDepthAt(screenY);
+    const projected = this.projectWorld(worldX, worldY);
     return {
       worldX,
       worldY,
-      groundY: worldY,
-      screenY,
-      screenX: this.perspectiveX(worldX, screenY),
-      scale: depth.scale,
-      alpha: depth.alpha,
-      contrast: depth.contrast,
-      depth
+      groundY: projected.drawY,
+      screenY: projected.screenY,
+      screenX: projected.screenX,
+      scale: projected.scale,
+      alpha: projected.alpha,
+      contrast: projected.contrast,
+      drawY: projected.drawY,
+      linearScreenY: projected.linearScreenY,
+      clip: projected.clip,
+      depth: projected
     };
   }
 
   perspectiveX(worldX, screenY) {
-    const t = this.nearT(screenY);
-    const vanishX = this.width * 0.5;
-    const squeeze = CONFIG.VISUAL.PERSPECTIVE_SQUEEZE ?? 0.1;
-    const span = 1 - squeeze + squeeze * t;
-    return vanishX + (worldX - vanishX) * span;
+    return this.projectWorld(worldX, screenY - (this.lastShift || 0)).screenX;
   }
 
   gardenWorldX(side, u) {
     const hedge = side < 0
-      ? CONFIG.TRACK_LEFT - (CONFIG.VISUAL.HEDGE_BORDER_NEAR || 30)
-      : CONFIG.TRACK_RIGHT + (CONFIG.VISUAL.HEDGE_BORDER_NEAR || 30);
-    const edge = side < 0 ? 14 : this.width - 14;
+      ? CONFIG.TRACK_LEFT - (CONFIG.VISUAL.HEDGE_BORDER_NEAR || 48)
+      : CONFIG.TRACK_RIGHT + (CONFIG.VISUAL.HEDGE_BORDER_NEAR || 48);
+    const edge = side < 0 ? -48 : this.width + 48;
     const t = Math.max(0, Math.min(1, u));
     return hedge + (edge - hedge) * t;
+  }
+
+  gardenLaneX(side, u, screenY) {
+    const shift = this.lastShift || 0;
+    const gameplayY = screenY - shift;
+    const projected = this.projectWorld(this.gardenWorldX(side, u), gameplayY);
+    return projected.screenX;
+  }
+
+  edgeGardenX(side, screenY, u) {
+    return this.gardenLaneX(side, u, screenY);
   }
 
   plantedY(gameplayY, progress) {
     return gameplayY - (progress || 0);
   }
 
-  horizonReveal(screenY, start = 0, span = 72) {
-    return Math.max(0, Math.min(1, (screenY - (this.horizonY() + start)) / Math.max(1, span)));
+  objectOcclusion(screenX, groundDrawY, spriteHeight) {
+    return horizonOcclusion(
+      screenX,
+      groundDrawY + (this.lastShift || 0),
+      spriteHeight,
+      this.width
+    );
+  }
+
+  isWorldObjectHidden(screenX, groundDrawY, spriteHeight) {
+    return this.objectOcclusion(screenX, groundDrawY, spriteHeight).state === 'HIDDEN';
+  }
+
+  isWorldObjectFullyVisible(screenX, groundDrawY, spriteHeight) {
+    return this.objectOcclusion(screenX, groundDrawY, spriteHeight).state === 'VISIBLE';
+  }
+
+  clipCrestRevealBand(x0, x1, visibleH) {
+    const ctx = this.ctx;
+    const shift = this.lastShift || 0;
+    const pad = 28;
+    const left = Math.min(x0, x1) - pad;
+    const right = Math.max(x0, x1) + pad;
+    const steps = 12;
+    const band = Math.max(1.5, visibleH);
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i += 1) {
+      const x = left + ((right - left) * i) / steps;
+      const y = projectorCrestYAt(x, this.width) - shift;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = steps; i >= 0; i -= 1) {
+      const x = left + ((right - left) * i) / steps;
+      ctx.lineTo(x, projectorCrestYAt(x, this.width) - shift + band + 1.5);
+    }
+    ctx.closePath();
+    ctx.clip();
+  }
+
+  beginHorizonReveal(x, groundDrawY, width, height, x0, x1) {
+    const occ = this.objectOcclusion(x, groundDrawY, height);
+    occ.clipped = false;
+    if (occ.state === 'HIDDEN') return null;
+    if (occ.state === 'PARTIAL') {
+      this.ctx.save();
+      const left = x0 == null ? x - width * 0.5 : x0;
+      const right = x1 == null ? x + width * 0.5 : x1;
+      this.clipCrestRevealBand(left, right, occ.visibleH);
+      if (occ.lift > 0.5) this.ctx.translate(0, occ.lift);
+      occ.clipped = true;
+    }
+    return occ;
+  }
+
+  endHorizonReveal(occ) {
+    if (occ?.clipped) this.ctx.restore();
+  }
+
+  spriteOffscreen(x, groundY, w, h) {
+    const margin = VIEW_CULL_MARGIN;
+    const half = Math.max(0, (w || 0) * 0.5);
+    const top = groundY - Math.max(0, h || 0);
+    const bottom = groundY;
+    const left = x - half;
+    const right = x + half;
+    return bottom < -margin
+      || top > this.height + margin
+      || right < -margin
+      || left > this.width + margin;
   }
 
   pathInset(screenY) {
-    const horizon = this.horizonY();
-    const base = pathInsetAt(Math.max(horizon, screenY), this.height);
-    if (screenY >= horizon) return base;
-    const over = horizon - screenY;
-    return Math.min(CONFIG.TRACK_WIDTH * 0.5 - 22, base + over * 0.1);
+    return this.pathVisualInset(screenY);
   }
 
-  pathLeftX(gameplayY, shift) {
-    return CONFIG.TRACK_LEFT + this.pathInset(gameplayY + shift);
+  pathLeftX(gameplayY, shift = this.lastShift || 0) {
+    return this.pathLeftVisual(gameplayY, shift);
   }
 
-  pathRightX(gameplayY, shift) {
-    return CONFIG.TRACK_RIGHT - this.pathInset(gameplayY + shift);
+  pathRightX(gameplayY, shift = this.lastShift || 0) {
+    return this.pathRightVisual(gameplayY, shift);
   }
 
   hedgeWidth(screenY) {
@@ -733,61 +812,61 @@ export class GardenArt {
   }
 
   hedgeInnerX(side, gameplayY, shift, progress = 0) {
-    const screenY = gameplayY + shift;
-    const path = side < 0
-      ? this.pathLeftX(gameplayY, shift)
-      : this.pathRightX(gameplayY, shift);
-    const setback = this.hedgeSetback(screenY);
+    const projected = projectWorldToScreen(this.width * 0.5, gameplayY, shift, this.height);
+    const path = side < 0 ? projected.roadLeft : projected.roadRight;
+    const setback = this.hedgeSetback(projected.linearScreenY);
     const wobble = edgeWobble(gameplayY - progress, side < 0 ? 2 : 9) * 0.18;
     return path + (side < 0 ? -1 : 1) * (setback + wobble);
   }
 
   hedgeOuterX(side, gameplayY, shift, progress) {
-    const screenY = gameplayY + shift;
+    const projected = projectWorldToScreen(this.width * 0.5, gameplayY, shift, this.height);
     const inner = this.hedgeInnerX(side, gameplayY, shift, progress);
-    const width = this.hedgeWidth(screenY);
-    const wobble = edgeWobble(gameplayY - (progress || 0), side < 0 ? 4 : 11) * (0.28 + this.depthEase(screenY) * 0.38);
+    const width = this.hedgeWidth(projected.linearScreenY);
+    const wobble = edgeWobble(gameplayY - (progress || 0), side < 0 ? 4 : 11)
+      * (0.28 + projected.t * 0.38);
     return inner + (side < 0 ? -1 : 1) * (width + wobble);
   }
 
   roadWidthScale(screenY) {
-    const inset = this.pathInset(screenY);
-    return Math.max(0.2, (CONFIG.TRACK_WIDTH - inset * 2) / CONFIG.TRACK_WIDTH);
+    const projected = this.projectWorld(this.width * 0.5, screenY - (this.lastShift || 0));
+    return Math.max(0.2, projected.roadWidth / CONFIG.TRACK_WIDTH);
   }
 
   projectGameplayX(gameplayX, gameplayY) {
-    const shift = this.lastShift || 0;
-    const left = this.pathLeftX(gameplayY, shift);
-    const right = this.pathRightX(gameplayY, shift);
-    const u = (gameplayX - CONFIG.TRACK_LEFT) / CONFIG.TRACK_WIDTH;
-    return left + u * Math.max(8, right - left);
+    return projectTrackX(gameplayX, gameplayY, this.lastShift || 0, this.height).screenX;
   }
 
   projectTrackRect(x, y, w, h) {
-    const groundY = y + h;
-    const screenY = groundY + (this.lastShift || 0);
-    const revealAt = CONFIG.VISUAL.OBSTACLE_REVEAL ?? 86;
-    if (screenY < this.horizonY() + Math.max(64, revealAt * 0.75)) return null;
-    const depth = this.worldDepthAt(screenY);
-    const visX = this.projectGameplayX(x, groundY);
-    const visRight = this.projectGameplayX(x + w, groundY);
-    const visW = Math.max(3, visRight - visX);
-    const uniform = depth.scale;
+    const groundWorldY = y + h;
+    const shift = this.lastShift || 0;
+    const left = projectTrackX(x, groundWorldY, shift, this.height);
+    const right = projectTrackX(x + w, groundWorldY, shift, this.height);
+    const roadLeft = left.roadLeft;
+    const roadRight = left.roadRight;
+    const visLeft = Math.max(roadLeft, Math.min(left.screenX, right.screenX));
+    const visRight = Math.min(roadRight, Math.max(left.screenX, right.screenX));
+    const visW = Math.max(3, visRight - visLeft);
+    const uniform = left.scale;
     const visH = Math.max(4, h * uniform);
-    const reveal = this.horizonReveal(screenY, revealAt * 0.45, 70);
     return {
-      x: visX,
-      y: groundY - visH,
+      x: visLeft,
+      y: left.drawY - visH,
       width: visW,
       height: visH,
-      groundY,
-      screenY,
+      groundY: left.drawY,
+      worldY: groundWorldY,
+      screenY: left.screenY,
+      roadCenter: left.roadCenter,
+      roadLeft,
+      roadRight,
+      roadWidth: left.roadWidth,
       scaleX: visW / Math.max(1, w),
       scaleZ: uniform,
       uniformScale: uniform,
-      alpha: depth.alpha * (0.55 + 0.45 * reveal),
-      contrast: depth.contrast,
-      depth
+      alpha: 1,
+      contrast: left.contrast,
+      depth: left
     };
   }
 
@@ -854,6 +933,7 @@ export class GardenArt {
     this.drawPath(camera);
     this.drawSandShoulder(camera);
     this.drawGardenBorders(camera);
+    this.drawCrestLandform();
     this.collectAndDrawWorld(camera, segments, playerY);
   }
 
@@ -898,9 +978,10 @@ export class GardenArt {
     this.resetWorldProps();
     this.markFenceClearance(segments);
     this.collectSideMasses(camera);
+    this.collectMidGarden(camera);
     this.collectSideGroups(camera);
     this.collectUnderstory(camera);
-    this.collectThroatFlora(camera);
+    this.collectRoadEdge(camera);
     this.collectHedgeFoliage(camera);
     if (this.usePack()) this.collectFenceRows(segments);
     else this.collectObstacles(segments);
@@ -916,7 +997,7 @@ export class GardenArt {
     const passLine = (Number(playerY) || CONFIG.PLAYER_START_Y) - 10;
     for (let i = 0; i < props.length; i += 1) {
       const prop = props[i];
-      if (prop.kind === 'arch' && prop.screenY >= passLine) {
+      if (prop.kind === 'arch' && (prop.groundY || prop.screenY) >= passLine) {
         this.deferredProps.push(prop);
         continue;
       }
@@ -951,21 +1032,29 @@ export class GardenArt {
 
   drawGardenArch(prop) {
     if (!prop.item || prop.w < 2 || prop.h < 2) return;
+    const occ = this.beginHorizonReveal(prop.x, prop.groundY, prop.w, prop.h);
+    if (!occ) return;
     this.drawSprite(prop.item, prop.x, prop.groundY, prop.w, prop.h, {
       grounded: true,
-      alpha: prop.alpha,
+      alpha: 1,
       flip: false
     });
+    this.endHorizonReveal(occ);
   }
 
   drawCollectedSprite(prop) {
     if (!prop.item || prop.w < 2 || prop.h < 2) return;
-    this.contactShadow(prop.x, prop.groundY, prop.w * (prop.role === 'tree' ? 0.42 : 0.58), prop.screenY);
+    const occ = this.beginHorizonReveal(prop.x, prop.groundY, prop.w, prop.h);
+    if (!occ) return;
+    if (occ.state === 'VISIBLE') {
+      this.contactShadow(prop.x, prop.groundY, prop.w * (prop.role === 'tree' ? 0.42 : 0.58), prop.screenY);
+    }
     this.drawSprite(prop.item, prop.x, prop.groundY, prop.w, prop.h, {
       grounded: true,
-      alpha: prop.alpha,
+      alpha: 1,
       flip: prop.flip
     });
+    this.endHorizonReveal(occ);
   }
 
   drawSky() {
@@ -992,98 +1081,100 @@ export class GardenArt {
     const step = 20;
     const skyBand = this.horizonY();
     const pack = this.usePack();
-    const y0 = this.crestPeakScreenY() - shift + 6;
-    const y1 = this.height + Math.abs(shift) + 56;
-    const wobbleAmp = pack ? 0.12 : 1;
+    const world0 = this.horizonY() - shift + 8;
+    const world1 = this.height - shift + 56;
+    const top = this.roadAt(world0);
+    const bottom = this.roadAt(world1);
+    const wobbleAmp = pack ? 0.08 : 1;
 
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(0, y0 + 10);
+    ctx.moveTo(0, top.drawY + 10);
     for (let x = 0; x <= this.width; x += 36) {
       const wobble = (Math.sin(x * 0.018) * 7 + Math.sin(x * 0.05) * 4) * wobbleAmp;
-      ctx.lineTo(x, y0 + wobble);
+      ctx.lineTo(x, top.drawY + wobble);
     }
-    ctx.lineTo(this.width, y1);
-    ctx.lineTo(0, y1);
+    ctx.lineTo(this.width, bottom.drawY);
+    ctx.lineTo(0, bottom.drawY);
     ctx.closePath();
     ctx.clip();
 
     if (pack && typeof ctx.createLinearGradient === 'function') {
-      const farLawn = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.38));
+      const farLawn = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.42));
       const midLawn = parseHex(this.lawnBed);
-      const fade = ctx.createLinearGradient(0, y0, 0, y0 + 160);
+      const fade = ctx.createLinearGradient(0, top.drawY, 0, top.drawY + 220);
       fade.addColorStop(0, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0)`);
-      fade.addColorStop(0.18, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.22)`);
-      fade.addColorStop(0.5, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.62)`);
-      fade.addColorStop(0.82, `rgba(${midLawn.r}, ${midLawn.g}, ${midLawn.b}, 0.92)`);
+      fade.addColorStop(0.12, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.18)`);
+      fade.addColorStop(0.38, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.58)`);
+      fade.addColorStop(0.72, `rgba(${midLawn.r}, ${midLawn.g}, ${midLawn.b}, 0.9)`);
       fade.addColorStop(1, this.lawnBed);
       ctx.fillStyle = fade;
     } else {
       ctx.fillStyle = this.lawnBed;
     }
     ctx.beginPath();
-    ctx.moveTo(0, y0);
-    for (let y = y0; y <= y1; y += step) {
-      ctx.lineTo(this.pathLeftVisual(y, shift) - 1, y);
+    ctx.moveTo(0, top.drawY);
+    for (let worldY = world0; worldY <= world1; worldY += step) {
+      const p = this.roadAt(worldY);
+      ctx.lineTo(p.roadLeft - 1, p.drawY);
     }
-    ctx.lineTo(0, y1);
+    ctx.lineTo(0, bottom.drawY);
     ctx.closePath();
     ctx.fill();
 
     ctx.beginPath();
-    ctx.moveTo(this.width, y0);
-    for (let y = y0; y <= y1; y += step) {
-      ctx.lineTo(this.pathRightVisual(y, shift) + 1, y);
+    ctx.moveTo(this.width, top.drawY);
+    for (let worldY = world0; worldY <= world1; worldY += step) {
+      const p = this.roadAt(worldY);
+      ctx.lineTo(p.roadRight + 1, p.drawY);
     }
-    ctx.lineTo(this.width, y1);
+    ctx.lineTo(this.width, bottom.drawY);
     ctx.closePath();
     ctx.fill();
 
     this.walkGameplay(cam, pack ? 28 : 54, (slot, y) => {
-      const screenY = y + shift;
-      if (screenY < skyBand - 4) return;
+      const p = this.roadAt(y);
+      if (p.linearScreenY < skyBand - 4) return;
       const leftSpot = hash01(slot + 2) > 0.5;
-      const edge = leftSpot
-        ? this.pathLeftVisual(y, shift)
-        : this.pathRightVisual(y, shift);
+      const edge = leftSpot ? p.roadLeft : p.roadRight;
       const garden = leftSpot
         ? Math.max(18, edge - 8)
         : Math.max(18, this.width - edge - 8);
       const x = leftSpot
         ? 8 + hash01(slot) * garden
         : edge + 8 + hash01(slot + 3) * garden;
-      ctx.globalAlpha = 0.1 + this.depthEase(screenY) * 0.14;
+      ctx.globalAlpha = 0.1 + p.t * 0.14;
       ctx.fillStyle = hash01(slot + 5) > 0.5 ? this.lawnLight : this.lawnShade;
-      const rx = (pack ? 18 : 18) + hash01(slot + 6) * (pack ? 16 : 16);
-      const ry = (pack ? 7 : 7) + hash01(slot + 7) * (pack ? 4 : 4);
-      this.oval(x, y + 14, rx, ry);
+      this.oval(x, p.drawY + 14, 18 + hash01(slot + 6) * 16, 7 + hash01(slot + 7) * 4);
     });
     ctx.globalAlpha = 1;
 
     ctx.fillStyle = mixHex(this.c.SafeLawn, this.c.FloorSand, 0.18);
     ctx.globalAlpha = pack ? 0.28 : 0.34;
-    const fringeY0 = this.crestFootScreenY() - shift + 10;
+    const fringe0 = this.horizonY() - shift + 16;
     ctx.beginPath();
-    for (let y = fringeY0; y <= y1; y += step) {
-      const x = this.pathLeftVisual(y, shift);
-      const fringe = this.hedgeSetback(y + shift) * (0.55 + 0.45 * this.nearT(y + shift));
-      if (y === fringeY0) ctx.moveTo(x - fringe, y);
-      else ctx.lineTo(x - fringe, y);
+    for (let worldY = fringe0; worldY <= world1; worldY += step) {
+      const p = this.roadAt(worldY);
+      const fringe = this.hedgeSetback(p.linearScreenY) * (0.55 + 0.45 * p.t);
+      if (worldY === fringe0) ctx.moveTo(p.roadLeft - fringe, p.drawY);
+      else ctx.lineTo(p.roadLeft - fringe, p.drawY);
     }
-    for (let y = y1; y >= fringeY0; y -= step) {
-      ctx.lineTo(this.pathLeftVisual(y, shift) + 1, y);
+    for (let worldY = world1; worldY >= fringe0; worldY -= step) {
+      const p = this.roadAt(worldY);
+      ctx.lineTo(p.roadLeft + 1, p.drawY);
     }
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
-    for (let y = fringeY0; y <= y1; y += step) {
-      const x = this.pathRightVisual(y, shift);
-      const fringe = this.hedgeSetback(y + shift) * (0.55 + 0.45 * this.nearT(y + shift));
-      if (y === fringeY0) ctx.moveTo(x + fringe, y);
-      else ctx.lineTo(x + fringe, y);
+    for (let worldY = fringe0; worldY <= world1; worldY += step) {
+      const p = this.roadAt(worldY);
+      const fringe = this.hedgeSetback(p.linearScreenY) * (0.55 + 0.45 * p.t);
+      if (worldY === fringe0) ctx.moveTo(p.roadRight + fringe, p.drawY);
+      else ctx.lineTo(p.roadRight + fringe, p.drawY);
     }
-    for (let y = y1; y >= fringeY0; y -= step) {
-      ctx.lineTo(this.pathRightVisual(y, shift) - 1, y);
+    for (let worldY = world1; worldY >= fringe0; worldY -= step) {
+      const p = this.roadAt(worldY);
+      ctx.lineTo(p.roadRight - 1, p.drawY);
     }
     ctx.closePath();
     ctx.fill();
@@ -1214,9 +1305,9 @@ export class GardenArt {
 
     const src = this.sourceRect(item);
     const aspect = src.sh / Math.max(1, src.sw);
-    const skylineT = CONFIG.VISUAL.FAR_SKYLINE_T || 0.78;
-    const minH = (horizon + 6) / Math.max(0.2, skylineT);
-    const destH = Math.max(minH, this.width * aspect * 1.04);
+    const skylineT = CONFIG.VISUAL.FAR_SKYLINE_T || 0.86;
+    const minH = (horizon + 4) / Math.max(0.2, skylineT);
+    const destH = Math.max(minH, this.width * aspect * 1.02);
     const destW = destH / aspect;
     const destX = (this.width - destW) / 2;
     const destY = horizon - destH * skylineT;
@@ -1244,12 +1335,12 @@ export class GardenArt {
     const ctx = this.ctx;
     if (typeof ctx.createLinearGradient !== 'function') return;
     const garden = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.34));
-    const coverTop = horizon + 4;
-    const coverBot = Math.min(this.crestFootScreenY(), Math.max(horizon + 28, destBottom));
+    const coverTop = horizon - 6;
+    const coverBot = Math.min(this.horizonY() + 42, Math.max(horizon + 18, destBottom));
     const cover = ctx.createLinearGradient(0, coverTop, 0, coverBot);
     cover.addColorStop(0, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0)`);
-    cover.addColorStop(0.45, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0.05)`);
-    cover.addColorStop(1, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0.1)`);
+    cover.addColorStop(0.55, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0.04)`);
+    cover.addColorStop(1, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0.08)`);
     ctx.fillStyle = cover;
     ctx.fillRect(0, coverTop, this.width, Math.max(8, coverBot - coverTop));
   }
@@ -1257,31 +1348,70 @@ export class GardenArt {
   drawDistantMeadow() {
     const ctx = this.ctx;
     const horizon = this.horizonY();
-    const foot = this.crestFootScreenY();
-    const meadow = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.42));
+    const meadow = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.38));
+    const steps = 16;
     ctx.save();
-    if (typeof ctx.createLinearGradient === 'function') {
-      const wash = ctx.createLinearGradient(0, horizon + 2, 0, foot);
-      wash.addColorStop(0, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0)`);
-      wash.addColorStop(0.35, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.08)`);
-      wash.addColorStop(1, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.16)`);
-      ctx.fillStyle = wash;
-      ctx.fillRect(0, horizon + 2, this.width, Math.max(8, foot - horizon));
+    ctx.beginPath();
+    ctx.moveTo(0, horizon - 6);
+    for (let i = 0; i <= steps; i += 1) {
+      const x = (this.width * i) / steps;
+      ctx.lineTo(x, projectorCrestYAt(x, this.width) + 8);
     }
-    ctx.fillStyle = mixHex(this.c.SafeLawn, this.c.HedgeSage, 0.28);
-    ctx.globalAlpha = 0.12;
-    this.oval(this.width * 0.5, horizon + 22, this.width * 0.46, 14);
-    this.oval(this.width * 0.28, horizon + 28, 90, 11);
-    this.oval(this.width * 0.72, horizon + 26, 88, 10);
+    ctx.lineTo(this.width, horizon - 6);
+    ctx.closePath();
+    if (typeof ctx.createLinearGradient === 'function') {
+      const peak = projectorCrestYAt(this.width * 0.5, this.width);
+      const wash = ctx.createLinearGradient(0, horizon - 4, 0, peak + 10);
+      wash.addColorStop(0, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0)`);
+      wash.addColorStop(0.55, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.05)`);
+      wash.addColorStop(1, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.09)`);
+      ctx.fillStyle = wash;
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  drawCrestLandform() {
+    const ctx = this.ctx;
+    const shift = this.lastShift || 0;
+    const steps = 16;
+    const sand = parseHex(mixHex(this.c.FloorSand, this.c.ShadowDust, 0.22));
+    const sage = parseHex(mixHex(this.c.HedgeSage, this.c.FloorSand, 0.42));
+    ctx.save();
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i += 1) {
+      const x = (this.width * i) / steps;
+      const y = projectorCrestYAt(x, this.width) - shift;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = steps; i >= 0; i -= 1) {
+      const x = (this.width * i) / steps;
+      ctx.lineTo(x, projectorCrestYAt(x, this.width) - shift + 18);
+    }
+    ctx.closePath();
+    ctx.clip();
+    const peak = projectorCrestYAt(this.width * 0.5, this.width) - shift;
+    if (typeof ctx.createLinearGradient === 'function') {
+      const wash = ctx.createLinearGradient(0, peak - 2, 0, peak + 18);
+      wash.addColorStop(0, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.16)`);
+      wash.addColorStop(0.42, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.08)`);
+      wash.addColorStop(1, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0)`);
+      ctx.fillStyle = wash;
+    } else {
+      ctx.fillStyle = this.sandShade;
+      ctx.globalAlpha = 0.08;
+    }
+    ctx.fillRect(0, peak - 6, this.width, 28);
     ctx.restore();
   }
 
   screenPathLeft(screenY) {
-    return CONFIG.TRACK_LEFT + this.pathInset(screenY);
+    return this.projectWorld(this.width * 0.5, screenY - (this.lastShift || 0)).roadLeft;
   }
 
   screenPathRight(screenY) {
-    return CONFIG.TRACK_RIGHT - this.pathInset(screenY);
+    return this.projectWorld(this.width * 0.5, screenY - (this.lastShift || 0)).roadRight;
   }
 
   drawSandShoulder(camera) {
@@ -1289,32 +1419,30 @@ export class GardenArt {
     const cam = camera || dummyCamera();
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const progress = cam.progress || 0;
-    const step = 12;
-    const y0 = this.crestPeakScreenY() - shift + 12;
-    const y1 = this.height + Math.abs(shift) + 48;
+    const step = 16;
+    const world0 = this.horizonY() - shift + 10;
+    const world1 = this.height - shift + 48;
 
     const paintShoulder = (side) => {
       ctx.beginPath();
       let started = false;
-      for (let y = y0; y <= y1; y += step) {
-        const screenY = y + shift;
-        const inner = side < 0 ? this.pathLeftVisual(y, shift) : this.pathRightVisual(y, shift);
-        const sand = sandShoulderWidth(screenY, this.height) * (1 - this.throatTaper(screenY) * 0.28);
-        const fade = 1 - this.throatTaper(screenY) * 0.45;
-        if (fade < 0.12) continue;
-        const x = inner - side * sand * 0.35;
+      for (let worldY = world0; worldY <= world1; worldY += step) {
+        const p = this.roadAt(worldY);
+        const sand = sandShoulderWidth(p.linearScreenY, this.height);
+        const inner = side < 0 ? p.roadLeft : p.roadRight;
+        const x = inner - side * sand * 0.28;
         if (!started) {
-          ctx.moveTo(x, y);
+          ctx.moveTo(x, p.drawY);
           started = true;
-        } else ctx.lineTo(x, y);
+        } else ctx.lineTo(x, p.drawY);
       }
       if (!started) return;
-      for (let y = y1; y >= y0; y -= step) {
-        const screenY = y + shift;
-        const inner = side < 0 ? this.pathLeftVisual(y, shift) : this.pathRightVisual(y, shift);
-        const sand = sandShoulderWidth(screenY, this.height) * (1 - this.throatTaper(screenY) * 0.28);
-        const wobble = edgeWobble(y - progress, side < 0 ? 15 : 19) * 0.25;
-        ctx.lineTo(inner + side * (sand * 0.72 + wobble), y);
+      for (let worldY = world1; worldY >= world0; worldY -= step) {
+        const p = this.roadAt(worldY);
+        const sand = sandShoulderWidth(p.linearScreenY, this.height);
+        const inner = side < 0 ? p.roadLeft : p.roadRight;
+        const wobble = edgeWobble(worldY - progress, side < 0 ? 15 : 19) * 0.22;
+        ctx.lineTo(inner + side * (sand * 0.78 + wobble), p.drawY);
       }
       ctx.closePath();
       ctx.fill();
@@ -1337,187 +1465,114 @@ export class GardenArt {
     const cam = camera || dummyCamera();
     const progress = cam.progress || 0;
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
-    const step = 12;
-    const vanishY = this.crestPeakScreenY() - shift;
-    const y1 = this.height + Math.abs(shift) + 56;
+    const samples = sampleRoadRibbon(shift, { height: this.height, pad: 56 });
+    if (samples.length < 2) return;
 
-    const walkEdge = (side, outset) => {
-      const points = [];
-      for (let y = y1; y >= vanishY; y -= step) {
-        const x = (side < 0 ? this.pathLeftVisual(y, shift) : this.pathRightVisual(y, shift)) + side * outset;
-        points.push({ x, y });
-      }
-      return points;
-    };
-
-    const tracePath = (outset = 0) => {
-      const leftPts = walkEdge(-1, outset);
-      const rightPts = walkEdge(1, outset);
-      if (leftPts.length < 2 || rightPts.length < 2) return false;
+    const traceRibbon = (outset = 0) => {
       ctx.beginPath();
-      ctx.moveTo(leftPts[0].x, leftPts[0].y);
-      for (let i = 1; i < leftPts.length; i += 1) ctx.lineTo(leftPts[i].x, leftPts[i].y);
-      const leftTip = leftPts[leftPts.length - 1];
-      const rightTip = rightPts[rightPts.length - 1];
-      const midX = (leftTip.x + rightTip.x) * 0.5;
-      ctx.quadraticCurveTo(midX, leftTip.y - 2, rightTip.x, rightTip.y);
-      for (let i = rightPts.length - 2; i >= 0; i -= 1) ctx.lineTo(rightPts[i].x, rightPts[i].y);
+      const last = samples[samples.length - 1];
+      ctx.moveTo(last.roadLeft - outset, last.drawY);
+      for (let i = samples.length - 2; i >= 0; i -= 1) {
+        ctx.lineTo(samples[i].roadLeft - outset, samples[i].drawY);
+      }
+      ctx.lineTo(samples[0].roadRight + outset, samples[0].drawY);
+      for (let i = 1; i < samples.length; i += 1) {
+        ctx.lineTo(samples[i].roadRight + outset, samples[i].drawY);
+      }
       ctx.closePath();
-      return true;
     };
 
     ctx.fillStyle = this.c.ShadowDust;
     ctx.globalAlpha = 0.16;
-    if (tracePath(3)) ctx.fill();
+    traceRibbon(3);
+    ctx.fill();
     ctx.globalAlpha = 1;
 
+    const farSample = samples[0];
+    const nearSample = samples[samples.length - 1];
     if (typeof ctx.createLinearGradient === 'function') {
       ctx.save();
-      if (tracePath(0)) {
-        ctx.clip();
-        const farC = parseHex(this.pathSandFar);
-        const midC = parseHex(mixHex(this.pathSandFar, this.pathSandNear, 0.45));
-        const span = Math.max(1, y1 - vanishY);
-        const fill = ctx.createLinearGradient(0, vanishY, 0, y1);
-        fill.addColorStop(0, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0)`);
-        fill.addColorStop(Math.min(0.12, 14 / span), `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.18)`);
-        fill.addColorStop(Math.min(0.22, 32 / span), `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.58)`);
-        fill.addColorStop(Math.min(0.34, 56 / span), `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.9)`);
-        fill.addColorStop(Math.min(0.55, 110 / span), `rgba(${midC.r}, ${midC.g}, ${midC.b}, 1)`);
-        fill.addColorStop(1, this.pathSandNear);
-        ctx.fillStyle = fill;
-        ctx.fillRect(0, vanishY, this.width, y1 - vanishY + 80);
-      }
+      traceRibbon(0);
+      ctx.clip();
+      const farC = parseHex(this.pathSandFar);
+      const midC = parseHex(mixHex(this.pathSandFar, this.pathSandNear, 0.45));
+      const fill = ctx.createLinearGradient(0, farSample.drawY, 0, nearSample.drawY);
+      fill.addColorStop(0, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.55)`);
+      fill.addColorStop(0.18, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.88)`);
+      fill.addColorStop(0.5, `rgba(${midC.r}, ${midC.g}, ${midC.b}, 1)`);
+      fill.addColorStop(1, this.pathSandNear);
+      ctx.fillStyle = fill;
+      ctx.fillRect(0, farSample.drawY - 8, this.width, nearSample.drawY - farSample.drawY + 24);
       ctx.restore();
     } else {
       ctx.fillStyle = this.pathSandNear;
-      if (tracePath(0)) ctx.fill();
+      traceRibbon(0);
+      ctx.fill();
     }
 
     const sand = this.usePack() ? this.pathSandItem() : null;
     if (sand && typeof ctx.drawImage === 'function') {
       ctx.save();
-      tracePath(0);
+      traceRibbon(0);
       ctx.clip();
-      this.drawPathSandMaterial(sand, vanishY, y1, shift, progress);
-      this.drawPathCenterWash(vanishY, y1, shift, progress);
-      this.drawPathEdgeTone(vanishY, y1, shift);
-      this.drawSandGrain(cam);
-      this.drawPathSandHorizonWash(vanishY, y1);
+      this.drawPathSandRibbon(sand, samples, progress);
+      this.drawRibbonEdgeTone(samples);
       ctx.restore();
     } else {
-      if (this.usePack() && typeof ctx.createLinearGradient === 'function') {
-        ctx.save();
-        tracePath(0);
-        ctx.clip();
-        const wash = ctx.createLinearGradient(0, vanishY, 0, y1);
-        const farC = parseHex(this.pathSandFar);
-        wash.addColorStop(0, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0)`);
-        wash.addColorStop(0.16, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.7)`);
-        wash.addColorStop(0.42, this.c.FloorSand);
-        wash.addColorStop(1, mixHex(this.c.FloorSand, this.c.ShadowDust, 0.16));
-        ctx.fillStyle = wash;
-        ctx.fillRect(0, vanishY, this.width, y1 - vanishY + 80);
-        ctx.restore();
-      }
       this.drawSandGrain(cam);
     }
   }
 
-  drawPathSandHorizonWash(vanishY, y1) {
-    const ctx = this.ctx;
-    if (typeof ctx.createLinearGradient !== 'function') return;
-    const meadow = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.4));
-    const sand = parseHex(this.pathSandFar);
-    const fadeH = 36;
-    const fade = ctx.createLinearGradient(0, vanishY, 0, vanishY + fadeH);
-    fade.addColorStop(0, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.16)`);
-    fade.addColorStop(0.5, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.03)`);
-    fade.addColorStop(1, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0)`);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = fade;
-    ctx.fillRect(0, vanishY, this.width, Math.min(fadeH, y1 - vanishY));
-  }
-
-  drawPathCenterWash(vanishY, y1, shift, progress) {
-    const ctx = this.ctx;
-    const step = 10;
-    for (let y = Math.floor(vanishY); y < y1; y += step) {
-      const screenY = y + shift;
-      if (screenY < this.crestPeakScreenY() + 10) continue;
-      const left = this.pathLeftVisual(y, shift, progress);
-      const right = this.pathRightVisual(y, shift, progress);
-      const destW = right - left;
-      if (destW < 10) continue;
-      const near = this.depthEase(screenY);
-      const mute = 1 - this.throatTaper(screenY) * 0.65;
-      ctx.fillStyle = this.pathSandNear;
-      ctx.globalAlpha = (0.16 + near * 0.18) * mute;
-      this.oval((left + right) / 2, y + step * 0.5, destW * (0.22 + near * 0.08), step * 0.9);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  drawPathEdgeTone(vanishY, y1, shift) {
-    const ctx = this.ctx;
-    const step = 12;
-    for (let y = Math.floor(vanishY); y < y1; y += step) {
-      const screenY = y + shift;
-      if (screenY < this.crestPeakScreenY() + 10) continue;
-      const left = this.pathLeftVisual(y, shift);
-      const right = this.pathRightVisual(y, shift);
-      const destW = right - left;
-      if (destW < 16) continue;
-      const near = this.depthEase(screenY);
-      const mute = 1 - this.throatTaper(screenY) * 0.7;
-      const band = Math.max(7, destW * (0.07 + near * 0.03));
-      ctx.fillStyle = this.sandEdge;
-      ctx.globalAlpha = (0.1 + near * 0.14) * mute;
-      this.oval(left + band * 0.55, y + step * 0.45, band, step * 0.7);
-      this.oval(right - band * 0.55, y + step * 0.45, band, step * 0.7);
-      ctx.fillStyle = this.sandRim;
-      ctx.globalAlpha = (0.06 + near * 0.08) * mute;
-      this.oval(left + band * 0.3, y + 2, band * 0.7, step * 0.45);
-      this.oval(right - band * 0.3, y + 2, band * 0.7, step * 0.45);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  drawPathSandMaterial(item, vanishY, y1, shift, progress) {
+  drawPathSandRibbon(item, samples, progress) {
     const ctx = this.ctx;
     const img = item.image;
+    if (!img) return;
     const tw = img.naturalWidth || 864;
     const th = img.naturalHeight || 1152;
     const tileWorld = Math.max(900, CONFIG.VISUAL.PATH_SAND_TILE || 1760);
     if (ctx.imageSmoothingEnabled != null) ctx.imageSmoothingEnabled = true;
 
-    let y = Math.floor(vanishY);
-    const yEnd = Math.ceil(y1);
-    while (y < yEnd) {
-      const screenY = y + shift;
-      const near = this.depthEase(screenY);
-      const destH = 2.1 + (1 - near) * 3.4;
-      if (screenY < this.crestPeakScreenY()) {
-        y += destH;
-        continue;
-      }
-      const left = this.pathLeftVisual(y, shift, progress);
-      const right = this.pathRightVisual(y, shift, progress);
+    for (let i = 0; i < samples.length - 1; i += 1) {
+      const a = samples[i];
+      const b = samples[i + 1];
+      const destH = Math.max(1, b.drawY - a.drawY) + 1;
+      const left = Math.min(a.roadLeft, b.roadLeft);
+      const right = Math.max(a.roadRight, b.roadRight);
       const destW = right - left;
-      if (destW < 2) {
-        y += destH;
-        continue;
-      }
+      if (destW < 2 || destH < 1) continue;
 
-      const mute = 1 - this.throatTaper(screenY) * 0.55;
-      ctx.globalAlpha = (0.12 + near * 0.3) * mute;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(a.roadLeft, a.drawY);
+      ctx.lineTo(b.roadLeft, b.drawY);
+      ctx.lineTo(b.roadRight, b.drawY);
+      ctx.lineTo(a.roadRight, a.drawY);
+      ctx.closePath();
+      ctx.clip();
 
-      const planted = this.plantedY(y, progress);
+      // Same planted world-Y as vegetation slots: worldY - progress, no extra scroll.
+      const planted = this.plantedY(a.worldY, progress);
       const worldV = ((planted % tileWorld) + tileWorld) % tileWorld;
       const srcY = (worldV / tileWorld) * th;
-      const srcH = Math.max(0.8, (destH / tileWorld) * th);
-      this.blitPathSandStrip(ctx, img, tw, th, srcY, srcH, left, y, destW, destH);
-      y += destH;
+      const srcH = Math.max(0.8, (Math.abs(b.worldY - a.worldY) / tileWorld) * th);
+      ctx.globalAlpha = 0.42 + a.t * 0.46;
+      this.blitPathSandStrip(ctx, img, tw, th, srcY, srcH, left, a.drawY - 0.5, destW, destH);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  drawRibbonEdgeTone(samples) {
+    const ctx = this.ctx;
+    for (let i = 1; i < samples.length; i += 1) {
+      const p = samples[i];
+      const destW = p.roadWidth;
+      if (destW < 16) continue;
+      const band = Math.max(6, destW * (0.08 + p.t * 0.04));
+      ctx.fillStyle = this.sandEdge;
+      ctx.globalAlpha = 0.12 + p.t * 0.16;
+      this.oval(p.roadLeft + band * 0.55, p.drawY, band, 6);
+      this.oval(p.roadRight - band * 0.55, p.drawY, band, 6);
     }
     ctx.globalAlpha = 1;
   }
@@ -1538,30 +1593,23 @@ export class GardenArt {
   drawSandGrain(camera) {
     const ctx = this.ctx;
     const cam = camera || dummyCamera();
-    const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const progress = cam.progress || 0;
-    const pack = this.usePack();
-    this.walkGameplay(cam, pack ? 76 : 48, (slot, y) => {
-      const screenY = y + shift;
-      if (screenY < this.crestPeakScreenY() + 12) return;
-      const pad = 8 + this.throatTaper(screenY) * 8;
-      const left = this.pathLeftVisual(y, shift, progress) + pad;
-      const right = this.pathRightVisual(y, shift, progress) - pad;
+    this.walkGameplay(cam, 72, (slot, y) => {
+      const p = this.roadAt(y);
+      if (p.linearScreenY < this.horizonY() + 10) return;
+      const pad = 10;
+      const left = p.roadLeft + pad;
+      const right = p.roadRight - pad;
       if (right <= left) return;
-      const near = this.depthEase(screenY);
-      const scale = this.depthScale(screenY);
       const span = right - left;
       const mid = (left + right) / 2;
-      const u = hash01(slot);
-      const x = left + u * span;
+      const x = left + hash01(slot) * span;
       const offCenter = Math.abs(x - mid) / Math.max(1, span * 0.5);
-      if (offCenter < (pack ? 0.34 : 0.28) && hash01(slot + 3) < 0.78) return;
-
-      const mute = 1 - this.throatTaper(screenY) * 0.85;
-      ctx.globalAlpha = ((pack ? 0.08 : 0.1) + near * (pack ? 0.16 : 0.18)) * mute;
-      ctx.fillStyle = hash01(slot + 2) > 0.5 ? this.sandLight : this.sandShade;
-      const patch = (pack ? 1.15 : 1) * scale;
-      this.oval(x, y + 14, (18 + hash01(slot + 4) * 16) * patch, (5 + hash01(slot + 6) * 4) * patch);
+      if (offCenter > 0.28 || hash01(slot + 3) > 0.62) {
+        ctx.globalAlpha = 0.1 + p.t * 0.16;
+        ctx.fillStyle = hash01(slot + 2) > 0.5 ? this.sandLight : this.sandShade;
+        this.oval(x, p.drawY + 8, (16 + hash01(slot + 4) * 14) * p.scale, (4.5 + hash01(slot + 6) * 3.5) * p.scale);
+      }
     });
     ctx.globalAlpha = 1;
   }
@@ -1577,8 +1625,8 @@ export class GardenArt {
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const progress = cam.progress || 0;
     const step = 10;
-    const y0 = this.crestFootScreenY() - shift + 6;
-    const y1 = this.height + Math.abs(shift) + 40;
+    const world0 = this.horizonY() - shift + 4;
+    const world1 = this.height - shift + 40;
     const innerPts = this.borderScratch.inner;
     const outerPts = this.borderScratch.outer;
     const topPts = this.borderScratch.top;
@@ -1586,19 +1634,19 @@ export class GardenArt {
     outerPts.length = 0;
     topPts.length = 0;
 
-    for (let y = y0; y <= y1; y += step) {
-      const screenY = y + shift;
-      const inner = this.hedgeInnerX(side, y, shift, progress);
-      const outer = this.hedgeOuterX(side, y, shift, progress);
-      const dip = hash01(Math.round((y - progress) / 38) * 17 + (side < 0 ? 3 : 11));
+    for (let worldY = world0; worldY <= world1; worldY += step) {
+      const projected = this.roadAt(worldY);
+      const inner = this.hedgeInnerX(side, worldY, shift, progress);
+      const outer = this.hedgeOuterX(side, worldY, shift, progress);
+      const dip = hash01(Math.round((worldY - progress) / 38) * 17 + (side < 0 ? 3 : 11));
       const live = dip < 0.18 ? 0.42 + dip * 0.8 : dip > 0.94 ? 1.1 : 1;
-      const height = this.hedgeHeight(screenY) * live;
-      const scallop = Math.sin((y - progress) * 0.038 + (side < 0 ? 0.6 : 1.8)) * (3.4 + this.nearT(screenY) * 4.6)
-        + Math.sin((y - progress) * 0.09 + side) * 2.4
-        + Math.sin((y - progress) * 0.17 + side * 0.7) * 1.4;
-      innerPts.push(inner, y);
-      outerPts.push(outer, y);
-      topPts.push((inner + outer) * 0.5, y - height + scallop);
+      const height = this.hedgeHeight(projected.linearScreenY) * live;
+      const scallop = Math.sin((worldY - progress) * 0.038 + (side < 0 ? 0.6 : 1.8)) * (3.4 + projected.t * 4.6)
+        + Math.sin((worldY - progress) * 0.09 + side) * 2.4
+        + Math.sin((worldY - progress) * 0.17 + side * 0.7) * 1.4;
+      innerPts.push(inner, projected.drawY);
+      outerPts.push(outer, projected.drawY);
+      topPts.push((inner + outer) * 0.5, projected.drawY - height + scallop);
     }
 
     if (innerPts.length < 4) return;
@@ -1612,10 +1660,10 @@ export class GardenArt {
     if (typeof ctx.createLinearGradient === 'function') {
       const fill = ctx.createLinearGradient(0, this.horizonY(), 0, this.height);
       const sage = parseHex(this.hedgeFill);
-      fill.addColorStop(0, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.08)`);
-      fill.addColorStop(0.18, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.28)`);
-      fill.addColorStop(0.48, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.62)`);
-      fill.addColorStop(1, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.9)`);
+      fill.addColorStop(0, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.34)`);
+      fill.addColorStop(0.1, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.62)`);
+      fill.addColorStop(0.32, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.86)`);
+      fill.addColorStop(1, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.96)`);
       ctx.fillStyle = fill;
       ctx.globalAlpha = 1;
     } else {
@@ -1659,47 +1707,39 @@ export class GardenArt {
     const progress = cam.progress || 0;
     const pack = this.usePack();
     [-1, 1].forEach((side) => {
-      this.walkGameplay(cam, pack ? 26 : 18, (slot, y) => {
-        const screenY = y + shift;
-        if (screenY < this.crestFootScreenY() - 4) return;
-        if (hash01(slot * 4.7 + side) < 0.18) return;
+      this.walkGameplay(cam, pack ? 36 : 28, (slot, y) => {
+        const projected = this.roadAt(y);
+        if (projected.linearScreenY < this.horizonY() - 10) return;
+        if (hash01(slot * 4.7 + side) < 0.45) return;
         const inner = this.hedgeInnerX(side, y, shift, progress);
         const outer = this.hedgeOuterX(side, y, shift, progress);
-        const height = this.hedgeHeight(screenY);
+        const height = this.hedgeHeight(projected.linearScreenY);
         const width = Math.abs(outer - inner);
-        const u = 0.38 + hash01(slot + 2) * 0.3;
+        const u = 0.42 + hash01(slot + 2) * 0.28;
         const worldX = inner + (side < 0 ? -1 : 1) * width * u;
-        const cx = this.perspectiveX(worldX, screenY);
-        const groundY = y + 3;
-        const reveal = this.horizonReveal(screenY, ROLE_REVEAL.hedge, 50);
-        const depth = this.worldDepthAt(screenY);
+        const groundY = projected.drawY + 3;
         const tuft = hash01(slot + 11);
-        let role = 'grass';
         let item = null;
-        let h = height * (0.42 + hash01(slot + 5) * 0.28);
-        if (pack && tuft > 0.72) {
-          role = 'flower';
+        let h = height * (0.34 + hash01(slot + 5) * 0.18);
+        if (pack && tuft > 0.86) {
           item = this.pick('flowers', slot + 17);
-          h = height * (0.3 + hash01(slot + 19) * 0.18);
-        } else if (pack && tuft > 0.28) {
-          role = 'smallBush';
-          item = this.pick('bushes', slot + 31 + side);
-          h = height * (0.62 + hash01(slot + 5) * 0.28);
+          h = height * (0.24 + hash01(slot + 19) * 0.12);
         } else if (pack) {
           item = this.pick('grass', slot + 41);
         }
         if (!item || !this.isReady(item)) return;
-        const size = this.spriteSize(item, Math.max(8, h * (0.92 + depth.t * 0.08)));
+        const size = this.spriteSize(item, Math.max(8, h * (0.94 + projected.t * 0.04)));
+        if (this.spriteOffscreen(worldX, groundY, size.width * 0.92, size.height)) return;
         const prop = this.allocProp();
         prop.kind = 'sprite';
         prop.role = 'hedge';
         prop.item = item;
-        prop.x = cx;
+        prop.x = worldX;
         prop.groundY = groundY;
-        prop.screenY = screenY;
-        prop.w = size.width * (role === 'smallBush' ? 0.82 : 0.95);
+        prop.screenY = projected.screenY;
+        prop.w = size.width * 0.92;
         prop.h = size.height;
-        prop.alpha = depth.alpha * (0.52 + 0.48 * reveal);
+        prop.alpha = 1;
         prop.flip = hash01(slot + 8) > 0.5;
         prop.layer = ROLE_LAYER.hedge;
         prop.side = side;
@@ -1713,29 +1753,29 @@ export class GardenArt {
       const item = this.sideMassItem(side);
       if (!item || !this.isReady(item)) return;
       const cam = camera || dummyCamera();
-      const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
       const catH = this.catH();
       const horizon = this.horizonY();
       this.walkGameplay(cam, this.massPeriod(side), (slot, y) => {
         if (!this.massShows(slot, side)) return;
-        const groundY = y + 18;
-        const propX = this.projectWorldProp(this.gardenWorldX(side, 0.7 + hash01(slot + 3) * 0.18), groundY);
-        if (propX.screenY < horizon + (ROLE_REVEAL.mass || 168)) return;
-        const nearCat = CONFIG.VISUAL.MASS_NEAR_CAT || 2.35;
-        const h = catH * (nearCat * (0.92 + hash01(slot) * 0.1)) * propX.scale;
+        const worldGroundY = y + 18;
+        const worldX = this.gardenWorldX(side, 0.72 + hash01(slot + 3) * 0.16);
+        const propX = this.projectWorldProp(worldX, worldGroundY);
+        if (propX.linearScreenY < horizon - 10) return;
+        const nearCat = CONFIG.VISUAL.MASS_NEAR_CAT || 1.92;
+        const h = catH * (nearCat * (0.96 + hash01(slot) * 0.05)) * propX.scale;
         const size = this.spriteSize(item, h);
-        const x = this.keepOffRoad(propX.screenX, size.width / 2, side, propX.screenY, 'mass');
-        const reveal = this.horizonReveal(propX.screenY, ROLE_REVEAL.mass * 0.45, 90);
+        const x = this.keepOffRoad(propX.screenX, size.width / 2, side, worldGroundY, 'mass');
+        if (this.spriteOffscreen(x, propX.groundY, size.width, size.height)) return;
         const prop = this.allocProp();
         prop.kind = 'sprite';
         prop.role = 'mass';
         prop.item = item;
         prop.x = x;
-        prop.groundY = groundY;
+        prop.groundY = propX.groundY;
         prop.screenY = propX.screenY;
         prop.w = size.width;
         prop.h = size.height;
-        prop.alpha = propX.alpha * (0.5 + 0.5 * reveal);
+        prop.alpha = 1;
         prop.flip = false;
         prop.layer = ROLE_LAYER.mass;
         prop.side = side;
@@ -1796,18 +1836,25 @@ export class GardenArt {
 
   nearChoiceGround(gameplayY) {
     return (this.choiceClearance || []).some((zone) => (
-      Math.abs((zone.groundY || 0) - gameplayY) < 86
+      Math.abs((zone.groundY || 0) - gameplayY) < 104
     ));
   }
 
-  blocksChoiceGateway(role, x, groundY, halfW) {
-    if (role === 'grass' || role === 'flower') return false;
+  blocksChoiceGateway(role, x, groundY, halfW, height = 0) {
+    if (role === 'grass' || role === 'flower' || role === 'edge') return false;
+    const shift = this.lastShift || 0;
+    const pathLeft = this.pathLeftVisual(groundY, shift);
+    const pathRight = this.pathRightVisual(groundY, shift);
+    if (!(x > pathLeft && x < pathRight)) return false;
     const half = Number(halfW) || 0;
+    const top = groundY - Math.max(8, height || 0);
     return (this.choiceClearance || []).some((zone) => {
-      if (Math.abs(groundY - zone.groundY) > 78) return false;
-      const left = this.projectGameplayX(zone.x0, zone.groundY);
-      const right = this.projectGameplayX(zone.x1, zone.groundY);
-      return x + half > left - 18 && x - half < right + 18;
+      const gateTop = zone.groundY - 96;
+      const gateBottom = zone.groundY;
+      if (top > gateBottom || groundY < gateTop) return false;
+      const gateLeft = this.projectGameplayX(zone.x0, zone.groundY);
+      const gateRight = this.projectGameplayX(zone.x1, zone.groundY);
+      return x + half > gateLeft && x - half < gateRight;
     });
   }
 
@@ -1883,7 +1930,6 @@ export class GardenArt {
     if (!this.usePack()) return;
     const kit = this.ensureFenceKit();
     if (!kit) return;
-    const revealAt = CONFIG.VISUAL.OBSTACLE_REVEAL ?? 86;
 
     (segments || []).forEach((segment) => {
       const rows = new Map();
@@ -1911,9 +1957,16 @@ export class GardenArt {
         const sample = spans[0];
         const vis = this.projectTrackRect(sample.x, sample.y, sample.width, sample.height);
         if (!vis) return;
-        const screenY = vis.screenY;
-        if (screenY < this.horizonY() + Math.max(48, revealAt * 0.6)) return;
-        if (screenY > this.height + 140) return;
+        const h = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * vis.uniformScale;
+        const gateH = choice
+          ? this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * vis.uniformScale
+          : 0;
+        if (this.spriteOffscreen(
+          vis.roadCenter,
+          vis.groundY,
+          vis.roadWidth,
+          Math.max(h, gateH)
+        )) return;
 
         const prop = this.allocProp();
         prop.kind = 'fence-row';
@@ -1922,24 +1975,28 @@ export class GardenArt {
         prop.openings = (row.paths || []).slice();
         prop.choice = choice;
         prop.classScale = classScale;
-        prop.screenY = screenY;
+        prop.screenY = vis.screenY;
         prop.groundY = vis.groundY;
-        prop.x = vis.x + vis.width / 2;
-        prop.alpha = vis.alpha;
+        prop.worldY = vis.worldY;
+        prop.x = vis.roadCenter;
+        prop.w = vis.roadWidth;
+        prop.h = Math.max(h, gateH);
+        prop.alpha = 1;
+        prop.scale = vis.uniformScale;
         prop.layer = ROLE_LAYER.planter;
       });
     });
   }
 
   fenceRowHeight(screenY) {
-    const scale = this.depthScale(screenY);
-    const nearCat = CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.96;
+    const scale = this.worldDepthAt(screenY).scale;
+    const nearCat = CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98;
     return this.catH() * nearCat * scale;
   }
 
   gatewayRowHeight(screenY) {
-    const scale = this.depthScale(screenY);
-    const nearCat = CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.1;
+    const scale = this.worldDepthAt(screenY).scale;
+    const nearCat = CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08;
     return this.catH() * nearCat * scale;
   }
 
@@ -1947,50 +2004,65 @@ export class GardenArt {
     if (!prop || !prop.spans || !prop.spans.length) return;
     const kit = this.ensureFenceKit();
     if (!kit) return;
-    const h = this.fenceRowHeight(prop.screenY);
+    const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
+    const h = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * scale;
     const groundY = prop.groundY;
-    const alpha = prop.alpha == null ? 1 : prop.alpha;
+    const worldY = Number.isFinite(prop.worldY) ? prop.worldY : groundY;
+    const road = this.roadAt(worldY);
+    const choice = !!(prop.choice && prop.openings && prop.openings.length >= 2);
+    const gateH = choice
+      ? this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * scale
+      : 0;
+    const occH = Math.max(h, gateH);
+    const occ = this.beginHorizonReveal(
+      road.roadCenter,
+      groundY,
+      road.roadWidth,
+      occH,
+      road.roadLeft,
+      road.roadRight
+    );
+    if (!occ) return;
 
     prop.spans.forEach((span) => {
-      const x0 = this.projectGameplayX(span.x, groundY);
-      const x1 = this.projectGameplayX(span.x + span.width, groundY);
+      const x0 = Math.max(road.roadLeft, this.projectGameplayX(span.x, worldY));
+      const x1 = Math.min(road.roadRight, this.projectGameplayX(span.x + span.width, worldY));
       if (!(x1 > x0)) return;
-      this.contactShadow((x0 + x1) / 2, groundY + 1, Math.max(16, x1 - x0), prop.screenY);
-      this.drawFenceSpan(kit, x0, x1, groundY, h, alpha);
+      if (occ.state === 'VISIBLE') {
+        this.contactShadow((x0 + x1) / 2, groundY + 1, Math.max(16, x1 - x0), prop.screenY);
+      }
+      this.drawFenceSpan(kit, x0, x1, groundY, h, 1, span, worldY);
     });
 
-    if (!prop.choice || !prop.openings || prop.openings.length < 2) return;
-    const gateKit = this.ensureGatewayKit();
-    if (!gateKit) return;
-    const gateH = this.gatewayRowHeight(prop.screenY);
-    prop.openings.forEach((path) => {
-      const left = this.projectGameplayX(path.x, groundY);
-      const right = this.projectGameplayX(path.x + path.width, groundY);
-      const frameScale = isRiskPathType(path.type) ? 1.1 : 1;
-      this.drawGatewayFrame(gateKit, left, right, groundY, gateH, alpha, frameScale);
-    });
+    if (choice) {
+      const gateKit = this.ensureGatewayKit();
+      if (gateKit) {
+        prop.openings.forEach((path) => {
+          const left = Math.max(road.roadLeft, this.projectGameplayX(path.x, worldY));
+          const right = Math.min(road.roadRight, this.projectGameplayX(path.x + path.width, worldY));
+          this.drawGatewayFrame(gateKit, left, right, groundY, gateH, 1, 1);
+        });
+      }
+    }
+    this.endHorizonReveal(occ);
   }
 
-  drawFenceSpan(kit, x0, x1, groundY, height, alpha) {
-    const span = x1 - x0;
-    if (span < 2 || height < 4) return;
+  drawFenceSpan(kit, x0, x1, groundY, height, alpha, span, worldY) {
+    const screenSpan = x1 - x0;
+    if (screenSpan < 10 || height < 8) return;
     const postW = Math.max(6, height * (kit.post.sw / Math.max(1, kit.post.sh)));
     const top = groundY - height;
-    if (span <= postW * 1.25) {
-      this.blitModule(kit.image, kit.post, x0 + (span - postW) / 2, top, postW, height, alpha);
-      return;
-    }
+    this.blitModule(kit.image, kit.rail, x0 + postW * 0.42, top, Math.max(2, screenSpan - postW * 0.84), height, alpha);
+    this.blitModule(kit.image, kit.post, x0, top, Math.min(postW, screenSpan * 0.42), height, alpha);
+    this.blitModule(kit.image, kit.post, x1 - Math.min(postW, screenSpan * 0.42), top, Math.min(postW, screenSpan * 0.42), height, alpha);
 
-    this.blitModule(kit.image, kit.rail, x0 + postW * 0.42, top, Math.max(2, span - postW * 0.84), height, alpha);
-    this.blitModule(kit.image, kit.post, x0, top, postW, height, alpha);
-    this.blitModule(kit.image, kit.post, x1 - postW, top, postW, height, alpha);
-
-    const bay = height * (CONFIG.VISUAL.FENCE_BAY ?? 1.16);
-    const inner = span - postW * 2;
-    if (inner <= bay * 1.35) return;
-    const extra = Math.max(1, Math.round(inner / bay) - 1);
+    const worldW = Math.max(1, span?.width || 0);
+    const bayWorld = this.catH() * (CONFIG.VISUAL.FENCE_BAY ?? 1.18);
+    const extra = Math.max(0, Math.round(worldW / Math.max(8, bayWorld)) - 1);
     for (let i = 1; i <= extra; i += 1) {
-      const px = x0 + postW + (inner * i) / (extra + 1) - postW / 2;
+      const worldX = (span?.x || 0) + (worldW * i) / (extra + 1);
+      const px = this.projectGameplayX(worldX, worldY) - postW / 2;
+      if (px + postW < x0 || px > x1) continue;
       this.blitModule(kit.image, kit.post, px, top, postW, height, alpha);
     }
   }
@@ -2023,6 +2095,7 @@ export class GardenArt {
       (segment.obstacles || []).forEach((obs) => {
         const vis = this.projectTrackRect(obs.x, obs.y, obs.width, obs.height);
         if (!vis) return;
+        if (this.spriteOffscreen(vis.x + vis.width / 2, vis.groundY, vis.width, vis.height)) return;
         const neighbors = choice
           ? (segment.paths || []).filter((path) => (
             Math.abs(path.y - obs.y) < 12
@@ -2055,6 +2128,8 @@ export class GardenArt {
         if (coin.collected) return;
         const vis = this.projectTrackRect(coin.x, coin.y, coin.width, coin.height);
         if (!vis) return;
+        const coinH = Math.max(10, (CONFIG.VISUAL.COIN_DRAW_SIZE || 26) * vis.uniformScale);
+        if (this.spriteOffscreen(vis.x + vis.width / 2, vis.groundY, coinH, coinH)) return;
         const prop = this.allocProp();
         prop.kind = 'coin';
         prop.role = 'coin';
@@ -2067,241 +2142,219 @@ export class GardenArt {
     });
   }
 
-  keepOffRoad(x, halfW, side, screenY, role = null) {
+  keepOffRoad(x, halfW, side, worldY, role = null) {
     const shift = this.lastShift || 0;
-    const gameplayY = screenY - shift;
-    const inner = side < 0
-      ? this.hedgeInnerX(-1, gameplayY, shift, this.lastProgress)
-      : this.hedgeInnerX(1, gameplayY, shift, this.lastProgress);
+    const projected = this.roadAt(worldY);
+    const t = projected.t;
+    const large = role === 'tree' || role === 'sapling' || role === 'mass';
+    const bound = large
+      ? (side < 0
+        ? this.hedgeOuterX(-1, worldY, shift, this.lastProgress)
+        : this.hedgeOuterX(1, worldY, shift, this.lastProgress))
+      : (side < 0
+        ? this.hedgeInnerX(-1, worldY, shift, this.lastProgress)
+        : this.hedgeInnerX(1, worldY, shift, this.lastProgress));
     const canopy = role === 'tree' || role === 'sapling'
-      ? 0.95
-      : role === 'largeBush'
-        ? 0.62
-        : 0.42;
-    const pad = Math.max(10, (halfW || 0) * canopy)
-      + (this.nearChoiceGround(gameplayY) ? 16 : 0);
-    if (side < 0) return Math.min(x, inner - pad);
-    return Math.max(x, inner + pad);
+      ? 0.52 + 0.12 * this.smoothstep((t - 0.4) / 0.3)
+      : role === 'mass'
+        ? 0.58
+        : role === 'largeBush'
+          ? 0.40
+          : 0.20;
+    const extra = large ? 12 * this.smoothstep((t - 0.4) / 0.3) : 0;
+    const pad = Math.max(8, (halfW || 0) * canopy) + extra;
+    if (side < 0) return Math.min(x, bound - pad);
+    return Math.max(x, bound + pad);
   }
 
   collectSideGroups(camera) {
-    const leftPeriod = this.usePack() ? 102 : 70;
-    const rightPeriod = this.usePack() ? 118 : 82;
+    const leftPeriod = this.usePack() ? 88 : 74;
+    const rightPeriod = this.usePack() ? 102 : 86;
     this.collectSideGroupLane(camera, -1, leftPeriod);
     this.collectSideGroupLane(camera, 1, rightPeriod);
   }
 
   collectSideGroupLane(camera, side, period) {
     const cam = camera || dummyCamera();
-    const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const horizon = this.horizonY();
     this.walkGameplay(cam, period, (slot, y) => {
-      const screenY = y + shift;
-      if (screenY < horizon - 4) return;
+      const projected = this.roadAt(y);
+      if (projected.linearScreenY < horizon - 4) return;
       const besideMass = this.usePack()
         && this.sideMassItem(side)
         && this.nearSideMass(side, y, cam.progress || 0);
       const groundY = y + 18;
-      const zone = besideMass ? 'D' : this.gardenZone(slot, side);
+      const zone = besideMass ? 'C' : this.gardenZone(slot, side);
       const layout = GROUP_LAYOUTS[zone] || GROUP_LAYOUTS.D;
       layout.forEach((entry, index) => {
-        const u = LANE_U[entry.lane] + (entry.ju || 0) + (hash01(slot + index + 3) - 0.5) * 0.06;
-        const worldX = this.gardenWorldX(side, Math.max(0.04, Math.min(0.96, u)));
-        this.collectPlant(entry.role, worldX, groundY + (entry.dy || 0), slot * 19 + index + side, side);
+        const outerBias = entry.role === 'tree' || entry.role === 'sapling' ? 0.06 : 0;
+        const u = LANE_U[entry.lane] + outerBias + (entry.ju || 0) + (hash01(slot + index + 3) - 0.5) * 0.04;
+        const worldX = this.gardenWorldX(side, Math.max(0.04, Math.min(0.98, u)));
+        this.collectPlant(entry.role, worldX, groundY + (entry.dy || 0), slot * 19 + index + side, side, false);
       });
     });
   }
 
-  collectThroatFlora(camera) {
+  collectMidGarden(camera) {
+    const cam = camera || dummyCamera();
+    const horizon = this.horizonY();
+    this.walkGameplay(cam, this.usePack() ? 44 : 38, (slot, y) => {
+      const projected = this.roadAt(y);
+      if (projected.linearScreenY < horizon - 2) return;
+      const groundY = y + 10;
+      [-1, 1].forEach((side) => {
+        const roll = hash01(slot * 3.17 + side * 5.1);
+        if (roll < 0.10) return;
+        this.collectPlant('grass', this.gardenWorldX(side, 0.08 + hash01(slot + 2) * 0.10), groundY + 8, slot * 11 + side, side, false);
+        if (roll > 0.62) {
+          this.collectPlant('flower', this.gardenWorldX(side, 0.12 + hash01(slot + 4) * 0.10), groundY + 5, slot * 13 + side, side, false);
+        }
+        if (roll > 0.08) {
+          this.collectPlant('smallBush', this.gardenWorldX(side, 0.22 + hash01(slot + 6) * 0.12), groundY + 3, slot * 17 + side, side, false);
+        }
+        if (roll > 0.40) {
+          this.collectPlant('largeBush', this.gardenWorldX(side, 0.36 + hash01(slot + 7) * 0.16), groundY + 1, slot * 18 + side, side, false);
+        }
+        if (roll > 0.82) {
+          this.collectPlant('sapling', this.gardenWorldX(side, 0.58 + hash01(slot + 8) * 0.16), groundY, slot * 19 + side, side, false);
+        }
+      });
+    });
+  }
+
+  roadEdgeItem(kind, seed) {
+    const ids = {
+      bush: ['road-edge-bush-01', 'road-edge-bush-02'],
+      grass: ['road-edge-grass-01'],
+      flower: ['road-edge-flower-01']
+    };
+    const named = this.pickByIds('roadEdges', ids[kind] || [], seed);
+    if (named && this.isReady(named)) return named;
+    if (kind === 'bush') return this.pick('bushes', seed);
+    if (kind === 'flower') return this.pick('flowers', seed);
+    return this.pick('grass', seed);
+  }
+
+  collectRoadEdge(camera) {
     const cam = camera || dummyCamera();
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
-    const tip = this.crestPeakScreenY();
-    const end = this.horizonY() + 132;
-    const pack = this.usePack();
-    this.walkGameplay(cam, pack ? 22 : 18, (slot, y) => {
-      const screenY = y + shift;
-      if (screenY < tip + 2 || screenY > end) return;
-      const groundY = y + 10;
-      const left = this.pathLeftVisual(y, shift);
-      const right = this.pathRightVisual(y, shift);
-      const taper = this.throatTaper(screenY);
-      const fade = this.horizonReveal(screenY, 0, 22);
-      if (fade <= 0.02) return;
-
-      if (hash01(slot * 2.17) > 0.28 && screenY < tip + 34) {
-        const u = 0.18 + hash01(slot + 3) * 0.64;
-        this.placeThroatPlant(
-          'grass',
-          left + (right - left) * u,
-          groundY,
-          screenY,
-          slot + 21,
-          hash01(slot) > 0.5 ? -1 : 1,
-          0.95,
-          fade * (0.5 + taper * 0.22)
-        );
-      }
-
-      [-1, 1].forEach((side) => {
-        if (hash01(slot * 4.3 + side) < 0.18) return;
-        const edge = side < 0 ? left : right;
-        const ontoRoad = hash01(slot + side + 6) < 0.72;
-        const screenX = ontoRoad
-          ? edge - side * (3 + hash01(slot + 8) * 11)
-          : edge + side * (2 + hash01(slot + 11) * 10);
-        const roll = hash01(slot * 5.1 + side);
-        let role = 'grass';
-        let sizeMul = 0.92;
-        if (roll > 0.82 && screenY > this.crestFootScreenY() - 6) {
-          role = 'smallBush';
-          sizeMul = 0.58;
-        } else if (roll > 0.58 && screenY > tip + 10) {
-          role = 'flower';
-          sizeMul = 0.82;
-        }
-        this.placeThroatPlant(
-          role,
-          screenX,
-          groundY + (role === 'grass' ? 4 : 2),
-          screenY,
-          slot * 13 + side,
-          side,
-          sizeMul,
-          fade * (0.55 + (1 - taper) * 0.18)
-        );
-      });
-    });
-  }
-
-  placeThroatPlant(role, screenX, groundY, screenY, seed, side, sizeMul, alphaMul) {
+    const progress = cam.progress || 0;
     const pack = this.usePack();
     const catH = this.catH();
-    let item = null;
-    let h = 12;
-    if (role === 'smallBush') {
-      item = this.pick('bushes', seed + 3);
-      h = pack ? catH * 0.5 * this.plantSizeByDepth(screenY, 0.72, 0.9) : 16;
-    } else if (role === 'flower') {
-      item = this.pick('flowers', seed);
-      h = pack ? catH * 0.22 * this.plantSizeByDepth(screenY, 0.8, 0.95) : 10;
-    } else {
-      item = this.pick('grass', seed);
-      h = pack ? catH * 0.16 * this.plantSizeByDepth(screenY, 0.8, 0.95) : 9;
-    }
-    if (!item || !this.isReady(item)) return;
-    h *= sizeMul;
-    const size = this.spriteSize(item, h);
-    if (size.width < 3 || size.height < 3) return;
-    const depth = this.worldDepthAt(screenY);
-    const prop = this.allocProp();
-    prop.kind = 'sprite';
-    prop.role = role;
-    prop.item = item;
-    prop.x = screenX;
-    prop.groundY = groundY;
-    prop.screenY = screenY;
-    prop.w = size.width;
-    prop.h = size.height;
-    prop.alpha = depth.alpha * Math.max(0.12, Math.min(0.78, alphaMul));
-    prop.flip = hash01(seed + 9) > 0.5;
-    prop.layer = ROLE_LAYER[role] || 4;
-    prop.side = side;
+    [-1, 1].forEach((side) => {
+      this.walkGameplay(cam, pack ? 40 : 32, (slot, y) => {
+        const projected = this.roadAt(y);
+        if (projected.linearScreenY < this.horizonY() - 10) return;
+        if (hash01(slot * 4.1 + side) < 0.38) return;
+        const path = side < 0 ? projected.roadLeft : projected.roadRight;
+        const inner = this.hedgeInnerX(side, y, shift, progress);
+        const u = 0.28 + hash01(slot + 3) * 0.42;
+        const x = path + (inner - path) * u;
+        const roll = hash01(slot * 6.3 + side);
+        let role = 'grass';
+        let kind = 'grass';
+        let h = pack ? catH * 0.13 * projected.scale : 10;
+        if (roll > 0.88) {
+          role = 'smallBush';
+          kind = 'bush';
+          h = pack ? catH * 0.32 * projected.scale : 14;
+        } else if (roll > 0.74) {
+          role = 'flower';
+          kind = 'flower';
+          h = pack ? catH * 0.18 * projected.scale : 11;
+        }
+        const item = this.roadEdgeItem(kind, slot * 9 + side);
+        if (!item || !this.isReady(item)) return;
+        const size = this.spriteSize(item, h);
+        if (size.width < 3 || size.height < 3) return;
+        const groundY = projected.drawY + (role === 'grass' ? 5 : 3);
+        if (this.spriteOffscreen(x, groundY, size.width, size.height)) return;
+        const prop = this.allocProp();
+        prop.kind = 'sprite';
+        prop.role = 'edge';
+        prop.item = item;
+        prop.x = x;
+        prop.groundY = groundY;
+        prop.screenY = projected.screenY;
+        prop.w = size.width * (role === 'smallBush' ? 0.82 : 1);
+        prop.h = size.height;
+        prop.alpha = 1;
+        prop.flip = hash01(slot + 8) > 0.5;
+        prop.layer = ROLE_LAYER.edge;
+        prop.side = side;
+      });
+    });
   }
 
   collectUnderstory(camera) {
     const cam = camera || dummyCamera();
-    const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
-    this.walkGameplay(cam, this.usePack() ? 38 : 28, (slot, y) => {
-      const screenY = y + shift;
-      if (screenY < this.horizonY() + 8) return;
-      if (hash01(slot * 9.13) < 0.1) return;
+    this.walkGameplay(cam, this.usePack() ? 44 : 36, (slot, y) => {
+      const projected = this.roadAt(y);
+      if (projected.linearScreenY < this.horizonY() - 10) return;
+      if (hash01(slot * 9.13) < 0.32) return;
       const side = hash01(slot + 2.4) > 0.5 ? 1 : -1;
       const groundY = y + 15;
-      const lane = hash01(slot + 5) > 0.55 ? 'mid' : 'inner';
-      const worldX = this.gardenWorldX(side, LANE_U[lane] + (hash01(slot + 8) - 0.5) * 0.08);
+      const lane = hash01(slot + 5) > 0.62 ? 'mid' : 'inner';
+      const u = LANE_U[lane] + (hash01(slot + 8) - 0.5) * 0.05;
+      const worldX = this.gardenWorldX(side, u);
       const roll = hash01(slot + 11);
-      if (roll < 0.48) {
-        this.collectPlant('grass', worldX, groundY + 7, slot, side);
-        if (hash01(slot + 16) > 0.55) {
-          this.collectPlant('flower', worldX + side * 8, groundY + 5, slot + 4, side);
-        }
+      if (roll < 0.58) {
+        this.collectPlant('grass', worldX, groundY + 7, slot, side, false);
       } else if (roll < 0.82) {
-        this.collectPlant('flower', worldX, groundY + 5, slot + 4, side);
-        this.collectPlant('grass', worldX - side * 7, groundY + 8, slot + 6, side);
+        this.collectPlant('flower', worldX, groundY + 5, slot + 4, side, false);
+      } else if (lane !== 'inner') {
+        this.collectPlant('smallBush', worldX, groundY + 3, slot + 8, side, false);
       } else {
-        this.collectPlant('smallBush', worldX, groundY + 3, slot + 8, side);
-        this.collectPlant('grass', worldX + side * 9, groundY + 8, slot + 9, side);
+        this.collectPlant('grass', worldX, groundY + 8, slot + 9, side, false);
       }
     });
   }
 
-  plantSizeByDepth(screenY, far = 0.7, near = 0.97) {
-    const t = this.nearT(screenY);
-    const mid = CONFIG.VISUAL.TREE_MID_SIZE ?? 0.86;
-    if (t < 0.5) return far + (mid - far) * this.smoothstep(t * 2);
-    return mid + (near - mid) * this.smoothstep((t - 0.5) * 2);
-  }
-
-  collectPlant(role, worldX, groundY, seed, side) {
-    const projected = this.projectWorldProp(worldX, groundY);
-    const revealStart = ROLE_REVEAL[role] ?? 48;
-    const revealSpan = role === 'tree' || role === 'sapling' ? 96 : 70;
-    const reveal = this.horizonReveal(projected.screenY, revealStart * 0.45, revealSpan);
-    if (reveal <= 0.02) return;
-    if (
-      (role === 'tree' || role === 'sapling' || role === 'largeBush')
-      && projected.screenY < this.crestFootScreenY() + 8
-    ) {
-      return;
-    }
+  collectPlant(role, xIn, groundY, seed, side) {
+    const projected = this.projectWorldProp(xIn, groundY);
     const catH = this.catH();
     const pack = this.usePack();
-    const t = this.nearT(projected.screenY);
-    const live = 1 + t * 0.06;
+    const vary = 0.98 + hash01(seed) * 0.04;
     let item = null;
     let h = 16;
     if (role === 'tree') {
       item = this.pick('trees', seed);
-      const near = CONFIG.VISUAL.TREE_NEAR_CAT || 2.68;
-      const farSize = CONFIG.VISUAL.TREE_FAR_SIZE ?? 0.7;
-      const nearSize = CONFIG.VISUAL.TREE_NEAR_SIZE ?? 0.97;
-      h = pack
-        ? catH * near * this.plantSizeByDepth(projected.screenY, farSize, nearSize) * live * (0.96 + hash01(seed) * 0.06)
-        : 86 * this.plantSizeByDepth(projected.screenY, 0.78, 1);
+      const near = CONFIG.VISUAL.TREE_NEAR_CAT || 2.48;
+      h = pack ? catH * near * projected.scale * vary : 86 * projected.scale;
     } else if (role === 'largeBush') {
       item = this.pick('bushes', seed);
-      const near = CONFIG.VISUAL.BUSH_LARGE_CAT || 1.52;
-      h = pack ? catH * near * this.plantSizeByDepth(projected.screenY, 0.78, 1) * (0.92 + hash01(seed) * 0.1) : 46;
+      const near = CONFIG.VISUAL.BUSH_LARGE_CAT || 1.22;
+      h = pack ? catH * near * projected.scale * vary : 46 * projected.scale;
     } else if (role === 'smallBush') {
       item = this.pick('bushes', seed + 3);
-      const near = CONFIG.VISUAL.BUSH_SMALL_CAT || 0.96;
-      h = pack ? catH * near * this.plantSizeByDepth(projected.screenY, 0.8, 1) * (0.9 + hash01(seed) * 0.1) : 30;
+      const near = CONFIG.VISUAL.BUSH_SMALL_CAT || 0.78;
+      h = pack ? catH * near * projected.scale * vary : 30 * projected.scale;
     } else if (role === 'flower') {
       item = this.pick('flowers', seed);
-      h = pack ? catH * (0.26 + hash01(seed) * 0.08) * this.plantSizeByDepth(projected.screenY, 0.88, 1) : 16;
+      h = pack ? catH * (0.20 + hash01(seed) * 0.04) * projected.scale : 16 * projected.scale;
     } else if (role === 'grass') {
       item = this.pick('grass', seed);
-      h = pack ? catH * (0.18 + hash01(seed) * 0.06) * this.plantSizeByDepth(projected.screenY, 0.88, 1) : 14;
+      h = pack ? catH * (0.14 + hash01(seed) * 0.04) * projected.scale : 14 * projected.scale;
     } else if (role === 'sapling') {
       item = this.pick('trees', seed);
-      const near = CONFIG.VISUAL.SAPLING_CAT || 1.22;
-      h = pack ? catH * near * this.plantSizeByDepth(projected.screenY, 0.74, 0.98) * live * (0.92 + hash01(seed) * 0.08) : 42;
+      const near = CONFIG.VISUAL.SAPLING_CAT || 1.08;
+      h = pack ? catH * near * projected.scale * vary : 42 * projected.scale;
     }
     if (!item || !this.isReady(item)) return;
     const size = this.spriteSize(item, h);
-    const x = this.keepOffRoad(projected.screenX, size.width / 2, side, projected.screenY, role);
-    if (this.blocksChoiceGateway(role, x, groundY, size.width / 2)) return;
-    const farMute = role === 'tree' || role === 'sapling' ? 0.72 + 0.28 * t : 0.82 + 0.18 * t;
+    const x = this.keepOffRoad(projected.screenX, size.width / 2, side, groundY, role);
+    if (this.blocksChoiceGateway(role, x, groundY, size.width / 2, size.height)) return;
+    if (this.spriteOffscreen(x, projected.groundY, size.width, size.height)) return;
     const prop = this.allocProp();
     prop.kind = 'sprite';
     prop.role = role;
     prop.item = item;
     prop.x = x;
-    prop.groundY = groundY;
+    prop.groundY = projected.groundY;
     prop.screenY = projected.screenY;
     prop.w = size.width;
     prop.h = size.height;
-    prop.alpha = projected.alpha * (0.5 + 0.5 * reveal) * farMute;
+    prop.alpha = 1;
     prop.flip = hash01(seed + 9) > 0.5;
     prop.layer = ROLE_LAYER[role] || 2;
     prop.side = side;
@@ -2344,30 +2397,42 @@ export class GardenArt {
     const mapped = LEGACY_FAMILY_MAP[family] || family || 'STANDING_PLANTER';
     const scaleClass = Number.isFinite(classScale) ? classScale : 1;
     const spec = PRODUCTION_CONSTRUCTIONS[mapped];
+    let fit = null;
+    let construction = null;
+    if (spec && this.usePack()) {
+      construction = this.readyConstructionSprite(mapped, lockedSprite);
+      if (construction) fit = this.constructionFit(vis, construction, scaleClass, spec.nearCat);
+    }
+    const revealH = fit ? fit.h : vis.height;
+    const revealW = fit ? fit.w : vis.width;
+    const revealX = fit ? fit.x : vis.x + vis.width / 2;
+    const occ = this.beginHorizonReveal(revealX, vis.groundY, revealW, revealH);
+    if (!occ) return;
 
     ctx.save();
-    ctx.globalAlpha = vis.alpha;
+    ctx.globalAlpha = 1;
 
-    if (spec && this.usePack()) {
-      const construction = this.readyConstructionSprite(mapped, lockedSprite);
-      if (construction) {
-        const fit = this.constructionFit(vis, construction, scaleClass, spec.nearCat);
+    if (fit && construction) {
+      if (occ.state === 'VISIBLE') {
         this.contactShadow(fit.x, vis.groundY + 1, Math.max(12, fit.w * 0.72), vis.screenY);
-        this.drawConstructionSprite(vis, construction, spec.nearCat, scaleClass, fit);
       }
+      this.drawConstructionSprite(vis, construction, spec.nearCat, scaleClass, fit);
       ctx.restore();
+      this.endHorizonReveal(occ);
       return;
     }
 
     const sprite = lockedSprite || null;
     const useSprite = !!(sprite && this.isReady(sprite) && vis.width >= 8);
 
-    this.contactShadow(
-      vis.x + vis.width / 2,
-      vis.groundY + 1,
-      Math.max(12, vis.width * 0.72),
-      vis.screenY
-    );
+    if (occ.state === 'VISIBLE') {
+      this.contactShadow(
+        vis.x + vis.width / 2,
+        vis.groundY + 1,
+        Math.max(12, vis.width * 0.72),
+        vis.screenY
+      );
+    }
     this.paintObstacleBed(vis, fill);
 
     if (useSprite) {
@@ -2382,6 +2447,7 @@ export class GardenArt {
 
     this.paintObstacleMaterial(vis, left, right);
     ctx.restore();
+    this.endHorizonReveal(occ);
   }
 
   paintObstacleBed(vis, fill) {
@@ -2428,14 +2494,10 @@ export class GardenArt {
     const src = this.sourceRect(sprite);
     const aspect = src.sw / Math.max(1, src.sh);
     const uniform = vis.uniformScale || vis.scaleZ || this.depthScale(vis.screenY);
-    let drawH = this.catH() * nearCat * (Number.isFinite(classScale) ? classScale : 1) * uniform;
+    const drawH = this.catH() * nearCat * (Number.isFinite(classScale) ? classScale : 1) * uniform;
     let drawW = Math.max(8, drawH * aspect);
     const span = Math.max(8, vis.width);
-    if (drawW > span) {
-      const fit = span / drawW;
-      drawW *= fit;
-      drawH *= fit;
-    }
+    if (drawW > span) drawW = span;
     return {
       x: vis.x + span / 2,
       w: drawW,
@@ -2574,10 +2636,13 @@ export class GardenArt {
   drawSill(path, gateH, accent) {
     const vis = this.projectTrackRect(path.x, path.y, path.width, gateH);
     if (!vis) return;
+    const revealH = this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08)
+      * (vis.uniformScale || 1);
+    if (!this.isWorldObjectFullyVisible(vis.x + vis.width / 2, vis.groundY, revealH)) return;
     const sill = Math.min(6, vis.height * 0.18);
     const painted = this.pathAccent(path.type);
     this.ctx.fillStyle = painted || accent;
-    this.ctx.globalAlpha = (path.type === 'SAFE' ? 0.32 : 0.4) * vis.alpha;
+    this.ctx.globalAlpha = path.type === 'SAFE' ? 0.32 : 0.4;
     this.roundedRectPath(vis.x + 2, vis.y + vis.height - sill, vis.width - 4, sill, 3);
     this.ctx.fill();
     this.ctx.globalAlpha = 1;
@@ -2603,22 +2668,25 @@ export class GardenArt {
     const bob = Math.sin((this.animTime || 0) * 3.1 + coin.x * 0.04) * (1.1 + scale * 0.6);
     const cx = vis.x + vis.width / 2;
     const groundY = vis.groundY;
+    const occ = this.beginHorizonReveal(cx, groundY, size, size);
+    if (!occ) return;
 
-    this.contactShadow(cx, groundY, size * 0.7, vis.screenY);
+    if (occ.state === 'VISIBLE') this.contactShadow(cx, groundY, size * 0.7, vis.screenY);
 
     const sprite = this.coinSprite(coin);
     if (sprite && this.isReady(sprite)) {
       this.drawSprite(sprite, cx, groundY + bob, size, size, {
         grounded: true,
-        alpha: vis.alpha
+        alpha: 1
       });
+      this.endHorizonReveal(occ);
       return;
     }
 
     const radius = size * 0.42;
     const cy = groundY - radius + bob;
     ctx.save();
-    ctx.globalAlpha = vis.alpha;
+    ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.fillStyle = this.coinGold;
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -2629,21 +2697,22 @@ export class GardenArt {
     ctx.arc(cx, cy, radius * 0.72, 0, Math.PI * 2);
     ctx.stroke();
     ctx.fillStyle = mixHex(this.c.CoinAmber, this.c.SkyPaper, 0.42);
-    ctx.globalAlpha = vis.alpha * 0.7;
+    ctx.globalAlpha = 0.7;
     ctx.beginPath();
     ctx.arc(cx - radius * 0.12, cy - radius * 0.08, radius * 0.42, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = this.coinHi;
-    ctx.globalAlpha = vis.alpha * 0.55;
+    ctx.globalAlpha = 0.55;
     ctx.beginPath();
     ctx.arc(cx - radius * 0.28, cy - radius * 0.32, radius * 0.22, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = vis.alpha;
+    ctx.globalAlpha = 1;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.strokeStyle = this.c.InkBrown;
     ctx.lineWidth = Math.max(1.8, CONFIG.VISUAL.OUTLINE_WIDTH - 1.5);
     ctx.stroke();
     ctx.restore();
+    this.endHorizonReveal(occ);
   }
 }

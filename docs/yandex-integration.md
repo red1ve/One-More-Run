@@ -14,9 +14,18 @@ The service exposes `unavailable`, `loading`, `ready`, and `failed` states. Miss
 
 No private keys, tokens, or credentials are used.
 
+## Language detection
+
+Immediately after `YaGames.init()`, the service reads `ysdk.environment.i18n.lang`. It exposes:
+
+- `detectedLanguage` — normalized Yandex portal language;
+- `language` — language currently supported by the game UI.
+
+The current UI is English-only. Therefore `en` selects English, while `ru` and all other codes honestly fall back to English. Russian must not be declared as a translated game language in the Developer Console until the complete UI is actually localized. Standalone mode also defaults to English.
+
 ## Loading and gameplay markup
 
-After the visible game is ready for interaction, `main.js` requests `LoadingAPI.ready()`. The service sends it when SDK initialization completes.
+After input listeners are installed and the visible START screen has rendered, `main.js` requests `LoadingAPI.ready()`. The service sends it when SDK initialization completes. The request is event-driven, has no arbitrary Game Ready delay, and can only be sent once.
 
 `GameplayAPI.start()` is sent only while PLAYING and not paused. `GameplayAPI.stop()` is sent on Game Over, tab hide, a platform pause event, and before an interstitial.
 
@@ -81,6 +90,7 @@ Use the official Yandex Games debug panel from the Developer Console. Alternativ
 Verify:
 
 - Loader indicator is `IT`;
+- I18N indicator turns green during startup;
 - Game Ready turns green;
 - Gameplay indicator starts/stops with PLAYING, Game Over, focus, and ads;
 - `game_api_pause` freezes movement, score, runTime, Coins, and audio;
@@ -94,6 +104,8 @@ Verify:
 - [ ] Upload the production `dist/` archive and verify `/sdk.js`.
 - [ ] Open the draft with the official debug panel.
 - [ ] Confirm SDK initialization and `LoadingAPI.ready()`.
+- [ ] Confirm automatic language detection in the debug panel.
+- [ ] Declare only English until Russian UI localization is complete.
 - [ ] Create a numeric descending leaderboard.
 - [ ] Set its Technical leaderboard name to `one_more_run_score`.
 - [ ] Test leaderboard submission as an authorized player.

@@ -78,7 +78,8 @@ check('TWO_PATHS has one SAFE and one RISK corridor', () => {
   assert(safe.length === 1, `expected 1 SAFE path, got ${safe.length}`);
   assert(risky.length === 1, `expected 1 RISK path, got ${risky.length}`);
   assert(safe[0].width > risky[0].width, 'SAFE should be wider than RISK');
-  assert(risky[0].width >= 70 && risky[0].width <= 80, `RISK width ${risky[0].width} should stay in 70–80`);
+  assert(risky[0].width >= CONFIG.RISKY_GAP_LATE && risky[0].width <= CONFIG.RISKY_GAP_TUTORIAL, `RISK width ${risky[0].width} should stay in ${CONFIG.RISKY_GAP_LATE}–${CONFIG.RISKY_GAP_TUTORIAL}`);
+  assert(risky[0].width * 1.6 < safe[0].width, 'RISK must stay clearly tighter than SAFE');
   assert(segment.isChoiceSegment, 'TWO_PATHS must be a choice segment');
 });
 
@@ -304,7 +305,7 @@ check('high speed TWO_PATHS either reachable or fallback', () => {
     const safe = segment.paths.find((path) => path.type === 'SAFE');
     const risk = segment.paths.find((path) => path.type === 'RISKY');
     assert(safe && risk, 'high-speed Choice missing a corridor');
-    assert(risk.width >= 70 && risk.width <= 80, `high-speed RISK width ${risk && risk.width}`);
+    assert(risk.width >= CONFIG.RISKY_GAP_LATE && risk.width <= CONFIG.RISKY_GAP_TUTORIAL, `high-speed RISK width ${risk && risk.width}`);
   } else {
     assert(segment.type === 'NORMAL', `unexpected fallback ${segment.type}`);
   }
@@ -368,7 +369,7 @@ check('Choice stays honest at progression speeds', () => {
     const safe = segment.paths.find((path) => path.type === 'SAFE');
     const risk = segment.paths.find((path) => path.type === 'RISKY');
     assert(safe && risk, `Choice missing a corridor at speed ${speed}`);
-    assert(risk.width >= 70 && risk.width <= 80, `RISK width ${risk.width} at speed ${speed}`);
+    assert(risk.width >= CONFIG.RISKY_GAP_LATE && risk.width <= CONFIG.RISKY_GAP_TUTORIAL, `RISK width ${risk.width} at speed ${speed}`);
 
     fromExits.forEach((exit) => {
       assert(track.canReach(exit, safe, travelY), `SAFE math unreachable at speed ${speed}`);
@@ -599,8 +600,8 @@ check('RISK/RISK has two RISK corridors with different rewards', () => {
   assert(easy.baseReward !== hard.baseReward, 'base rewards must differ');
   assert(hard.baseReward > easy.baseReward, 'narrower RISK must pay more');
   assert(easy.width > hard.width, 'easier RISK must be wider');
-  assert(easy.width >= 100 && easy.width <= 110, `easy width ${easy.width}`);
-  assert(hard.width >= 75 && hard.width <= 85, `hard width ${hard.width}`);
+  assert(easy.width === CONFIG.RISK_EASY_GAP_WIDTH, `easy width ${easy.width}`);
+  assert(hard.width === CONFIG.RISK_HARD_GAP_WIDTH, `hard width ${hard.width}`);
 });
 
 check('RISK/RISK corridors are adjacent', () => {
@@ -1436,6 +1437,7 @@ check('Audio mute and hidden tab do not play SFX', () => {
   audio.setMuted(false);
   audio.setHidden(true);
   assert(audio.play('risk') === false, 'hidden tab must not play');
+  assert(audio.play('meow') === false, 'hidden tab must not meow');
 });
 
 check('late Choice intervals keep breathing room', () => {

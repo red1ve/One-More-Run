@@ -79,14 +79,15 @@ export const PACK_GARDEN_SHEETS = {
     full('distant-garden', new URL('../../assets/environment/background/distant-garden.png', import.meta.url).href)
   ],
   sideMasses: [
-    full('left-garden-mass', new URL('../../assets/environment/side-masses/left-garden-mass.png', import.meta.url).href),
-    full('right-garden-mass', new URL('../../assets/environment/side-masses/right-garden-mass.png', import.meta.url).href)
+    full('left-garden-mass', new URL('../../assets/environment/side-masses/left-garden-mass.png', import.meta.url).href)
   ],
   pathSand: [
     full('path-sand-material', new URL('../../assets/environment/background/path-sand-material.png', import.meta.url).href)
   ],
   roadCrest: [],
-  roadEdges: [],
+  roadEdges: [
+    // Future: road-edge-bush-01/02, road-edge-grass-01, road-edge-flower-01
+  ],
   landmarks: [
     full(
       'single-choice-arch',

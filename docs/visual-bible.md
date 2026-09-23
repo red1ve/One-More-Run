@@ -443,35 +443,33 @@ Procedural geometry stays procedural. Renderer will later paint **materials** on
 
 ### Layers (back to front)
 
-1. GardenSky in **screen space**, occupying the top ~28% as open sky
-2. Large clouds in the top sky, screen-space drift, never on the path
-3. Distant garden strip on the horizon: overlapping pale foliage masses, not a row of PNGs (weak 0.12 parallax)
-4. MAIN_WORLD via camera: continuous lawn, path that narrows toward a visual vanishing point, vegetation groups, planters, coins, cat
-5. Gate sills (local SAFE / RISK / HIGH RISK accent in the opening only)
-6. Obstacle rects as wooden planters (`planter-01`, including thin slices)
-7. Coins
-8. Cat
-9. Particles / trails
-10. Reward markers (`+N`)
-11. HUD badges / overlays
+1. With `USE_ENVIRONMENT_ASSET_PACK`, FAR is **one image**: `distant-garden-horizon.png` (sky + clouds + distant hills + garden skyline). It is drawn in screen space behind MAIN_WORLD, aspect-preserved, with the painted tree line meeting the horizon so the path can vanish inside the far garden. No procedural sky, no extra cloud sprites, and no FAR parallax. If that PNG is not ready, fall back to `distant-garden.png`. Pack off keeps procedural sky, cloud sprites, and foliage blobs.
+2. MAIN_WORLD via camera, layered as FAR landscape → MID garden → side garden frame → road → cat. Lawn, a garden-path corridor with LEFT/RIGHT hedge borders, a MID garden band of small trees/bushes/grass, roadside low plants, vegetation groups, a continuous garden fence with openings, coins, cat. Pack fills that visual road polygon with `path-sand-material.png` as a world-Y tiled sand material (not a full-screen sprite). If the PNG is not ready, the road falls back to procedural FloorSand. Continuous hedge borders share the road's vanishing projection and remain the physical edges of the playable sand. Visually the sequence is sand shoulder → low plants → hedge → bushes → trees. Pack also draws `left-garden-mass` / `right-garden-mass` as outer-lawn groups **behind** those borders on the same world/camera path as trees and bushes. They are presentation-only, never a continuous side wall, and never collide as obstacles. Player X is clamped to the sand inner faces at the cat's screen Y. Obstacle generation still uses `TRACK_LEFT` / `TRACK_RIGHT`.
+3. Gate sills (local SAFE / RISK / HIGH RISK material on the opening only — no bright UI strip)
+4. Obstacle rects as one continuous garden fence per row, with a separate open gateway on each TWO_PATHS / DUAL_RISK opening
+5. Coins
+6. Cat
+7. Particles / trails
+8. Reward markers (`+N`)
+9. HUD badges / overlays
 
 ### Background
 
-Gameplay objects live in a world Y where planted position is `entity.y - progress`. A `WorldCamera` follows the cat with `screenY = worldY - cameraY`. Sky and clouds stay in screen space. The path and roadside vegetation share one horizon-keyed visual projection: the sand is narrower near the horizon (far inset 58px) and wider at the cat (near inset 4px), with a soft pointed tip that melts into the distant garden. Collision stays `TRACK_LEFT` / `TRACK_RIGHT`. Lawn is a continuous MAIN_WORLD surface; trees, bushes, and flowers stand on that grass in groups. Distant garden uses a weak 0.12 horizon parallax. Clouds never scroll with the road.
+Gameplay objects live in a world Y where planted position is `entity.y - progress`. A `WorldCamera` follows the cat with `screenY = worldY - cameraY`. With the environment pack, sky lives inside the FAR image; pack off keeps screen-space sky and clouds. The path, hedge borders, planters, coins, and roadside vegetation share one horizon-keyed visual projection (`projectTrackRect` / `pathInsetAt`): gameplay X is remapped onto the visual road at that depth. Path inset is moderate (`PATH_INSET_NEAR` 26px, `PATH_INSET_FAR` 108px) so the corridor narrows without a needle vanishing point. Visual and physical road edges stay in sync; there is no extra throat taper. The sand polygon fades into the FAR tree line instead of ending on a hard cap. Player X is clamped to the same inner road edges used to draw LEFT_BORDER / RIGHT_BORDER. Lawn is a continuous MAIN_WORLD surface that meets that join at the horizon. The FAR skyline stays in screen space and does not scroll with MAIN_WORLD. Side vegetation uses overlapping FAR / MID / NEAR compositional groups (tree + understory, not a tree wall) with small air between living clusters, not empty field. Environment props use one continuous `worldDepth` mapping from world position: camera transform → screenY → mild uniform scale, alpha, and contrast. ScreenY travel leads; tree size stays in about `0.68–1.02` and obstacle size in about `0.90–1.06` so objects approach instead of sprouting. Trees, bushes, side masses, and standing obstacles keep a world ground point and a **uniform** `depthScale` (scaleX === scaleY) with a bottom-center anchor. World objects are painter-sorted by ground `screenY`. Obstacle rows are one continuous fence construction with openings; TWO_PATHS / DUAL_RISK add a separate open gateway per opening, posts on the opening edges. Each track segment stores `visualObstacleType`, `visualObstacleSeed`, `visualObstacleScale`, and `visualObstacleId` at creation; the renderer never re-rolls family from `segment.y`, loading, or gap width. Coins keep gameplay size `COIN_SIZE`; presentation uses `VISUAL.COIN_DRAW_SIZE` and `coin.visualId` / `visualSeed` so a production sprite can drop in. A large distant garden arch is not spawned in runtime.
 
 ### Track edges
 
-Bush sprites hug the corridor. Collision stays the straight track bounds. The playable sand stays clear except for gates and coins.
+Bush and grass tufts sit on the hedge band itself so the border reads as a living garden edge, not a pipe of identical blobs. A road-edge layer (grass / flowers / small bushes, with hooks for future `road-edge-*.png`) sits between sand and hedge. Pack side-mass sprites sit in the outer lawn behind those borders, are not mirrored, and share depth projection with other MAIN_WORLD plants. Left and right masses use different world-Y periods so they do not alternate as a stripe. Near trees may overflow the viewport edge. The playable sand stays clear except for gates and coins. The cat cannot leave the sand: LEFT_BORDER / RIGHT_BORDER are the road boundaries, not extra obstacles.
 
 ### Obstacles / gates
 
-Obstacle rects use `garden/planter-01.png` as a visual shell over the existing geometry, including thin slices for narrow gates. Procedural wood is fallback only if the sprite is not ready. SAFE / RISK readability still lives on gap width, inner faces, and sills.
+Obstacle rects use one visual family per segment as a shell over existing geometry. The family is stored on the segment (`FLOWER_GATE`, `STANDING_PLANTER`, or `GARDEN_FENCE`) when the segment is created and does not change while that segment is alive. Pack rendering uses one continuous `garden-fence` construction for every barrier row, with openings left as gaps. TWO_PATHS and DUAL_RISK add a separate open gateway (`single-choice-arch` posts + beam) on each opening. SAFE and RISK openings in the same row share one barrier height. Pack off falls back to procedural wood. SAFE / RISK readability lives on gap width, inner-face material, and sills — not a bright accent strip.
 
 Never paint obstacles red. Red was debug danger. In this world, danger is **narrowness**, not colour-of-death.
 
 ### Depth
 
-Visual vanishing is presentation-only. Path edges, grass, and vegetation use the same `nearT(screenY)` so a tree moves down, grows, and gains contrast as it approaches — it must not merely scale in place. Player draw origin, hitboxes, and gate geometry stay unprojected. Objects still use a single contact-shadow blob. No AO. Reward plates sit in front of gates and behind HUD.
+Visual vanishing is presentation-only. Path edges, grass, and vegetation share `worldDepth(screenY)` so a tree’s ground point moves down the screen while uniform scale stays in about `0.90–1.06`. It must not stretch vertically, scale from a fixed ground point, or grow `0.2→1.0`. Player draw origin, hitboxes, and gate geometry stay unprojected. Objects still use a single contact-shadow blob. No AO. Reward plates sit in front of gates and behind HUD.
 
 ### Pattern presentation (semantics unchanged)
 
@@ -485,7 +483,7 @@ Visual vanishing is presentation-only. Path edges, grass, and vegetation use the
 | TWO_PATHS SAFE/RISK | Two openings in the same hedge wall. SAFE is the wider lawn cut with calm wood. RISK is the tighter, warmer planter. The sand between gates stays FloorSand. |
 | DUAL_RISK | Two tight cuts, same family as RISK. The harder one is narrower and uses HighRiskClay on the gate, not a full-path fill. |
 
-The corridor floor stays FloorSand. Difficulty colour lives on the **gate** (planter fill, inner face, 8 px sill), never as a rectangle filling the whole route.
+The corridor floor stays FloorSand. Pack paints `path-sand-material.png` inside the existing projected road polygon so the sand reads as a hand-painted garden path; road edges still come from path geometry against the lawn, not from that texture. Difficulty colour lives on the **gate** (planter fill, inner face, 8 px sill), never as a rectangle filling the whole route.
 
 **Reward values are the primary textual indicator at Choice. SAFE/RISK labels are not permanently displayed during normal gameplay. Difficulty is communicated primarily through geometry, material, and restrained color accents.**
 

@@ -1,6 +1,40 @@
 import { CONFIG, getCoinChance, isIntentionalRiskType } from '../config.js';
 import { VariationDirector } from './VariationDirector.js';
 
+const VISUAL_OBSTACLE_TYPES = ['FLOWER_GATE', 'STANDING_PLANTER', 'GARDEN_FENCE'];
+const VISUAL_OBSTACLE_IDS = {
+  FLOWER_GATE: ['garden-gate'],
+  STANDING_PLANTER: ['planter-06', 'planter-07', 'planter-08'],
+  GARDEN_FENCE: ['garden-fence']
+};
+const COIN_VISUAL_IDS = ['coin-01', 'coin-02', 'coin-03', 'coin-04'];
+
+function visualUnit(n) {
+  const x = Math.sin(Number(n) * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function chooseVisualObstacleType(segmentId, previousType) {
+  const types = VISUAL_OBSTACLE_TYPES;
+  let index = Math.floor(visualUnit(segmentId) * types.length) % types.length;
+  if (previousType && types[index] === previousType) {
+    index = (index + 1) % types.length;
+  }
+  return types[index];
+}
+
+function chooseVisualObstacleScale(segmentId) {
+  const unit = visualUnit(segmentId * 5.91);
+  if (unit < 0.34) return 0.97;
+  if (unit < 0.67) return 1.0;
+  return 1.04;
+}
+
+function chooseVisualObstacleId(type, seed) {
+  const ids = VISUAL_OBSTACLE_IDS[type] || VISUAL_OBSTACLE_IDS.STANDING_PLANTER;
+  return ids[Math.floor(visualUnit(seed) * ids.length) % ids.length];
+}
+
 export class Track {
   constructor() {
     this.segments = [];
@@ -153,6 +187,10 @@ export class Track {
 
   findGapX(width, obstacleY, preferredCenter) {
     const travelY = this.getTravelTo(obstacleY);
+    return this.findGapXForTravel(width, preferredCenter, travelY);
+  }
+
+  findGapXForTravel(width, preferredCenter, travelY) {
     const minX = CONFIG.TRACK_LEFT;
     const maxX = CONFIG.TRACK_RIGHT - width;
     if (maxX < minX) return null;
@@ -200,33 +238,225 @@ export class Track {
     }
   }
 
-  addSegment(y, type = null) {
-    let segmentType = this.pickSegmentType(type);
+  getPatternOffsetLimit() {
+    if (this.runTime < 30) return CONFIG.PATTERN_OFFSET_SHIFT_INTRO;
+    if (this.runTime < 60) return CONFIG.PATTERN_OFFSET_SHIFT_EARLY;
+    if (this.runTime < 120) return CONFIG.PATTERN_OFFSET_SHIFT_MID;
+    return CONFIG.PATTERN_OFFSET_SHIFT_LATE;
+  }
 
+  centerBounds(width) {
+    return {
+      min: CONFIG.TRACK_LEFT + width / 2,
+      max: CONFIG.TRACK_RIGHT - width / 2
+    };
+  }
+
+  gapFromCenter(center, width, type = 'SAFE', baseReward = undefined) {
+    const bounds = this.centerBounds(width);
+    const safeCenter = Math.max(bounds.min, Math.min(bounds.max, center));
+    const opening = {
+      x: safeCenter - width / 2,
+      width,
+      type
+    };
+    if (baseReward !== undefined) opening.baseReward = baseReward;
+    return opening;
+  }
+
+  playerCenterRange(opening) {
+    const half = CONFIG.PLAYER_WIDTH / 2;
+    return {
+      min: opening.x + half,
+      max: opening.x + opening.width - half
+    };
+  }
+
+  transitionTravel(previousRow, nextRow, gateHeight) {
+    return Math.max(
+      0,
+      previousRow.y - (nextRow.y + gateHeight) - CONFIG.PLAYER_HEIGHT
+    );
+  }
+
+  canFollowRouteFromExit(exit, route, initialTravel, gateHeight) {
+    let reachable = this.playerCenterRange(exit);
+    if (reachable.max < reachable.min) return false;
+
+    for (let index = 0; index < route.length; index += 1) {
+      const opening = route[index];
+      const target = this.playerCenterRange(opening);
+      if (target.max < target.min) return false;
+      const travelY = index === 0
+        ? initialTravel
+        : this.transitionTravel(route[index - 1], opening, gateHeight);
+      const lateral = this.maxLateral(travelY);
+      reachable = {
+        min: Math.max(target.min, reachable.min - lateral),
+        max: Math.min(target.max, reachable.max + lateral)
+      };
+      if (reachable.max < reachable.min) return false;
+    }
+
+    return true;
+  }
+
+  validateGateRows(rows, initialTravel, gateHeight) {
+    if (!rows.length) return false;
+    const routeCount = rows[0].openings.length;
+    if (routeCount < 1) return false;
+
+    for (const row of rows) {
+      if (row.openings.length !== routeCount) return false;
+      const sorted = [...row.openings].sort((a, b) => a.x - b.x);
+      let right = CONFIG.TRACK_LEFT;
+      for (const opening of sorted) {
+        if (
+          opening.width < CONFIG.MIN_GAP
+          || opening.x < CONFIG.TRACK_LEFT
+          || opening.x + opening.width > CONFIG.TRACK_RIGHT
+          || opening.x < right
+        ) return false;
+        right = opening.x + opening.width;
+      }
+    }
+
+    for (let routeIndex = 0; routeIndex < routeCount; routeIndex += 1) {
+      const route = rows.map((row) => ({
+        ...row.openings[routeIndex],
+        y: row.y
+      }));
+      for (const exit of this.lastExits) {
+        if (!this.canFollowRouteFromExit(exit, route, initialTravel, gateHeight)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  addWallsAroundOpenings(obstacles, openings, y, height) {
+    const sorted = [...openings].sort((a, b) => a.x - b.x);
+    let cursor = CONFIG.TRACK_LEFT;
+    for (const opening of sorted) {
+      if (opening.x > cursor) {
+        obstacles.push({ x: cursor, y, width: opening.x - cursor, height });
+      }
+      cursor = opening.x + opening.width;
+    }
+    if (cursor < CONFIG.TRACK_RIGHT) {
+      obstacles.push({ x: cursor, y, width: CONFIG.TRACK_RIGHT - cursor, height });
+    }
+  }
+
+  compileGateRows(segmentY, rows, initialTravel, gateHeight = CONFIG.PATTERN_GATE_HEIGHT) {
+    if (!this.validateGateRows(rows, initialTravel, gateHeight)) return null;
+
+    const obstacles = [];
+    const paths = [];
+    rows.forEach((row, rowIndex) => {
+      this.addWallsAroundOpenings(obstacles, row.openings, row.y, gateHeight);
+      const pathBottom = rowIndex === 0
+        ? segmentY + this.segmentHeight - gateHeight
+        : rows[rowIndex - 1].y + gateHeight;
+      const pathHeight = Math.max(gateHeight, pathBottom - row.y);
+      row.openings.forEach((opening, routeIndex) => {
+        paths.push({
+          x: opening.x,
+          y: row.y,
+          width: opening.width,
+          height: pathHeight,
+          type: opening.type,
+          baseReward: opening.baseReward,
+          routeIndex,
+          gateIndex: rowIndex
+        });
+      });
+    });
+
+    const finalOpenings = rows[rows.length - 1].openings;
+    this.setExits(finalOpenings.map((opening) => ({
+      x: opening.x,
+      width: opening.width
+    })));
+
+    const coinPath = paths.reduce((widest, path) => (
+      !widest || path.width > widest.width ? path : widest
+    ), null);
+    return { obstacles, paths, gates: rows, coinPath, initialTravel };
+  }
+
+  fitDriftDirection(startCenter, width, step, count, direction) {
+    const bounds = this.centerBounds(width);
+    const fits = (candidate) => {
+      const end = startCenter + candidate * step * (count - 1);
+      return end >= bounds.min && end <= bounds.max;
+    };
+    if (fits(direction)) return direction;
+    if (fits(-direction)) return -direction;
+    return direction;
+  }
+
+  addSegment(y, type = null, requestedPattern = null) {
+    const lastType = this.segments.length > 0
+      ? this.segments[this.segments.length - 1].type
+      : 'EMPTY';
+    let segmentType = this.pickSegmentType(type);
+    let pattern = requestedPattern || (
+      type
+        ? 'STRAIGHT'
+        : this.director.choosePattern({ runTime: this.runTime, segmentType, lastType })
+    );
+
+    const segmentId = Date.now() + Math.random();
     const segment = {
-      id: Date.now() + Math.random(),
+      id: segmentId,
       y,
       type: segmentType,
       isPassed: false,
       chosenPathType: null,
       isChoiceSegment: this.isChoiceType(segmentType),
+      pattern,
       paths: [],
       obstacles: [],
-      coins: []
+      coins: [],
+      gates: [],
+      coinPath: null,
+      initialTravel: null,
+      visualObstacleType: chooseVisualObstacleType(
+        segmentId,
+        this.segments.length > 0
+          ? this.segments[this.segments.length - 1].visualObstacleType
+          : null
+      ),
+      visualObstacleSeed: Math.abs(Math.round(visualUnit(segmentId * 3.17) * 1e6)) + 1,
+      visualObstacleScale: chooseVisualObstacleScale(segmentId)
     };
+    segment.visualObstacleId = chooseVisualObstacleId(
+      segment.visualObstacleType,
+      segment.visualObstacleSeed
+    );
 
-    let geometry = this.createGeometryForType(segmentType, y);
+    let geometry = this.createGeometryForType(segmentType, y, pattern);
+    if (!geometry && pattern !== 'STRAIGHT') {
+      pattern = 'STRAIGHT';
+      segment.pattern = pattern;
+      geometry = this.createGeometryForType(segmentType, y, pattern);
+    }
     if (!geometry && segmentType === 'DUAL_RISK') {
       segmentType = 'TWO_PATHS';
       segment.type = 'TWO_PATHS';
       segment.isChoiceSegment = true;
-      geometry = this.createGeometryForType('TWO_PATHS', y);
+      segment.pattern = 'STRAIGHT';
+      geometry = this.createGeometryForType('TWO_PATHS', y, 'STRAIGHT');
     }
     if (!geometry && segmentType !== 'NORMAL' && segmentType !== 'EMPTY') {
       segmentType = 'NORMAL';
       segment.type = 'NORMAL';
       segment.isChoiceSegment = false;
-      geometry = this.createGeometryForType('NORMAL', y);
+      segment.pattern = 'STRAIGHT';
+      geometry = this.createGeometryForType('NORMAL', y, 'STRAIGHT');
     }
 
     if (!geometry) {
@@ -235,6 +465,9 @@ export class Track {
 
     segment.obstacles = geometry.obstacles;
     segment.paths = geometry.paths;
+    segment.gates = geometry.gates || [];
+    segment.coinPath = geometry.coinPath || segment.paths[0] || null;
+    segment.initialTravel = geometry.initialTravel ?? null;
     segment.coins = [];
     this.segments.push(segment);
     this.maybePlaceCoin(segment);
@@ -250,16 +483,16 @@ export class Track {
     }
   }
 
-  createGeometryForType(type, segmentY) {
+  createGeometryForType(type, segmentY, pattern = 'STRAIGHT') {
     switch (type) {
       case 'EMPTY':
         return { obstacles: [], paths: [] };
       case 'NORMAL':
-        return this.createNormal(segmentY);
+        return this.createNormal(segmentY, pattern);
       case 'TWO_PATHS':
-        return this.createTwoPaths(segmentY);
+        return this.createTwoPaths(segmentY, pattern);
       case 'DUAL_RISK':
-        return this.createDualRisk(segmentY);
+        return this.createDualRisk(segmentY, pattern);
       case 'RISKY':
       case 'SHORT_RISKY':
         return this.createNormal(segmentY);
@@ -268,7 +501,11 @@ export class Track {
     }
   }
 
-  createNormal(segmentY) {
+  createNormal(segmentY, pattern = 'STRAIGHT') {
+    if (pattern !== 'STRAIGHT') {
+      return this.createPatternedNormal(segmentY, pattern);
+    }
+
     const obsHeight = 40;
     const gapY = segmentY + 300;
     const preferred = this.lastGapX + (Math.random() - 0.5) * 80;
@@ -279,6 +516,102 @@ export class Track {
     const paths = [{ x: gap.x, y: gapY, width: gap.width, height: obsHeight, type: 'SAFE' }];
     this.setExits([gap]);
     return { obstacles, paths };
+  }
+
+  createPatternedNormal(segmentY, pattern) {
+    const gateHeight = CONFIG.PATTERN_GATE_HEIGHT;
+    const baseWidth = this.getBreathingWidth();
+    let rows;
+    let initialTravel;
+
+    if (pattern === 'OFFSET') {
+      const offsets = [460, 300, 140];
+      const firstY = segmentY + offsets[0];
+      initialTravel = this.getFreeTravelTo(firstY, gateHeight);
+      const firstX = this.findGapXForTravel(baseWidth, this.lastGapX, initialTravel);
+      if (firstX === null) return null;
+      const firstCenter = firstX + baseWidth / 2;
+      const freeTravel = this.transitionTravel(
+        { y: segmentY + offsets[0] },
+        { y: segmentY + offsets[1] },
+        gateHeight
+      );
+      const step = Math.min(
+        this.getPatternOffsetLimit(),
+        this.maxLateral(freeTravel) * 0.65
+      );
+      let direction = this.director.pickDriftDirection();
+      direction = this.fitDriftDirection(firstCenter, baseWidth, step, offsets.length, direction);
+      rows = offsets.map((offset, index) => ({
+        y: segmentY + offset,
+        openings: [
+          this.gapFromCenter(firstCenter + direction * step * index, baseWidth, 'SAFE')
+        ]
+      }));
+    } else if (pattern === 'FUNNEL') {
+      const offsets = [460, 380, 300, 220, 140];
+      const expansion = CONFIG.PATTERN_FUNNEL_EXPAND_NORMAL;
+      const widths = [
+        Math.min(CONFIG.TRACK_WIDTH, baseWidth + expansion),
+        Math.min(CONFIG.TRACK_WIDTH, baseWidth + expansion / 2),
+        baseWidth,
+        Math.min(CONFIG.TRACK_WIDTH, baseWidth + expansion / 2),
+        Math.min(CONFIG.TRACK_WIDTH, baseWidth + expansion)
+      ];
+      const firstY = segmentY + offsets[0];
+      initialTravel = this.getFreeTravelTo(firstY, gateHeight);
+      const firstX = this.findGapXForTravel(widths[0], this.lastGapX, initialTravel);
+      if (firstX === null) return null;
+      const center = firstX + widths[0] / 2;
+      rows = offsets.map((offset, index) => ({
+        y: segmentY + offset,
+        openings: [this.gapFromCenter(center, widths[index], 'SAFE')]
+      }));
+    } else if (pattern === 'OFFSET_GATE') {
+      const offsets = [380, 340, 300];
+      const firstY = segmentY + offsets[0];
+      initialTravel = this.getFreeTravelTo(firstY, gateHeight);
+      const firstX = this.findGapXForTravel(baseWidth, this.lastGapX, initialTravel);
+      if (firstX === null) return null;
+      const firstCenter = firstX + baseWidth / 2;
+      const step = CONFIG.PATTERN_OFFSET_GATE_SHIFT / (offsets.length - 1);
+      let direction = this.director.pickDriftDirection();
+      direction = this.fitDriftDirection(firstCenter, baseWidth, step, offsets.length, direction);
+      rows = offsets.map((offset, index) => ({
+        y: segmentY + offset,
+        openings: [
+          this.gapFromCenter(firstCenter + direction * step * index, baseWidth, 'SAFE')
+        ]
+      }));
+    } else if (pattern === 'DOUBLE_GATE') {
+      const offsets = [420, 200];
+      const firstY = segmentY + offsets[0];
+      initialTravel = this.getFreeTravelTo(firstY, gateHeight);
+      const firstX = this.findGapXForTravel(baseWidth, this.lastGapX, initialTravel);
+      if (firstX === null) return null;
+      const firstCenter = firstX + baseWidth / 2;
+      const freeTravel = this.transitionTravel(
+        { y: segmentY + offsets[0] },
+        { y: segmentY + offsets[1] },
+        gateHeight
+      );
+      const step = Math.min(
+        this.getPatternOffsetLimit() * 1.35,
+        this.maxLateral(freeTravel) * 0.65
+      );
+      let direction = this.director.pickDriftDirection();
+      direction = this.fitDriftDirection(firstCenter, baseWidth, step, offsets.length, direction);
+      rows = offsets.map((offset, index) => ({
+        y: segmentY + offset,
+        openings: [
+          this.gapFromCenter(firstCenter + direction * step * index, baseWidth, 'SAFE')
+        ]
+      }));
+    } else {
+      return null;
+    }
+
+    return this.compileGateRows(segmentY, rows, initialTravel, gateHeight);
   }
 
   rectsOverlap(a, b) {
@@ -424,7 +757,7 @@ export class Track {
 
   tryPlaceCoin(segment, options = {}) {
     if (segment.type !== 'NORMAL') return null;
-    const path = segment.paths[0];
+    const path = segment.coinPath || segment.paths[0];
     if (!path) return null;
 
     const size = CONFIG.COIN_SIZE;
@@ -437,7 +770,19 @@ export class Track {
     const y = this.coinYForSlot(segment, path, size, ySlot, yJitter);
     if (x == null || y == null) return null;
 
-    const coin = { x, y, width: size, height: size, collected: false, zone, ySlot };
+    const visualSeed = Math.abs(Math.round(x * 17 + (segment.id || 1) * 13)) + 1;
+    const coin = {
+      x,
+      y,
+      width: size,
+      height: size,
+      collected: false,
+      zone,
+      ySlot,
+      visualSeed,
+      visualId: COIN_VISUAL_IDS[Math.floor(visualUnit(visualSeed) * COIN_VISUAL_IDS.length)
+        % COIN_VISUAL_IDS.length]
+    };
     if (!this.isCoinValid(segment, path, coin)) return null;
 
     segment.coins.push(coin);
@@ -464,7 +809,166 @@ export class Track {
     }
   }
 
-  createTwoPaths(segmentY) {
+  choiceDefinitions(segmentType) {
+    if (segmentType === 'TWO_PATHS') {
+      const { safe, risk } = this.getChoiceWidths();
+      const safeDef = { width: safe, type: 'SAFE', baseReward: CONFIG.REWARDS.SAFE };
+      const riskDef = { width: risk, type: 'RISKY', baseReward: CONFIG.REWARDS.RISKY };
+      return Math.random() > 0.5 ? [riskDef, safeDef] : [safeDef, riskDef];
+    }
+
+    if (segmentType === 'DUAL_RISK') {
+      const easy = {
+        width: CONFIG.RISK_EASY_GAP_WIDTH,
+        type: 'RISKY_EASY',
+        baseReward: CONFIG.REWARDS.RISKY_EASY
+      };
+      const hard = {
+        width: CONFIG.RISK_HARD_GAP_WIDTH,
+        type: 'RISKY_HARD',
+        baseReward: CONFIG.REWARDS.RISKY_HARD
+      };
+      return Math.random() > 0.5 ? [hard, easy] : [easy, hard];
+    }
+
+    return null;
+  }
+
+  openingsAtFork(forkX, definitions) {
+    const openings = [];
+    let cursor = forkX;
+    definitions.forEach((definition, index) => {
+      openings.push({
+        x: cursor,
+        width: definition.width,
+        type: definition.type,
+        baseReward: definition.baseReward
+      });
+      cursor += definition.width;
+      if (index < definitions.length - 1) cursor += CONFIG.TWO_PATHS_DIVIDER;
+    });
+    return openings;
+  }
+
+  findPatternFork(definitions, gateY, gateHeight) {
+    const forkWidth = definitions.reduce((sum, definition) => sum + definition.width, 0)
+      + CONFIG.TWO_PATHS_DIVIDER * (definitions.length - 1);
+    if (forkWidth > CONFIG.TRACK_WIDTH) return null;
+
+    const minFork = CONFIG.TRACK_LEFT;
+    const maxFork = CONFIG.TRACK_RIGHT - forkWidth;
+    const startFork = Math.max(
+      minFork,
+      Math.min(maxFork, this.preferredChoiceForkX(forkWidth))
+    );
+    const initialTravel = this.getFreeTravelTo(gateY, gateHeight);
+
+    for (let distance = 0; distance <= CONFIG.TRACK_WIDTH; distance += 8) {
+      const candidates = distance === 0
+        ? [startFork]
+        : [startFork + distance, startFork - distance];
+      for (const forkX of candidates) {
+        if (forkX < minFork || forkX > maxFork) continue;
+        const openings = this.openingsAtFork(forkX, definitions);
+        const reachable = openings.every((opening) => (
+          this.lastExits.every((exit) => this.canReach(exit, opening, initialTravel))
+        ));
+        if (reachable) {
+          return { forkX, forkWidth, openings, initialTravel };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  createPatternedChoice(segmentY, segmentType, pattern) {
+    const supported = segmentType === 'TWO_PATHS'
+      ? ['OFFSET', 'FUNNEL', 'OFFSET_GATE']
+      : ['OFFSET_GATE'];
+    if (!supported.includes(pattern)) return null;
+
+    const gateHeight = CONFIG.PATTERN_GATE_HEIGHT;
+    const definitions = this.choiceDefinitions(segmentType);
+    if (!definitions) return null;
+    let rows;
+    let initialTravel;
+
+    if (pattern === 'FUNNEL') {
+      const offsets = [460, 380, 300, 220, 140];
+      const expansionFor = (definition) => (
+        definition.type === 'SAFE'
+          ? CONFIG.PATTERN_FUNNEL_EXPAND_SAFE
+          : CONFIG.PATTERN_FUNNEL_EXPAND_RISK
+      );
+      const maxDefinitions = definitions.map((definition) => ({
+        ...definition,
+        width: definition.width + expansionFor(definition)
+      }));
+      const start = this.findPatternFork(maxDefinitions, segmentY + offsets[0], gateHeight);
+      if (!start) return null;
+      initialTravel = start.initialTravel;
+      const centers = start.openings.map((opening) => opening.x + opening.width / 2);
+      const factors = [1, 0.5, 0, 0.5, 1];
+      rows = offsets.map((offset, rowIndex) => ({
+        y: segmentY + offset,
+        openings: definitions.map((definition, routeIndex) => (
+          this.gapFromCenter(
+            centers[routeIndex],
+            definition.width + expansionFor(definition) * factors[rowIndex],
+            definition.type,
+            definition.baseReward
+          )
+        ))
+      }));
+    } else {
+      const offsets = pattern === 'OFFSET'
+        ? [460, 300, 140]
+        : [380, 340, 300];
+      const start = this.findPatternFork(definitions, segmentY + offsets[0], gateHeight);
+      if (!start) return null;
+      initialTravel = start.initialTravel;
+
+      let step;
+      if (pattern === 'OFFSET') {
+        const freeTravel = this.transitionTravel(
+          { y: segmentY + offsets[0] },
+          { y: segmentY + offsets[1] },
+          gateHeight
+        );
+        step = Math.min(
+          this.getPatternOffsetLimit(),
+          this.maxLateral(freeTravel) * 0.6
+        );
+      } else {
+        step = CONFIG.PATTERN_OFFSET_GATE_SHIFT / (offsets.length - 1);
+      }
+
+      let direction = this.director.pickDriftDirection();
+      direction = this.fitDriftDirection(
+        start.forkX + start.forkWidth / 2,
+        start.forkWidth,
+        step,
+        offsets.length,
+        direction
+      );
+      rows = offsets.map((offset, index) => ({
+        y: segmentY + offset,
+        openings: this.openingsAtFork(
+          start.forkX + direction * step * index,
+          definitions
+        )
+      }));
+    }
+
+    return this.compileGateRows(segmentY, rows, initialTravel, gateHeight);
+  }
+
+  createTwoPaths(segmentY, pattern = 'STRAIGHT') {
+    if (pattern !== 'STRAIGHT') {
+      return this.createPatternedChoice(segmentY, 'TWO_PATHS', pattern);
+    }
+
     const gateH = CONFIG.CHOICE_GATE_HEIGHT;
     const showH = CONFIG.CHOICE_SHOW_HEIGHT;
     const dividerW = CONFIG.TWO_PATHS_DIVIDER;
@@ -576,7 +1080,11 @@ export class Track {
     return { obstacles, paths, isChoiceSegment: true };
   }
 
-  createDualRisk(segmentY) {
+  createDualRisk(segmentY, pattern = 'STRAIGHT') {
+    if (pattern !== 'STRAIGHT') {
+      return this.createPatternedChoice(segmentY, 'DUAL_RISK', pattern);
+    }
+
     const gateH = CONFIG.CHOICE_GATE_HEIGHT;
     const showH = CONFIG.CHOICE_SHOW_HEIGHT;
     const dividerW = CONFIG.TWO_PATHS_DIVIDER;
@@ -707,6 +1215,9 @@ export class Track {
       segment.coins.forEach((coin) => {
         coin.y += moveDist;
       });
+      segment.gates?.forEach((gate) => {
+        gate.y += moveDist;
+      });
     });
 
     if (this.segments.length > 0 && this.segments[0].y > CONFIG.CANVAS_HEIGHT) {
@@ -720,6 +1231,13 @@ export class Track {
   }
 
   sampleChosenPath(segment, player) {
+    if (
+      segment.isChoiceSegment
+      && segment.pattern
+      && segment.pattern !== 'STRAIGHT'
+      && segment.chosenPathType
+    ) return;
+
     const halfW = player.width / 2;
     const halfH = player.height / 2;
     const left = player.x - halfW;

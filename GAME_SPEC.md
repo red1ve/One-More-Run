@@ -218,6 +218,23 @@ UI не должен закрывать игровую область.
 
 Нельзя создавать невозможные комбинации препятствий.
 
+Phase 9 добавляет геометрические варианты без новых gameplay systems:
+
+- OFFSET — несколько проходов постепенно смещаются в одном направлении;
+- FUNNEL — широкий проход плавно сужается до существующей безопасной ширины и снова расширяется;
+- OFFSET_GATE — компактные ступенчатые стены создают асимметричный проход;
+- DOUBLE_GATE — два достижимых прохода с умеренной коррекцией между ними.
+
+Паттерн хранится отдельно от семантики сегмента. `NORMAL`, `TWO_PATHS` и `DUAL_RISK` сохраняют существующие награды и правила streak.
+
+Геометрия описывается последовательностью gate rows и компилируется в общие `obstacles` / `paths`, которые одновременно используются collision и Renderer.
+
+Reachability проверяется как последовательное пересечение допустимых интервалов центра игрока через все gate rows. Для Choice отдельно валидируются SAFE и RISK; для DUAL_RISK — оба рискованных маршрута. При неудаче используется STRAIGHT fallback.
+
+VariationDirector выбирает паттерны мягкими весами: ранняя игра остаётся преимущественно прямой, после 30 секунд появляется больше OFFSET/FUNNEL/OFFSET_GATE, DOUBLE_GATE доступен только после 60 секунд. Повторы и резкая сложность сразу после Choice подавляются.
+
+Coins остаются только на NORMAL, используют существующие проверки пересечения, достижимости и возможности пропустить Coin.
+
 ---
 
 # 11. Сложность
@@ -677,11 +694,13 @@ ru.json
 
 en.json
 
-Язык должен определяться через окружение Yandex Games SDK.
+Язык должен определяться при запуске через `ysdk.environment.i18n.lang`.
 
 Если определить язык невозможно:
 
-использовать English или Russian fallback.
+использовать English fallback.
+
+Phase 7.1: сервис хранит отдельно язык портала и поддерживаемый язык UI. Текущий UI остаётся English-only; Russian нельзя считать готовой локализацией.
 
 ---
 
@@ -694,7 +713,7 @@ Yandex Games advertising.
 Использовать:
 
 - fullscreen ads;
-- rewarded ads.
+- rewarded ads только после появления отдельного добровольного reward loop в будущей фазе.
 
 Не использовать сторонние рекламные сети.
 
@@ -982,6 +1001,8 @@ Game → YandexService → Yandex Games SDK
 
 SDK загружается асинхронно через `/sdk.js`; `YaGames.init()` не блокирует START или standalone gameplay. Состояния сервиса: unavailable, loading, ready, failed.
 
+Сразу после успешного `YaGames.init()` сервис читает `ysdk.environment.i18n.lang`. Поддерживаемый UI language устанавливается до отправки pending gameplay state; неподдерживаемые языки используют English fallback.
+
 localStorage остаётся source of truth для немедленного локального сохранения best score, Coins и mute. SDK не является обязательной зависимостью игрового цикла.
 
 Leaderboard получает только новый локальный best через technical name `one_more_run_score`. Ошибки SDK, отсутствие leaderboard и отсутствие авторизации не отменяют локальный NEW BEST.
@@ -1134,11 +1155,11 @@ Yandex Games integration and release foundation.
 
 ## Phase 8
 
-Developer Console setup and Yandex debug verification.
+Retention and clarity polish without new gameplay mechanics.
 
 ## Phase 9
 
-Localization implementation and platform language.
+Track variety through reachable geometric passage patterns.
 
 ## Phase 10
 
@@ -1154,7 +1175,7 @@ Release advertising verification.
 
 ## Phase 13
 
-Final localization QA.
+Localization implementation and final QA.
 
 ## Phase 14
 

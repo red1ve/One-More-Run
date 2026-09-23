@@ -25,6 +25,10 @@ Priorities:
 | Obstacle generation    | P0       | DONE   |
 | Collision system       | P0       | DONE   |
 | Procedural track       | P0       | DONE   |
+| OFFSET passages        | P1       | DONE   |
+| FUNNEL passages        | P1       | DONE   |
+| OFFSET_GATE passages   | P1       | DONE   |
+| DOUBLE_GATE passages   | P1       | DONE   |
 | Difficulty progression | P0       | DONE   |
 | Score system           | P0       | DONE   |
 | Game over              | P0       | DONE   |
@@ -34,12 +38,16 @@ Priorities:
 Current implementation notes:
 
 - Horizontal player speed is ~420 px/s; the hitbox is unchanged.
+- Player X is clamped to the visual garden-path inner edges (hedge borders), not to empty grass outside the sand.
 - Track speed follows `v(t) = max - (max - start) * e^(-t / tau)` (300 → 720, tau 70).
 - Choices are SAFE/RISK (`TWO_PATHS`) and RISK/RISK (`DUAL_RISK` after 30s). No other Choice types.
 - Intentional RISK grows streak; SAFE on a Choice resets streak and multiplier to 1.0x. Breathing / non-choice does not change streak.
 - Multiplier starts at 1.0x, steps +0.5, caps at 5.0x. Path reward uses the multiplier **before** the step.
 - Coins are a separate meta counter (+1), not score/streak/multiplier. They persist through Game Over. There is no shop.
 - `VariationDirector` spaces Choices; reachability remains the source of truth, with fallback.
+- Track patterns use ordered gate rows compiled into the existing obstacle/path rectangles. OFFSET, FUNNEL, OFFSET_GATE, and DOUBLE_GATE vary steering geometry without adding controls or rewards.
+- All four patterns can vary NORMAL; SAFE/RISK supports OFFSET, FUNNEL, and OFFSET_GATE; DUAL_RISK supports OFFSET_GATE. DOUBLE_GATE unlocks after 60 seconds and remains NORMAL-only.
+- Every route is validated across all gate rows and prior exits. Invalid patterns fall back to straight geometry of the same semantic segment.
 - Game Over stops physics, score, coins, and new segments. The render loop may continue for overlay/effects.
 - Restart: R / tap / click / Space / Enter start a run from START or GAME OVER. R does nothing while PLAYING.
 
@@ -70,6 +78,7 @@ Current implementation notes:
 | LoadingAPI                      | P0       | DONE    |
 | Gameplay API                    | P0       | DONE    |
 | Platform pause/resume events    | P0       | DONE    |
+| Automatic SDK language detection| P0       | DONE    |
 | Fullscreen advertising wrapper  | P0       | DONE    |
 | Authorized leaderboard submit   | P1       | DONE    |
 | Explicit authorization UI       | P1       | PLANNED |
@@ -90,13 +99,21 @@ Current implementation notes:
 | Mouse click strafe   | P0       | DONE    |
 | Mobile / touch       | P0       | DONE    |
 | Control hint on start| P1       | DONE    |
+| First-run SAFE/RISK clarity | P1 | DONE    |
+| Contextual streak explanation | P1 | DONE  |
+| DUAL_RISK label hierarchy | P1  | DONE    |
+| Game Over replay motivation | P1 | DONE   |
 | Mute toggle          | P1       | DONE    |
 | Full settings menu   | P1       | PLANNED |
 | Russian localization | P0       | PLANNED |
-| English localization | P0       | PLANNED |
+| English UI           | P0       | DONE    |
 
 
 Start / Game Over are canvas overlays, not a separate menu system. Localization files exist but are not wired yet.
+
+Phase 8 adds presentation-only clarity: first-run hints disappear after the first launch, the first RISK explains streak, multiplier steps identify the new score multiplier, and Game Over shows either honest NEW BEST feedback or the points still needed. Coins are described as saved between runs. During play, Choices show reward values rather than repeating the words SAFE and RISK.
+
+Phase 8 deliberately does not change speed, physics, hitboxes, Choice timing/geometry, rewards, score mathematics, streak/multiplier rules, Coin behavior, reachability, or Yandex lifecycle.
 
 ---
 

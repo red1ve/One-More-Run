@@ -2,6 +2,7 @@ import { CONFIG, getTrackSpeed } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WorldCamera } from '../rendering/WorldCamera.js';
 import { Player } from './Player.js';
+import { playableXBounds } from './Corridor.js';
 import { Track } from './Track.js';
 import { GameFeel } from './GameFeel.js';
 import { KeyboardInput } from '../input/KeyboardInput.js';
@@ -167,6 +168,9 @@ export class Game {
     this.player.reset();
     this.track.reset();
     this.camera?.reset?.();
+    this.keyboardInput?.reset?.();
+    this.mouseInput?.reset?.();
+    this.touchInput?.reset?.();
 
     this.lastTime = performance.now();
     this.syncGameplayLifecycle?.();
@@ -218,7 +222,8 @@ export class Game {
     }
 
     this.player.setMoveDirection(moveDirection);
-    this.player.update(deltaTime);
+    const screenY = this.player.y + (this.camera?.gameplayShift?.() || 0);
+    this.player.update(deltaTime, playableXBounds(screenY, this.player.width));
 
     this.runTime += deltaTime;
     this.currentSpeed = getTrackSpeed(this.runTime);
@@ -391,9 +396,10 @@ export class Game {
     this.renderer.drawBackdrop(time);
     this.renderer.drawFarWorld(camera);
     this.renderer.beginWorld({ x: 0, y: camera ? camera.gameplayShift() : 0 });
-    this.renderer.drawMainWorld(camera);
+    this.renderer.drawWorld(camera, this.track.segments, this.player.y);
     this.renderer.drawSegments(this.track.segments);
     this.renderer.drawPlayer(this.player, this.feel);
+    this.renderer.drawDeferredWorld();
     this.renderer.drawParticles(this.feel?.particles.particles);
     this.renderer.drawFloatingRewards(this.floatingRewards);
     this.renderer.endWorld();
