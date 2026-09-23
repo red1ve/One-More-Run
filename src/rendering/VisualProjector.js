@@ -36,19 +36,21 @@ export function readZoneStartWorldY() {
   return CONFIG.PLAYER_START_Y - cfg.readZoneAbove;
 }
 
-function hermiteG(u, s) {
-  const x = clamp(u, 0, 1);
-  const x2 = x * x;
-  const x3 = x2 * x;
-  return (s - 1) * x3 + 2 * (1 - s) * x2 + s * x;
-}
-
 function depthScale(t, cfg) {
   const far = cfg.scaleFar;
   const mid = cfg.scaleMid;
   const near = cfg.scaleNear;
   if (t < 0.5) return far + (mid - far) * smooth01(t * 2);
   return mid + (near - mid) * smooth01((t - 0.5) * 2);
+}
+
+function legacySpriteScale(screenY, shift, cfg) {
+  const vanishY = corridorHorizonY();
+  const readStart = readZoneStartWorldY() + shift;
+  if (screenY >= readStart) return cfg.scaleNear;
+  const farSpan = Math.max(1, readStart - vanishY);
+  const farU = screenY <= vanishY ? 0 : clamp((screenY - vanishY) / farSpan, 0, 1);
+  return depthScale(farU, cfg);
 }
 
 function widthEase(t) {
@@ -69,19 +71,134 @@ function gameplayRoadAt(linearScreenY, height) {
   };
 }
 
-function projectedScreenY(linearScreenY, shift, height, cfg) {
-  const vanishY = corridorHorizonY();
-  const readStartLinearY = readZoneStartWorldY() + shift;
-  const farSpan = Math.max(1, readStartLinearY - vanishY);
-  const inReadZone = linearScreenY >= readStartLinearY;
-  let screenY;
-  if (inReadZone) screenY = linearScreenY;
-  else if (linearScreenY <= vanishY) screenY = vanishY;
-  else {
-    const u = (linearScreenY - vanishY) / farSpan;
-    screenY = vanishY + hermiteG(u, cfg.farYSpeed) * farSpan;
+function playerAnchor(shift) {
+  const worldY = CONFIG.PLAYER_START_Y;
+  return {
+    worldY,
+    screenY: worldY + shift
+  };
+}
+
+function depthAtScreen(screenY, shift, height, cfg = projectorConfig()) {
+  const anchor = playerAnchor(shift);
+  const nearW = Math.max(1, visualRoadWidth(anchor.screenY, shift, height, cfg));
+  const width = visualRoadWidth(screenY, shift, height, cfg);
+  const s = width / nearW;
+  return {
+    s,
+    width,
+    nearW,
+    yJacobian: s * s
+  };
+}
+
+let depthMapCache = null;
+
+function interpolateTable(xs, ys, x) {
+  const n = xs.length;
+  if (x <= xs[0]) return ys[0];
+  if (x >= xs[n - 1]) return ys[n - 1];
+  let lo = 0;
+  let hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid] <= x) lo = mid;
+    else hi = mid;
   }
-  return { screenY, inReadZone, vanishY, readStartLinearY, farSpan };
+  const span = xs[hi] - xs[lo];
+  const u = span > 1e-8 ? (x - xs[lo]) / span : 0;
+  return ys[lo] + (ys[hi] - ys[lo]) * u;
+}
+
+function buildDepthMap(shift, height) {
+  const horizon = corridorHorizonY();
+  const anchor = playerAnchor(shift);
+  const top = horizon;
+  const bottom = height + 80;
+  const step = 1;
+  const screens = [top];
+  const offsets = [0];
+  let prev = top;
+  let acc = 0;
+  for (let screen = top + step; screen <= bottom + 1e-6; screen += step) {
+    const next = Math.min(screen, bottom);
+    const s0 = depthAtScreen(prev, shift, height).s;
+    const s1 = depthAtScreen(next, shift, height).s;
+    const mid = Math.max(1e-3, (s0 + s1) * 0.5);
+    acc += (next - prev) / (mid * mid);
+    screens.push(next);
+    offsets.push(acc);
+    prev = next;
+    if (next >= bottom - 1e-6) break;
+  }
+  const playerOffset = interpolateTable(screens, offsets, anchor.screenY);
+  const worlds = offsets.map((offset) => anchor.worldY + (offset - playerOffset));
+  return {
+    shift,
+    height,
+    screens,
+    worlds,
+    horizon,
+    playerWorld: anchor.worldY,
+    playerScreen: anchor.screenY
+  };
+}
+
+function depthMapFor(shift, height) {
+  if (!depthMapCache || depthMapCache.shift !== shift || depthMapCache.height !== height) {
+    depthMapCache = buildDepthMap(shift, height);
+  }
+  return depthMapCache;
+}
+
+function bracket(xs, x) {
+  const n = xs.length;
+  if (x <= xs[0]) return { lo: 0, hi: 0, u: 0, outside: -1 };
+  if (x >= xs[n - 1]) return { lo: n - 1, hi: n - 1, u: 0, outside: 1 };
+  let lo = 0;
+  let hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid] <= x) lo = mid;
+    else hi = mid;
+  }
+  const span = xs[hi] - xs[lo];
+  return {
+    lo,
+    hi,
+    u: span > 1e-8 ? (x - xs[lo]) / span : 0,
+    outside: 0
+  };
+}
+
+export function worldYForScreen(screenY, shift = 0, height = CONFIG.CANVAS_HEIGHT) {
+  const map = depthMapFor(shift, height);
+  const edge = depthAtScreen(screenY, shift, height);
+  const jac = Math.max(1e-4, edge.yJacobian);
+  if (screenY <= map.screens[0]) {
+    return map.worlds[0] + (screenY - map.screens[0]) / jac;
+  }
+  const last = map.screens.length - 1;
+  if (screenY >= map.screens[last]) {
+    return map.worlds[last] + (screenY - map.screens[last]) / jac;
+  }
+  const hit = bracket(map.screens, screenY);
+  return map.worlds[hit.lo] + (map.worlds[hit.hi] - map.worlds[hit.lo]) * hit.u;
+}
+
+export function screenYForWorld(worldY, shift = 0, height = CONFIG.CANVAS_HEIGHT) {
+  const map = depthMapFor(shift, height);
+  const jac0 = Math.max(1e-4, depthAtScreen(map.screens[0], shift, height).yJacobian);
+  if (worldY <= map.worlds[0]) {
+    return map.screens[0] + (worldY - map.worlds[0]) * jac0;
+  }
+  const last = map.worlds.length - 1;
+  const jac1 = Math.max(1e-4, depthAtScreen(map.screens[last], shift, height).yJacobian);
+  if (worldY >= map.worlds[last]) {
+    return map.screens[last] + (worldY - map.worlds[last]) * jac1;
+  }
+  const hit = bracket(map.worlds, worldY);
+  return map.screens[hit.lo] + (map.screens[hit.hi] - map.screens[hit.lo]) * hit.u;
 }
 
 function visualRoadWidth(screenY, shift, height, cfg) {
@@ -104,35 +221,36 @@ export function projectWorldToScreen(
 ) {
   const cfg = projectorConfig();
   const vanishX = CONFIG.CANVAS_WIDTH * 0.5;
-  const linearScreenY = worldY + shift;
-  const yInfo = projectedScreenY(linearScreenY, shift, height, cfg);
-  const { screenY, inReadZone, vanishY, farSpan } = yInfo;
+  const vanishY = corridorHorizonY();
+  const anchor = playerAnchor(shift);
+  const screenY = screenYForWorld(worldY, shift, height);
+  const depth = depthAtScreen(screenY, shift, height, cfg);
   const drawY = screenY - shift;
-  const t = clamp((linearScreenY - vanishY) / Math.max(1, height - vanishY), 0, 1);
-  const farU = linearScreenY <= vanishY
-    ? 0
-    : clamp((linearScreenY - vanishY) / farSpan, 0, 1);
-
-  const gameplay = gameplayRoadAt(linearScreenY, height);
-  const roadWidth = visualRoadWidth(screenY, shift, height, cfg);
+  const t = clamp((screenY - vanishY) / Math.max(1, height - vanishY), 0, 1);
+  const gameplay = gameplayRoadAt(screenY, height);
+  const roadWidth = depth.width;
   const roadCenter = vanishX;
   const roadLeft = roadCenter - roadWidth * 0.5;
   const roadRight = roadCenter + roadWidth * 0.5;
   const xScale = roadWidth / gameplay.width;
   const screenX = vanishX + (worldX - vanishX) * xScale;
-  const scale = inReadZone ? cfg.scaleNear : depthScale(farU, cfg);
-  const clip = linearScreenY < vanishY
-    ? clamp((vanishY - linearScreenY) / 48, 0, 1)
+  const readStart = readZoneStartWorldY() + shift;
+  const inReadZone = screenY >= readStart;
+  const clip = screenY < vanishY
+    ? clamp((vanishY - screenY) / 48, 0, 1)
     : 0;
 
   return {
     worldX,
     worldY,
-    linearScreenY,
+    linearScreenY: screenY,
     screenY,
     drawY,
     screenX,
-    scale,
+    scale: depth.s,
+    s: depth.s,
+    yJacobian: depth.yJacobian,
+    nearRoadWidth: depth.nearW,
     t,
     xScale,
     inset: (CONFIG.TRACK_WIDTH - roadWidth) * 0.5,
@@ -147,6 +265,7 @@ export function projectWorldToScreen(
     clip,
     vanishX,
     vanishY,
+    playerScreenY: anchor.screenY,
     alpha: 0.88 + 0.12 * t,
     contrast: 0.78 + 0.22 * t
   };
@@ -178,14 +297,43 @@ export function sampleRoadRibbon(shift = 0, options = {}) {
   const height = options.height || CONFIG.CANVAS_HEIGHT;
   const sections = Math.max(12, Math.min(24, options.sections || projectorConfig().roadSections));
   const pad = options.pad == null ? 56 : options.pad;
-  const worldTop = corridorHorizonY() - shift;
-  const worldBot = height - shift + pad;
+  const top = corridorHorizonY();
+  const bottom = height + pad;
   const samples = [];
   for (let i = 0; i <= sections; i += 1) {
-    const worldY = worldTop + ((worldBot - worldTop) * i) / sections;
+    const screen = top + ((bottom - top) * i) / sections;
+    const worldY = worldYForScreen(screen, shift, height);
     samples.push(projectWorldToScreen(CONFIG.CANVAS_WIDTH * 0.5, worldY, shift, height));
   }
   return samples;
+}
+
+export function unifiedDepthSample(screenY, shift = 0, height = CONFIG.CANVAS_HEIGHT) {
+  const worldY = worldYForScreen(screenY, shift, height);
+  const projected = projectWorldToScreen(CONFIG.CANVAS_WIDTH * 0.5, worldY, shift, height);
+  const tile = Math.max(1, CONFIG.VISUAL.PATH_SAND_TILE || 2600);
+  return {
+    ...projected,
+    texelPerSource: projected.yJacobian * tile
+  };
+}
+
+export function unifiedDepthZones(shift = 0, height = CONFIG.CANVAS_HEIGHT) {
+  const horizon = corridorHorizonY();
+  const playerScreen = CONFIG.PLAYER_START_Y + shift;
+  const mid = horizon + (playerScreen - horizon) * 0.5;
+  return {
+    horizon,
+    playerScreen,
+    FAR: unifiedDepthSample(horizon, shift, height),
+    MID: unifiedDepthSample(mid, shift, height),
+    NEAR: unifiedDepthSample(playerScreen, shift, height)
+  };
+}
+
+export function depthDebugEnabled() {
+  const env = import.meta.env;
+  return !!(env && env.DEV);
 }
 
 export function crestYAt(screenX, width = CONFIG.CANVAS_WIDTH) {

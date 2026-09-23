@@ -9,6 +9,9 @@ import {
   projectTrackX,
   projectWorldToScreen,
   sampleRoadRibbon,
+  worldYForScreen,
+  unifiedDepthZones,
+  depthDebugEnabled,
   crestYAt as projectorCrestYAt,
   horizonOcclusion
 } from './VisualProjector.js';
@@ -601,8 +604,12 @@ export class GardenArt {
     return this.projectWorld(this.width * 0.5, worldY);
   }
 
+  screenToWorldY(screenY, shift = this.lastShift || 0) {
+    return worldYForScreen(screenY, shift, this.height);
+  }
+
   pathVisualInset(screenY) {
-    return this.roadAt(screenY - (this.lastShift || 0)).inset;
+    return this.roadAt(this.screenToWorldY(screenY)).inset;
   }
 
   pathLeftVisual(gameplayY, shift = this.lastShift || 0) {
@@ -631,7 +638,7 @@ export class GardenArt {
   }
 
   worldDepthAt(screenY) {
-    const projected = this.projectWorld(this.width * 0.5, screenY - (this.lastShift || 0));
+    const projected = this.projectWorld(this.width * 0.5, this.screenToWorldY(screenY));
     return {
       t: projected.t,
       z: 1 / Math.max(0.001, projected.scale),
@@ -671,7 +678,8 @@ export class GardenArt {
       groundY: projected.drawY,
       screenY: projected.screenY,
       screenX: projected.screenX,
-      scale: projected.scale,
+      scale: projected.s,
+      s: projected.s,
       alpha: projected.alpha,
       contrast: projected.contrast,
       drawY: projected.drawY,
@@ -682,7 +690,7 @@ export class GardenArt {
   }
 
   perspectiveX(worldX, screenY) {
-    return this.projectWorld(worldX, screenY - (this.lastShift || 0)).screenX;
+    return this.projectWorld(worldX, this.screenToWorldY(screenY)).screenX;
   }
 
   gardenWorldX(side, u) {
@@ -695,9 +703,7 @@ export class GardenArt {
   }
 
   gardenLaneX(side, u, screenY) {
-    const shift = this.lastShift || 0;
-    const gameplayY = screenY - shift;
-    const projected = this.projectWorld(this.gardenWorldX(side, u), gameplayY);
+    const projected = this.projectWorld(this.gardenWorldX(side, u), this.screenToWorldY(screenY));
     return projected.screenX;
   }
 
@@ -829,7 +835,7 @@ export class GardenArt {
   }
 
   roadWidthScale(screenY) {
-    const projected = this.projectWorld(this.width * 0.5, screenY - (this.lastShift || 0));
+    const projected = this.projectWorld(this.width * 0.5, this.screenToWorldY(screenY));
     return Math.max(0.2, projected.roadWidth / CONFIG.TRACK_WIDTH);
   }
 
@@ -864,6 +870,7 @@ export class GardenArt {
       scaleX: visW / Math.max(1, w),
       scaleZ: uniform,
       uniformScale: uniform,
+      s: left.s,
       alpha: 1,
       contrast: left.contrast,
       depth: left
@@ -935,6 +942,324 @@ export class GardenArt {
     this.drawGardenBorders(camera);
     this.drawCrestLandform();
     this.collectAndDrawWorld(camera, segments, playerY);
+    this.drawDepthProbe();
+  }
+
+  depthProbeWorldY(progress) {
+    const shift = this.lastShift || 0;
+    if (this._depthProgress != null && progress + 1 < this._depthProgress) {
+      this.depthProbePlanted = null;
+      this._depthClock = null;
+      this._liveLock = {};
+    }
+    this._depthProgress = progress;
+    if (this.depthProbePlanted == null) {
+      const horizon = this.horizonY();
+      const playerScreen = CONFIG.PLAYER_START_Y + shift;
+      const screen = horizon + (playerScreen - horizon) * 0.12;
+      this.depthProbePlanted = this.screenToWorldY(screen, shift) - progress;
+    }
+    let worldY = this.depthProbePlanted + progress;
+    let projected = this.projectWorld(this.width * 0.5, worldY);
+    if (projected.screenY > this.height + 24) {
+      const horizon = this.horizonY();
+      const playerScreen = CONFIG.PLAYER_START_Y + shift;
+      const screen = horizon + (playerScreen - horizon) * 0.08;
+      worldY = this.screenToWorldY(screen, shift);
+      this.depthProbePlanted = worldY - progress;
+      projected = this.projectWorld(this.width * 0.5, worldY);
+      this._depthClock = null;
+    }
+    return { worldY, planted: this.depthProbePlanted, projected };
+  }
+
+  liveDepthSample(progress, worldSpeed, now) {
+    if (!this._liveLock) this._liveLock = {};
+    const props = this.worldProps || [];
+    const trees = [];
+    const fences = [];
+    const gates = [];
+    for (let i = 0; i < props.length; i += 1) {
+      const prop = props[i];
+      if (!Number.isFinite(prop.worldY) || !Number.isFinite(prop.s)) continue;
+      if (prop.kind === 'sprite' && prop.role === 'tree') trees.push(prop);
+      else if (prop.kind === 'fence-row' && prop.choice) gates.push(prop);
+      else if (prop.kind === 'fence-row') fences.push(prop);
+    }
+    return {
+      TREE: this.trackLiveDepth('TREE', trees, progress, worldSpeed, now),
+      FENCE: this.trackLiveDepth('FENCE', fences.length ? fences : gates, progress, worldSpeed, now),
+      GATEWAY: this.trackLiveDepth('GATEWAY', gates, progress, worldSpeed, now)
+    };
+  }
+
+  trackLiveDepth(name, candidates, progress, worldSpeed, now) {
+    const prev = this._liveLock[name];
+    let prop = null;
+    if (prev) {
+      for (let i = 0; i < candidates.length; i += 1) {
+        const item = candidates[i];
+        if (Math.abs((item.worldY - progress) - prev.planted) < 2.5) {
+          prop = item;
+          break;
+        }
+      }
+      if (prop && prop.screenY > this.height + 36) prop = null;
+    }
+    if (!prop) {
+      const horizon = this.horizonY();
+      for (let i = 0; i < candidates.length; i += 1) {
+        const item = candidates[i];
+        if (item.screenY < horizon - 12 || item.screenY > this.height + 8) continue;
+        if (!prop || item.screenY < prop.screenY) prop = item;
+      }
+    }
+    if (!prop) {
+      this._liveLock[name] = null;
+      return null;
+    }
+    const planted = prop.worldY - progress;
+    let speed = (Number(prop.s) || 0) ** 2 * (worldSpeed || 0);
+    let worldV = worldSpeed || 0;
+    if (prev && Math.abs(prev.planted - planted) < 2.5 && now > prev.t) {
+      const dt = (now - prev.t) / 1000;
+      if (dt >= 1 / 120 && dt <= 0.25) {
+        speed = (prop.screenY - prev.screenY) / dt;
+        worldV = (prop.worldY - prev.worldY) / dt;
+      }
+    }
+    this._liveLock[name] = {
+      planted,
+      t: now,
+      screenY: prop.screenY,
+      worldY: prop.worldY
+    };
+    const check = this.projectWorld(Number.isFinite(prop.x) ? prop.x : this.width * 0.5, prop.worldY);
+    return {
+      name,
+      id: prop.item?.id || '',
+      worldY: prop.worldY,
+      screenY: prop.screenY,
+      s: prop.s,
+      scale: prop.scale,
+      speed,
+      worldV,
+      model: (Number(prop.s) || 0) ** 2 * (worldV || 0),
+      projS: check.s,
+      projScale: check.scale,
+      projScreen: check.screenY,
+      groundY: prop.groundY
+    };
+  }
+
+  liveDepthCohort(live) {
+    const anchor = live?.TREE || live?.FENCE || live?.GATEWAY;
+    if (!anchor || !Number.isFinite(anchor.worldY)) return null;
+    let n = 0;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let minSy = Infinity;
+    let maxSy = -Infinity;
+    let minS = Infinity;
+    let maxS = -Infinity;
+    const props = this.worldProps || [];
+    for (let i = 0; i < props.length; i += 1) {
+      const prop = props[i];
+      if (!Number.isFinite(prop.worldY) || !Number.isFinite(prop.s)) continue;
+      if (Math.abs(prop.worldY - anchor.worldY) > 1.5) continue;
+      n += 1;
+      minY = Math.min(minY, prop.worldY);
+      maxY = Math.max(maxY, prop.worldY);
+      minSy = Math.min(minSy, prop.screenY);
+      maxSy = Math.max(maxSy, prop.screenY);
+      minS = Math.min(minS, prop.s);
+      maxS = Math.max(maxS, prop.s);
+    }
+    if (n < 2) return { n, dY: 0, dSy: 0, dS: 0 };
+    return {
+      n,
+      dY: maxY - minY,
+      dSy: maxSy - minSy,
+      dS: maxS - minS
+    };
+  }
+
+  drawDepthProbe() {
+    if (!depthDebugEnabled()) return;
+    const progress = this.lastProgress || 0;
+    const probe = this.depthProbeWorldY(progress);
+    const sand = probe.projected;
+    const tree = this.projectWorld(sand.roadCenter - 70, probe.worldY);
+    const post = this.projectWorld(sand.roadCenter + 70, probe.worldY);
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const prev = this._depthClock;
+    let screenSpeed = this._depthScreenSpeed;
+    if (prev && now > prev.t) {
+      const dt = (now - prev.t) / 1000;
+      if (dt >= 1 / 120 && dt <= 0.25) {
+        screenSpeed = (sand.screenY - prev.screenY) / dt;
+        this._depthScreenSpeed = screenSpeed;
+        this._depthWorldSpeed = (probe.worldY - prev.worldY) / dt;
+      }
+    }
+    this._depthClock = { t: now, screenY: sand.screenY, worldY: probe.worldY };
+    const tile = Math.max(1, CONFIG.VISUAL.PATH_SAND_TILE || 2600);
+    const sandItem = this.pathSandItem();
+    const texH = sandItem?.image?.naturalHeight || 1152;
+    const planted = probe.planted;
+    const uvV = (((planted % tile) + tile) % tile) / tile;
+    const texel = sand.yJacobian * tile / texH;
+    const rows = [
+      { name: 'SAND', p: sand },
+      { name: 'M-TREE', p: tree },
+      { name: 'M-FENCE', p: post }
+    ];
+    const worldSpeed = this._depthWorldSpeed || 0;
+    const live = this.liveDepthSample(progress, worldSpeed, now);
+    const cohort = this.liveDepthCohort(live);
+    const anchor = live.TREE || live.FENCE || live.GATEWAY;
+    let xLock = null;
+    if (anchor) {
+      const left = this.projectWorld(this.width * 0.5 - 90, anchor.worldY);
+      const right = this.projectWorld(this.width * 0.5 + 90, anchor.worldY);
+      xLock = {
+        worldY: anchor.worldY,
+        screenY: left.screenY,
+        s: left.s,
+        scale: left.scale,
+        dScreen: Math.abs(left.screenY - right.screenY),
+        dS: Math.abs(left.s - right.s),
+        dScale: Math.abs(left.scale - right.scale),
+        spriteScreen: Math.abs(anchor.screenY - left.screenY),
+        spriteS: Math.abs(anchor.s - left.s)
+      };
+    }
+    this._depthProbe = {
+      planted,
+      uvV,
+      texel,
+      screenSpeed: screenSpeed || 0,
+      worldSpeed,
+      rows: rows.map((row) => ({
+        name: row.name,
+        worldY: row.p.worldY,
+        planted,
+        s: row.p.s,
+        screenY: row.p.screenY,
+        scale: row.p.scale,
+        speed: screenSpeed || 0,
+        roadWidth: row.p.roadWidth,
+        uvV,
+        yJacobian: row.p.yJacobian
+      })),
+      live,
+      cohort,
+      xLock
+    };
+    if (typeof window !== 'undefined') window.__omrDepth = this._depthProbe;
+    this.paintDepthProbeMarkers(sand, tree, post);
+    this.paintDepthProbeReadout(this._depthProbe, texH);
+  }
+
+  paintDepthProbeMarkers(sand, tree, post) {
+    const ctx = this.ctx;
+    const s = Math.max(0.08, sand.s);
+    const ground = sand.drawY;
+    const markR = Math.max(4, 18 * s);
+    ctx.save();
+    ctx.fillStyle = this.c.InkBrown;
+    ctx.globalAlpha = 0.9;
+    this.oval(sand.roadCenter, ground, markR, Math.max(3, markR * 0.45));
+    ctx.restore();
+
+    const treeH = this.catH() * (CONFIG.VISUAL.TREE_NEAR_CAT || 2.48) * s;
+    const treeItem = this.pick('trees', 3);
+    if (treeItem && this.isReady(treeItem)) {
+      const size = this.spriteSize(treeItem, treeH);
+      this.drawSprite(treeItem, tree.roadLeft - size.width * 0.15, ground, size.width, size.height, {
+        grounded: true,
+        alpha: 1
+      });
+    } else {
+      ctx.save();
+      ctx.fillStyle = this.c.HedgeSage;
+      ctx.fillRect(tree.roadLeft - 8 * s, ground - treeH, 16 * s, treeH);
+      ctx.restore();
+    }
+
+    const postH = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT || 0.98) * s;
+    const kit = this.ensureFenceKit();
+    const postW = Math.max(4, postH * 0.18);
+    const postX = post.roadRight - postW;
+    if (kit) {
+      this.blitModule(kit.image, kit.post, postX, ground - postH, postW, postH, 1);
+    } else {
+      ctx.save();
+      ctx.fillStyle = this.c.PlanterWood;
+      ctx.fillRect(postX, ground - postH, postW, postH);
+      ctx.restore();
+    }
+  }
+
+  paintDepthProbeReadout(probe, texH) {
+    const ctx = this.ctx;
+    const shift = this.lastShift || 0;
+    const zones = unifiedDepthZones(shift, this.height);
+    const tile = Math.max(1, CONFIG.VISUAL.PATH_SAND_TILE || 2600);
+    const zoneLine = (name, sample) => {
+      const texel = sample.yJacobian * tile / texH;
+      return `${name} s ${sample.s.toFixed(2)}  j ${sample.yJacobian.toFixed(2)}  w ${Math.round(sample.roadWidth)}  tex ${texel.toFixed(2)}`;
+    };
+    const lines = [
+      'UNIFIED DEPTH',
+      zoneLine('FAR', zones.FAR),
+      zoneLine('MID', zones.MID),
+      zoneLine('NEAR', zones.NEAR),
+      `uvV ${probe.uvV.toFixed(3)}  planted ${probe.planted.toFixed(0)}`
+    ];
+    probe.rows.forEach((row) => {
+      lines.push(
+        `${row.name} y ${row.worldY.toFixed(0)} sy ${row.screenY.toFixed(1)} s ${row.s.toFixed(2)} sc ${row.scale.toFixed(2)} v ${row.speed.toFixed(0)}`
+      );
+    });
+    lines.push('LIVE');
+    ['TREE', 'FENCE', 'GATEWAY'].forEach((name) => {
+      const row = probe.live?.[name];
+      if (!row) {
+        lines.push(`${name} --`);
+        return;
+      }
+      const id = row.id ? ` ${row.id}` : '';
+      lines.push(
+        `${name}${id} y ${row.worldY.toFixed(0)} sy ${row.screenY.toFixed(1)} s ${row.s.toFixed(2)} sc ${row.scale.toFixed(2)} v ${row.speed.toFixed(0)}`
+      );
+    });
+    if (probe.cohort && probe.cohort.n >= 2) {
+      lines.push(
+        `SAME n${probe.cohort.n} dY ${probe.cohort.dY.toFixed(1)} dSy ${probe.cohort.dSy.toFixed(2)} dS ${probe.cohort.dS.toFixed(3)}`
+      );
+    }
+    const x = 12;
+    const y = 188 - shift;
+    const width = 348;
+    const lineH = 13;
+    const height = 10 + lines.length * lineH;
+    ctx.save();
+    ctx.fillStyle = this.c.SkyPaper;
+    ctx.globalAlpha = 0.92;
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeStyle = this.c.InkBrown;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, width, height);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = this.c.InkBrown;
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    lines.forEach((line, index) => {
+      ctx.fillText(line, x + 6, y + 5 + index * lineH);
+    });
+    ctx.restore();
   }
 
   resetWorldProps() {
@@ -970,6 +1295,9 @@ export class GardenArt {
     prop.spans = null;
     prop.openings = null;
     prop.choice = false;
+    prop.worldY = null;
+    prop.scale = null;
+    prop.s = null;
     this.worldProps.push(prop);
     return prop;
   }
@@ -1081,8 +1409,9 @@ export class GardenArt {
     const step = 20;
     const skyBand = this.horizonY();
     const pack = this.usePack();
-    const world0 = this.horizonY() - shift + 8;
-    const world1 = this.height - shift + 56;
+    const span = this.roadWorldRange(shift, 8, 56);
+    const world0 = span.world0;
+    const world1 = span.world1;
     const top = this.roadAt(world0);
     const bottom = this.roadAt(world1);
     const wobbleAmp = pack ? 0.08 : 1;
@@ -1151,7 +1480,7 @@ export class GardenArt {
 
     ctx.fillStyle = mixHex(this.c.SafeLawn, this.c.FloorSand, 0.18);
     ctx.globalAlpha = pack ? 0.28 : 0.34;
-    const fringe0 = this.horizonY() - shift + 16;
+    const fringe0 = this.roadWorldRange(shift, 16, 56).world0;
     ctx.beginPath();
     for (let worldY = fringe0; worldY <= world1; worldY += step) {
       const p = this.roadAt(worldY);
@@ -1406,12 +1735,19 @@ export class GardenArt {
     ctx.restore();
   }
 
+  roadWorldRange(shift, farPad = 4, nearPad = 48) {
+    return {
+      world0: worldYForScreen(this.horizonY() + farPad, shift, this.height),
+      world1: worldYForScreen(this.height + nearPad, shift, this.height)
+    };
+  }
+
   screenPathLeft(screenY) {
-    return this.projectWorld(this.width * 0.5, screenY - (this.lastShift || 0)).roadLeft;
+    return this.projectWorld(this.width * 0.5, this.screenToWorldY(screenY)).roadLeft;
   }
 
   screenPathRight(screenY) {
-    return this.projectWorld(this.width * 0.5, screenY - (this.lastShift || 0)).roadRight;
+    return this.projectWorld(this.width * 0.5, this.screenToWorldY(screenY)).roadRight;
   }
 
   drawSandShoulder(camera) {
@@ -1420,8 +1756,9 @@ export class GardenArt {
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const progress = cam.progress || 0;
     const step = 16;
-    const world0 = this.horizonY() - shift + 10;
-    const world1 = this.height - shift + 48;
+    const span = this.roadWorldRange(shift, 10, 48);
+    const world0 = span.world0;
+    const world1 = span.world1;
 
     const paintShoulder = (side) => {
       ctx.beginPath();
@@ -1625,8 +1962,9 @@ export class GardenArt {
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const progress = cam.progress || 0;
     const step = 10;
-    const world0 = this.horizonY() - shift + 4;
-    const world1 = this.height - shift + 40;
+    const span = this.roadWorldRange(shift, 4, 40);
+    const world0 = span.world0;
+    const world1 = span.world1;
     const innerPts = this.borderScratch.inner;
     const outerPts = this.borderScratch.outer;
     const topPts = this.borderScratch.top;
@@ -1773,6 +2111,9 @@ export class GardenArt {
         prop.x = x;
         prop.groundY = propX.groundY;
         prop.screenY = propX.screenY;
+        prop.worldY = worldGroundY;
+        prop.s = propX.s;
+        prop.scale = propX.s;
         prop.w = size.width;
         prop.h = size.height;
         prop.alpha = 1;
@@ -1982,7 +2323,8 @@ export class GardenArt {
         prop.w = vis.roadWidth;
         prop.h = Math.max(h, gateH);
         prop.alpha = 1;
-        prop.scale = vis.uniformScale;
+        prop.scale = vis.s;
+        prop.s = vis.s;
         prop.layer = ROLE_LAYER.planter;
       });
     });
@@ -2136,6 +2478,9 @@ export class GardenArt {
         prop.coin = coin;
         prop.screenY = vis.screenY;
         prop.groundY = vis.groundY;
+        prop.worldY = vis.worldY;
+        prop.s = vis.s;
+        prop.scale = vis.s;
         prop.x = vis.x + vis.width / 2;
         prop.layer = ROLE_LAYER.coin;
       });
@@ -2276,6 +2621,9 @@ export class GardenArt {
         prop.x = x;
         prop.groundY = groundY;
         prop.screenY = projected.screenY;
+        prop.worldY = y;
+        prop.s = projected.s;
+        prop.scale = projected.s;
         prop.w = size.width * (role === 'smallBush' ? 0.82 : 1);
         prop.h = size.height;
         prop.alpha = 1;
@@ -2352,6 +2700,9 @@ export class GardenArt {
     prop.x = x;
     prop.groundY = projected.groundY;
     prop.screenY = projected.screenY;
+    prop.worldY = groundY;
+    prop.s = projected.s;
+    prop.scale = projected.s;
     prop.w = size.width;
     prop.h = size.height;
     prop.alpha = 1;
