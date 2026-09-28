@@ -1981,7 +1981,7 @@ export class GardenArt {
       const worldV = ((planted % tileWorld) + tileWorld) % tileWorld;
       const srcY = (worldV / tileWorld) * th;
       const srcH = Math.max(0.8, (Math.abs(b.worldY - a.worldY) / tileWorld) * th);
-      ctx.globalAlpha = 0.42 + a.t * 0.46;
+      ctx.globalAlpha = 0.78 + a.t * 0.22;
       this.blitPathSandStrip(ctx, img, tw, th, srcY, srcH, left, a.drawY - 0.5, destW, destH);
       ctx.restore();
     }
