@@ -4,7 +4,7 @@ import { VariationDirector } from './VariationDirector.js';
 const VISUAL_OBSTACLE_TYPES = ['FLOWER_GATE', 'STANDING_PLANTER', 'GARDEN_FENCE'];
 const VISUAL_OBSTACLE_IDS = {
   FLOWER_GATE: ['garden-gate'],
-  STANDING_PLANTER: ['planter-06', 'planter-07', 'planter-08'],
+  STANDING_PLANTER: ['planter-04', 'planter-06', 'planter-08'],
   GARDEN_FENCE: ['garden-fence']
 };
 const COIN_VISUAL_IDS = ['coin-01', 'coin-02', 'coin-03', 'coin-04'];

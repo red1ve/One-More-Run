@@ -70,7 +70,7 @@ function cloneSheets() {
 
 const OBSTACLE_FAMILIES = {
   FLOWER_GATE: ['garden-gate'],
-  STANDING_PLANTER: ['planter-06', 'planter-07', 'planter-08'],
+  STANDING_PLANTER: ['planter-04', 'planter-06', 'planter-08'],
   GARDEN_FENCE: ['garden-fence']
 };
 
