@@ -189,7 +189,7 @@ export const CONFIG = {
     PATH_INSET_NEAR: 26,
     PATH_INSET_FAR: 108,
     PROJECTOR: {
-      FAR_ROAD_WIDTH: 120,
+      FAR_ROAD_WIDTH: 200,
       X_SCALE_FAR: 0.75,
       SCALE_FAR: 0.88,
       SCALE_MID: 0.94,
