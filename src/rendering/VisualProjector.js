@@ -401,13 +401,34 @@ export function crestYAt(screenX, width = CONFIG.CANVAS_WIDTH) {
   return horizon + sideOff + (peakOff - sideOff) * hill + asym;
 }
 
+/**
+ * Occlusion crest for obstacle reveal. Same broad shape as the visual crest,
+ * but taller so HIDDEN→TOP→PARTIAL→FULL reads clearly. Does not change
+ * road silhouette / FAR continuity (those keep crestYAt / C1 throat).
+ */
+export function revealCrestYAt(screenX, width = CONFIG.CANVAS_WIDTH) {
+  const vis = CONFIG.VISUAL.PROJECTOR || {};
+  const horizon = corridorHorizonY();
+  const peakOff = Math.max(
+    vis.CREST_PEAK ?? 16,
+    vis.REVEAL_CREST_PEAK ?? CONFIG.VISUAL.OBSTACLE_REVEAL ?? 48
+  );
+  const sideOff = Math.max(vis.CREST_SIDE ?? 6, Math.round(peakOff * 0.28));
+  const asymAmp = vis.CREST_ASYM ?? 3.2;
+  const nx = (screenX - width * 0.5) / Math.max(1, width * 0.48);
+  const u = clamp(Math.abs(nx), 0, 1);
+  const hill = (1 - u * u) * (0.92 + 0.08 * (1 - u));
+  const asym = Math.sin(nx * 0.95 + 0.35) * asymAmp;
+  return horizon + sideOff + (peakOff - sideOff) * hill + asym;
+}
+
 export function horizonOcclusion(
   screenX,
   groundScreenY,
   spriteHeight,
   width = CONFIG.CANVAS_WIDTH
 ) {
-  const crestY = crestYAt(screenX, width);
+  const crestY = revealCrestYAt(screenX, width);
   const h = Math.max(1, spriteHeight || 0);
   const past = groundScreenY - crestY;
   if (past <= 0.75) {
@@ -420,16 +441,18 @@ export function horizonOcclusion(
       lift: 0
     };
   }
-  const visibleH = Math.min(h, past);
+  // Span > 1 keeps tip/mid on screen longer without raising the crest peak.
+  const span = Math.max(1, CONFIG.VISUAL.PROJECTOR?.REVEAL_SPAN ?? 1.28) * h;
+  const visibleH = Math.min(h, (past / span) * h);
   const visibleRatio = clamp(visibleH / h, 0, 1);
-  const full = visibleRatio >= 0.995;
+  const full = past >= span - 0.5;
   return {
     state: full ? 'VISIBLE' : 'PARTIAL',
     visibleRatio: full ? 1 : visibleRatio,
     visibleH: full ? h : visibleH,
     past,
     crestY,
-    lift: full ? 0 : (crestY + h - groundScreenY)
+    lift: full ? 0 : (h - visibleH)
   };
 }
 

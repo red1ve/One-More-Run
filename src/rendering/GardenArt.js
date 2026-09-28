@@ -11,6 +11,7 @@ import {
   sampleRoadRibbon,
   worldYForScreen,
   crestYAt as projectorCrestYAt,
+  revealCrestYAt,
   horizonOcclusion
 } from './VisualProjector.js';
 
@@ -733,21 +734,28 @@ export class GardenArt {
   clipCrestRevealBand(x0, x1, visibleH) {
     const ctx = this.ctx;
     const shift = this.lastShift || 0;
-    const pad = 28;
+    const pad = 36;
     const left = Math.min(x0, x1) - pad;
     const right = Math.max(x0, x1) + pad;
-    const steps = 12;
-    const band = Math.max(1.5, visibleH);
+    const steps = 16;
+    const band = Math.max(2, visibleH + 2);
+    // Soft geometric lip: crest curve + slight scallop, not a flat screen cut.
     ctx.beginPath();
     for (let i = 0; i <= steps; i += 1) {
-      const x = left + ((right - left) * i) / steps;
-      const y = projectorCrestYAt(x, this.width) - shift;
+      const u = i / steps;
+      const x = left + (right - left) * u;
+      const base = revealCrestYAt(x, this.width) - shift;
+      const scallop = Math.sin(u * Math.PI * 2.2) * 1.6 + Math.sin(u * Math.PI * 5.1) * 0.7;
+      const y = base - 1.2 + scallop;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     for (let i = steps; i >= 0; i -= 1) {
-      const x = left + ((right - left) * i) / steps;
-      ctx.lineTo(x, projectorCrestYAt(x, this.width) - shift + band + 1.5);
+      const u = i / steps;
+      const x = left + (right - left) * u;
+      const base = revealCrestYAt(x, this.width) - shift;
+      const scallop = Math.sin(u * Math.PI * 2.2) * 1.2;
+      ctx.lineTo(x, base + band + 2.5 + scallop);
     }
     ctx.closePath();
     ctx.clip();
@@ -812,7 +820,12 @@ export class GardenArt {
     const t = this.nearT(screenY);
     const near = CONFIG.VISUAL.HEDGE_HEIGHT_NEAR;
     const far = CONFIG.VISUAL.HEDGE_HEIGHT_FAR;
-    return far + (near - far) * t;
+    let height = far + (near - far) * t;
+    // Soft FAR join: shrink gradually so tops do not form a cardboard shelf.
+    const horizon = this.horizonY();
+    const join = Math.max(0, Math.min(1, (screenY - (horizon - 24)) / 140));
+    const ease = join * join * (3 - 2 * join);
+    return height * (0.18 + 0.82 * ease);
   }
 
   hedgeInnerX(side, gameplayY, shift, progress = 0) {
@@ -940,6 +953,8 @@ export class GardenArt {
     this.drawGardenBorders(camera);
     this.drawCrestLandform();
     this.collectAndDrawWorld(camera, segments, playerY);
+    this.drawRevealCrestFeather();
+    this.drawRevealTestLabel();
   }
 
   depthProbeWorldY(progress) {
@@ -1134,8 +1149,10 @@ export class GardenArt {
     this.collectUnderstory(camera);
     this.collectRoadEdge(camera);
     this.collectHedgeFoliage(camera);
-    if (this.usePack()) this.collectFenceRows(segments);
-    else this.collectObstacles(segments);
+    if (this.usePack()) {
+      if (!this.revealTestStage()) this.collectFenceRows(segments);
+    } else this.collectObstacles(segments);
+    this.collectRevealTestProps(camera);
     this.collectCoins(segments);
 
     const props = this.worldProps;
@@ -1232,7 +1249,7 @@ export class GardenArt {
     const step = 20;
     const skyBand = this.horizonY();
     const pack = this.usePack();
-    const span = this.roadWorldRange(shift, 8, 56);
+    const span = this.roadWorldRange(shift, -28, 56);
     const world0 = span.world0;
     const world1 = span.world1;
     const top = this.roadAt(world0);
@@ -1255,10 +1272,11 @@ export class GardenArt {
       const farLawn = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.42));
       const midLawn = parseHex(this.lawnBed);
       const fade = ctx.createLinearGradient(0, top.drawY, 0, top.drawY + 220);
-      fade.addColorStop(0, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0)`);
-      fade.addColorStop(0.12, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.18)`);
-      fade.addColorStop(0.38, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.58)`);
-      fade.addColorStop(0.72, `rgba(${midLawn.r}, ${midLawn.g}, ${midLawn.b}, 0.9)`);
+      // Stay opaque enough at the FAR join so sky never flashes between layers.
+      fade.addColorStop(0, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.28)`);
+      fade.addColorStop(0.12, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.52)`);
+      fade.addColorStop(0.32, `rgba(${farLawn.r}, ${farLawn.g}, ${farLawn.b}, 0.74)`);
+      fade.addColorStop(0.68, `rgba(${midLawn.r}, ${midLawn.g}, ${midLawn.b}, 0.9)`);
       fade.addColorStop(1, this.lawnBed);
       ctx.fillStyle = fade;
     } else {
@@ -1286,7 +1304,7 @@ export class GardenArt {
 
     this.walkGameplay(cam, pack ? 28 : 54, (slot, y) => {
       const p = this.roadAt(y);
-      if (p.linearScreenY < skyBand - 4) return;
+      if (p.linearScreenY < skyBand - 28) return;
       const leftSpot = hash01(slot + 2) > 0.5;
       const edge = leftSpot ? p.roadLeft : p.roadRight;
       const garden = leftSpot
@@ -1303,7 +1321,7 @@ export class GardenArt {
 
     ctx.fillStyle = mixHex(this.c.SafeLawn, this.c.FloorSand, 0.18);
     ctx.globalAlpha = pack ? 0.28 : 0.34;
-    const fringe0 = this.roadWorldRange(shift, 16, 56).world0;
+    const fringe0 = this.roadWorldRange(shift, -12, 56).world0;
     ctx.beginPath();
     for (let worldY = fringe0; worldY <= world1; worldY += step) {
       const p = this.roadAt(worldY);
@@ -1463,6 +1481,7 @@ export class GardenArt {
     const destW = destH / aspect;
     const destX = (this.width - destW) / 2;
     const destY = horizon - destH * skylineT;
+    const destBottom = destY + destH;
 
     ctx.drawImage(
       item.image,
@@ -1476,85 +1495,240 @@ export class GardenArt {
       destH
     );
 
-    this.drawHorizonSeam(horizon, destY + destH);
+    // Soften the flat lower green field so it does not read as a cardboard strip.
+    this.softenFarLowerField(horizon, destBottom);
+    // Soft sand throat: MAIN road tip continues visually into FAR.
+    this.drawFarRoadThroat(horizon);
+    this.drawHorizonSeam(horizon, destBottom);
   }
 
   drawFarGardenWings() {
     return;
   }
 
-  drawHorizonSeam(horizon, destBottom) {
+  /**
+   * Fade the FAR asset's flat lower meadow into MAIN lawn.
+   * Keep sides covering sky; keep road-corridor sand SHORT — not a tall board.
+   */
+  softenFarLowerField(horizon, destBottom) {
     const ctx = this.ctx;
     if (typeof ctx.createLinearGradient !== 'function') return;
-    const garden = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.34));
-    const coverTop = horizon - 6;
-    const coverBot = Math.min(this.horizonY() + 42, Math.max(horizon + 18, destBottom));
-    const cover = ctx.createLinearGradient(0, coverTop, 0, coverBot);
-    cover.addColorStop(0, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0)`);
-    cover.addColorStop(0.55, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0.04)`);
-    cover.addColorStop(1, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0.08)`);
-    ctx.fillStyle = cover;
-    ctx.fillRect(0, coverTop, this.width, Math.max(8, coverBot - coverTop));
-  }
+    const coverTop = horizon - 40;
+    const coverBot = Math.max(horizon + 22, Math.min(horizon + 36, destBottom + 6));
+    const height = Math.max(14, coverBot - coverTop);
+    const lawn = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.5));
+    const sand = parseHex(mixHex(this.c.FloorSand, this.c.SkyPaper, 0.14));
+    const cx = this.width * 0.5;
+    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH || 120;
+    const halfRoad = farW * 0.42;
+    const halfBlend = farW * 1.55;
 
-  drawDistantMeadow() {
-    const ctx = this.ctx;
-    const horizon = this.horizonY();
-    const meadow = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.38));
-    const steps = 16;
+    // Stronger side dissolve so FAR lower meadow does not read as a green floor strip.
+    const base = ctx.createLinearGradient(0, coverTop, 0, coverBot);
+    base.addColorStop(0, `rgba(${lawn.r}, ${lawn.g}, ${lawn.b}, 0)`);
+    base.addColorStop(0.3, `rgba(${lawn.r}, ${lawn.g}, ${lawn.b}, 0.22)`);
+    base.addColorStop(0.65, `rgba(${lawn.r}, ${lawn.g}, ${lawn.b}, 0.42)`);
+    base.addColorStop(1, `rgba(${lawn.r}, ${lawn.g}, ${lawn.b}, 0.52)`);
+    ctx.fillStyle = base;
+    ctx.fillRect(0, coverTop, this.width, height);
+
+    // Short road tip only.
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(0, horizon - 6);
-    for (let i = 0; i <= steps; i += 1) {
-      const x = (this.width * i) / steps;
-      ctx.lineTo(x, projectorCrestYAt(x, this.width) + 8);
-    }
-    ctx.lineTo(this.width, horizon - 6);
+    ctx.moveTo(cx - halfBlend * 0.75, horizon - 6);
+    ctx.quadraticCurveTo(cx, horizon - 10, cx + halfBlend * 0.75, horizon - 6);
+    ctx.lineTo(cx + halfRoad, coverBot);
+    ctx.quadraticCurveTo(cx, coverBot + 2, cx - halfRoad, coverBot);
     ctx.closePath();
-    if (typeof ctx.createLinearGradient === 'function') {
-      const peak = projectorCrestYAt(this.width * 0.5, this.width);
-      const wash = ctx.createLinearGradient(0, horizon - 4, 0, peak + 10);
-      wash.addColorStop(0, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0)`);
-      wash.addColorStop(0.55, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.05)`);
-      wash.addColorStop(1, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.09)`);
-      ctx.fillStyle = wash;
-      ctx.fill();
-    }
+    ctx.clip();
+    const throat = ctx.createLinearGradient(0, horizon - 8, 0, coverBot);
+    throat.addColorStop(0, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0)`);
+    throat.addColorStop(0.45, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.28)`);
+    throat.addColorStop(0.8, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.36)`);
+    throat.addColorStop(1, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.12)`);
+    ctx.fillStyle = throat;
+    ctx.fillRect(0, coverTop, this.width, height);
     ctx.restore();
   }
 
-  drawCrestLandform() {
+  /** Short sand tip at vanish — continues MAIN road, not a tall FAR board. */
+  drawFarRoadThroat(horizon) {
     const ctx = this.ctx;
-    const shift = this.lastShift || 0;
-    const steps = 16;
-    const sand = parseHex(mixHex(this.c.FloorSand, this.c.ShadowDust, 0.22));
-    const sage = parseHex(mixHex(this.c.HedgeSage, this.c.FloorSand, 0.42));
+    const cx = this.width * 0.5;
+    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH || 120;
+    const sand = parseHex(mixHex(this.c.FloorSand, this.c.SkyPaper, 0.12));
+    const dust = parseHex(mixHex(this.c.FloorSand, this.c.ShadowDust, 0.2));
+    // ~22px visible tip (was ~56px) so FAR road reads as a short continuation.
+    const top = horizon - 4;
+    const bot = horizon + 16;
+    const halfTop = farW * 0.28;
+    const halfBot = farW * 0.55;
+
     ctx.save();
     ctx.beginPath();
-    for (let i = 0; i <= steps; i += 1) {
-      const x = (this.width * i) / steps;
-      const y = projectorCrestYAt(x, this.width) - shift;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    for (let i = steps; i >= 0; i -= 1) {
-      const x = (this.width * i) / steps;
-      ctx.lineTo(x, projectorCrestYAt(x, this.width) - shift + 18);
-    }
+    ctx.moveTo(cx - halfTop, top);
+    ctx.quadraticCurveTo(cx, top - 2, cx + halfTop, top);
+    ctx.lineTo(cx + halfBot, bot);
+    ctx.quadraticCurveTo(cx, bot + 3, cx - halfBot, bot);
     ctx.closePath();
-    ctx.clip();
-    const peak = projectorCrestYAt(this.width * 0.5, this.width) - shift;
     if (typeof ctx.createLinearGradient === 'function') {
-      const wash = ctx.createLinearGradient(0, peak - 2, 0, peak + 18);
-      wash.addColorStop(0, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.16)`);
-      wash.addColorStop(0.42, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.08)`);
+      const wash = ctx.createLinearGradient(0, top, 0, bot);
+      wash.addColorStop(0, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.1)`);
+      wash.addColorStop(0.45, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.36)`);
+      wash.addColorStop(0.85, `rgba(${dust.r}, ${dust.g}, ${dust.b}, 0.12)`);
+      wash.addColorStop(1, `rgba(${dust.r}, ${dust.g}, ${dust.b}, 0)`);
+      ctx.fillStyle = wash;
+    } else {
+      ctx.fillStyle = this.pathSandFar;
+      ctx.globalAlpha = 0.22;
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawHorizonSeam(horizon, destBottom) {
+    const ctx = this.ctx;
+    if (typeof ctx.createLinearGradient !== 'function') return;
+    const garden = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.36));
+    const coverTop = horizon - 2;
+    const coverBot = Math.min(horizon + 16, Math.max(horizon + 8, destBottom));
+    const cover = ctx.createLinearGradient(0, coverTop, 0, coverBot);
+    cover.addColorStop(0, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0)`);
+    cover.addColorStop(0.6, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0.02)`);
+    cover.addColorStop(1, `rgba(${garden.r}, ${garden.g}, ${garden.b}, 0.04)`);
+    ctx.fillStyle = cover;
+    ctx.fillRect(0, coverTop, this.width, Math.max(6, coverBot - coverTop));
+  }
+
+  drawDistantMeadow() {
+    // Side-only soft meadow so the road throat stays sand, not a green slab.
+    const ctx = this.ctx;
+    const horizon = this.horizonY();
+    const meadow = parseHex(mixHex(this.c.HedgeSage, this.c.SafeLawn, 0.38));
+    const cx = this.width * 0.5;
+    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH || 120;
+    const gap = farW * 0.7;
+    const peak = projectorCrestYAt(cx, this.width);
+    if (typeof ctx.createLinearGradient !== 'function') return;
+
+    const paintSide = (x0, x1) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x0, horizon - 4);
+      for (let x = x0; x <= x1; x += 24) {
+        ctx.lineTo(x, projectorCrestYAt(x, this.width) + 6);
+      }
+      ctx.lineTo(x1, horizon - 4);
+      ctx.closePath();
+      const wash = ctx.createLinearGradient(0, horizon - 4, 0, peak + 8);
+      wash.addColorStop(0, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0)`);
+      wash.addColorStop(0.6, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.04)`);
+      wash.addColorStop(1, `rgba(${meadow.r}, ${meadow.g}, ${meadow.b}, 0.07)`);
+      ctx.fillStyle = wash;
+      ctx.fill();
+      ctx.restore();
+    };
+    paintSide(0, Math.max(0, cx - gap));
+    paintSide(Math.min(this.width, cx + gap), this.width);
+  }
+
+  drawCrestLandform() {
+    // Road-corridor sand continuity only — no full-width green mountain band.
+    const ctx = this.ctx;
+    const shift = this.lastShift || 0;
+    const cx = this.width * 0.5;
+    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH || 120;
+    const sand = parseHex(mixHex(this.c.FloorSand, this.c.ShadowDust, 0.18));
+    const peak = projectorCrestYAt(cx, this.width) - shift;
+    const half = farW * 0.72;
+    const top = peak - 2;
+    const bot = peak + 16;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx - half * 0.85, top);
+    ctx.quadraticCurveTo(cx, top - 2, cx + half * 0.85, top);
+    ctx.lineTo(cx + half, bot);
+    ctx.quadraticCurveTo(cx, bot + 3, cx - half, bot);
+    ctx.closePath();
+    if (typeof ctx.createLinearGradient === 'function') {
+      const wash = ctx.createLinearGradient(0, top, 0, bot);
+      wash.addColorStop(0, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.14)`);
+      wash.addColorStop(0.55, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.08)`);
       wash.addColorStop(1, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0)`);
       ctx.fillStyle = wash;
     } else {
       ctx.fillStyle = this.sandShade;
       ctx.globalAlpha = 0.08;
     }
-    ctx.fillRect(0, peak - 6, this.width, 28);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * Soft sand feather along the reveal crest — keep subtle so it does not
+   * redraw a FAR/MAIN horizontal board on top of the shortened throat.
+   */
+  drawRevealCrestFeather() {
+    const ctx = this.ctx;
+    const shift = this.lastShift || 0;
+    const cx = this.width * 0.5;
+    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH || 120;
+    const peak = revealCrestYAt(cx, this.width) - shift;
+    const half = farW * 0.78;
+    const sand = parseHex(mixHex(this.c.FloorSand, this.c.ShadowDust, 0.18));
+    const path = parseHex(mixHex(this.c.FloorSand, this.c.PlanterWood, 0.06));
+    const top = peak - 3;
+    const bot = peak + 12;
+    const steps = 12;
+
+    ctx.save();
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i += 1) {
+      const u = i / steps;
+      const x = cx - half + half * 2 * u;
+      const y = revealCrestYAt(x, this.width) - shift
+        - 1
+        + Math.sin(u * Math.PI * 2.4) * 1.2;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.lineTo(cx + half, bot);
+    ctx.quadraticCurveTo(cx, bot + 3, cx - half, bot);
+    ctx.closePath();
+    if (typeof ctx.createLinearGradient === 'function') {
+      const wash = ctx.createLinearGradient(0, top, 0, bot);
+      wash.addColorStop(0, `rgba(${path.r}, ${path.g}, ${path.b}, 0)`);
+      wash.addColorStop(0.35, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.1)`);
+      wash.addColorStop(0.65, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0.16)`);
+      wash.addColorStop(1, `rgba(${sand.r}, ${sand.g}, ${sand.b}, 0)`);
+      ctx.fillStyle = wash;
+    } else {
+      ctx.fillStyle = this.pathSandFar;
+      ctx.globalAlpha = 0.12;
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawRevealTestLabel() {
+    const stage = this.revealTestStage();
+    if (!stage || typeof import.meta === 'undefined' || !import.meta.env?.DEV) return;
+    const ctx = this.ctx;
+    const text = `C2 REVEAL ${stage}`;
+    ctx.save();
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = this.c.SkyPaper;
+    ctx.globalAlpha = 0.82;
+    ctx.fillRect(10, 10, 108, 22);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = this.c.InkBrown;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 10, 108, 22);
+    ctx.fillStyle = this.c.InkBrown;
+    ctx.fillText(text, 16, 14);
     ctx.restore();
   }
 
@@ -1579,7 +1753,7 @@ export class GardenArt {
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const progress = cam.progress || 0;
     const step = 16;
-    const span = this.roadWorldRange(shift, 10, 48);
+    const span = this.roadWorldRange(shift, -20, 48);
     const world0 = span.world0;
     const world1 = span.world1;
 
@@ -1625,8 +1799,31 @@ export class GardenArt {
     const cam = camera || dummyCamera();
     const progress = cam.progress || 0;
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
-    const samples = sampleRoadRibbon(shift, { height: this.height, pad: 56 });
+    let samples = sampleRoadRibbon(shift, { height: this.height, pad: 56 });
     if (samples.length < 2) return;
+
+    // Extend MAIN road tip a short way into FAR as a NARROW continuation
+    // (visual tip only — projector FAR width at horizon stays 120).
+    const horizon = this.horizonY();
+    const tipScreens = [horizon - 18, horizon - 8];
+    const tips = [];
+    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH || 120;
+    for (let i = 0; i < tipScreens.length; i += 1) {
+      const screen = tipScreens[i];
+      if (samples[0] && screen + 0.5 >= samples[0].screenY) continue;
+      const p = this.projectWorld(this.width * 0.5, this.screenToWorldY(screen, shift));
+      const u = Math.max(0, Math.min(1, (horizon - screen) / 22));
+      // Pull tip inward so FAR continuation reads as a short V, not a wide board.
+      const tipW = farW * (0.72 - u * 0.28);
+      const cx = p.roadCenter;
+      tips.push({
+        ...p,
+        roadLeft: cx - tipW * 0.5,
+        roadRight: cx + tipW * 0.5,
+        roadWidth: tipW
+      });
+    }
+    if (tips.length) samples = tips.concat(samples);
 
     const traceRibbon = (outset = 0) => {
       ctx.beginPath();
@@ -1643,7 +1840,7 @@ export class GardenArt {
     };
 
     ctx.fillStyle = this.c.ShadowDust;
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = 0.14;
     traceRibbon(3);
     ctx.fill();
     ctx.globalAlpha = 1;
@@ -1657,9 +1854,12 @@ export class GardenArt {
       const farC = parseHex(this.pathSandFar);
       const midC = parseHex(mixHex(this.pathSandFar, this.pathSandNear, 0.45));
       const fill = ctx.createLinearGradient(0, farSample.drawY, 0, nearSample.drawY);
-      fill.addColorStop(0, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.55)`);
-      fill.addColorStop(0.18, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.88)`);
-      fill.addColorStop(0.5, `rgba(${midC.r}, ${midC.g}, ${midC.b}, 1)`);
+      // Tip into FAR stays soft and short — not a long sand board.
+      fill.addColorStop(0, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.22)`);
+      fill.addColorStop(0.05, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.55)`);
+      fill.addColorStop(0.12, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.88)`);
+      fill.addColorStop(0.28, `rgba(${farC.r}, ${farC.g}, ${farC.b}, 0.96)`);
+      fill.addColorStop(0.55, `rgba(${midC.r}, ${midC.g}, ${midC.b}, 1)`);
       fill.addColorStop(1, this.pathSandNear);
       ctx.fillStyle = fill;
       ctx.fillRect(0, farSample.drawY - 8, this.width, nearSample.drawY - farSample.drawY + 24);
@@ -1785,7 +1985,7 @@ export class GardenArt {
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const progress = cam.progress || 0;
     const step = 10;
-    const span = this.roadWorldRange(shift, 4, 40);
+    const span = this.roadWorldRange(shift, -24, 40);
     const world0 = span.world0;
     const world1 = span.world1;
     const innerPts = this.borderScratch.inner;
@@ -1801,7 +2001,11 @@ export class GardenArt {
       const outer = this.hedgeOuterX(side, worldY, shift, progress);
       const dip = hash01(Math.round((worldY - progress) / 38) * 17 + (side < 0 ? 3 : 11));
       const live = dip < 0.18 ? 0.42 + dip * 0.8 : dip > 0.94 ? 1.1 : 1;
-      const height = this.hedgeHeight(projected.linearScreenY) * live;
+      // Break flat far shelf: irregular height collapse as we enter FAR.
+      const farJoin = Math.max(0, Math.min(1, (projected.linearScreenY - (this.horizonY() - 30)) / 70));
+      const shelfBreak = 0.35 + 0.65 * farJoin * farJoin
+        + (hash01(Math.round(worldY) + side) - 0.5) * 0.18 * (1 - farJoin);
+      const height = this.hedgeHeight(projected.linearScreenY) * live * shelfBreak;
       const scallop = Math.sin((worldY - progress) * 0.038 + (side < 0 ? 0.6 : 1.8)) * (3.4 + projected.t * 4.6)
         + Math.sin((worldY - progress) * 0.09 + side) * 2.4
         + Math.sin((worldY - progress) * 0.17 + side * 0.7) * 1.4;
@@ -1819,11 +2023,12 @@ export class GardenArt {
     for (let i = outerPts.length - 2; i >= 0; i -= 2) ctx.lineTo(outerPts[i], outerPts[i + 1]);
     ctx.closePath();
     if (typeof ctx.createLinearGradient === 'function') {
-      const fill = ctx.createLinearGradient(0, this.horizonY(), 0, this.height);
+      const fill = ctx.createLinearGradient(0, this.horizonY() - 24, 0, this.height);
       const sage = parseHex(this.hedgeFill);
-      fill.addColorStop(0, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.34)`);
-      fill.addColorStop(0.1, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.62)`);
-      fill.addColorStop(0.32, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.86)`);
+      fill.addColorStop(0, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.06)`);
+      fill.addColorStop(0.06, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.22)`);
+      fill.addColorStop(0.16, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.58)`);
+      fill.addColorStop(0.36, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.88)`);
       fill.addColorStop(1, `rgba(${sage.r}, ${sage.g}, ${sage.b}, 0.96)`);
       ctx.fillStyle = fill;
       ctx.globalAlpha = 1;
@@ -1870,7 +2075,7 @@ export class GardenArt {
     [-1, 1].forEach((side) => {
       this.walkGameplay(cam, pack ? 36 : 28, (slot, y) => {
         const projected = this.roadAt(y);
-        if (projected.linearScreenY < this.horizonY() - 10) return;
+        if (projected.linearScreenY < this.horizonY() - 28) return;
         if (hash01(slot * 4.7 + side) < 0.45) return;
         const inner = this.hedgeInnerX(side, y, shift, progress);
         const outer = this.hedgeOuterX(side, y, shift, progress);
@@ -1921,7 +2126,7 @@ export class GardenArt {
         const worldGroundY = y + 18;
         const worldX = this.gardenWorldX(side, 0.72 + hash01(slot + 3) * 0.16);
         const propX = this.projectWorldProp(worldX, worldGroundY);
-        if (propX.linearScreenY < horizon - 10) return;
+        if (propX.linearScreenY < horizon - 28) return;
         const nearCat = CONFIG.VISUAL.MASS_NEAR_CAT || 1.92;
         const h = catH * (nearCat * (0.96 + hash01(slot) * 0.05)) * propX.scale;
         const size = this.spriteSize(item, h);
@@ -2125,6 +2330,8 @@ export class GardenArt {
         const gateH = choice
           ? this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * vis.uniformScale
           : 0;
+        // Keep rows alive behind the reveal crest (HIDDEN) so they can emerge
+        // via occlusion instead of popping into existence when VISIBLE.
         if (this.spriteOffscreen(
           vis.roadCenter,
           vis.groundY,
@@ -2151,6 +2358,99 @@ export class GardenArt {
         prop.layer = ROLE_LAYER.planter;
       });
     });
+  }
+
+  revealTestStage() {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search || '');
+    const raw = (params.get('c2reveal') || params.get('reveal') || '').toUpperCase();
+    if (!raw) return null;
+    if ('ABCDE'.includes(raw[0])) return raw[0];
+    const map = { HIDDEN: 'A', TOP: 'B', PARTIAL: 'C', FULL: 'D', NEAR: 'E' };
+    return map[raw] || null;
+  }
+
+  /**
+   * Deterministic fence + gateway for POST-C2 screenshots.
+   * Stages A–E pin screenY relative to the reveal crest; worldY is derived
+   * from that screenY (no spawn, no worldY rewrite on reveal).
+   */
+  collectRevealTestProps(camera) {
+    const stage = this.revealTestStage();
+    if (!stage || !this.usePack()) return;
+    const kit = this.ensureFenceKit();
+    if (!kit) return;
+    const cam = camera || dummyCamera();
+    const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
+    const cx = this.width * 0.5;
+    const crest = revealCrestYAt(cx, this.width);
+    const spanMul = Math.max(1, CONFIG.VISUAL.PROJECTOR?.REVEAL_SPAN ?? 1.28);
+    const sProbe = this.projectWorld(cx, this.screenToWorldY(crest + 24, shift));
+    const fenceH = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * Math.max(0.35, sProbe.s);
+    const gateH = this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * Math.max(0.35, sProbe.s);
+    const occH = Math.max(fenceH, gateH);
+    const span = occH * spanMul;
+    // Tip / substantial / full — spaced for readable screenshots.
+    const stageScreen = {
+      A: crest - 14,
+      B: crest + Math.max(5, span * 0.11),
+      C: crest + span * 0.48,
+      D: crest + span + 10,
+      E: CONFIG.PLAYER_START_Y + shift - 40
+    };
+    const screenY = stageScreen[stage];
+    if (!Number.isFinite(screenY)) return;
+    const worldY = this.screenToWorldY(screenY, shift);
+    const road = this.roadAt(worldY);
+    const trackLeft = CONFIG.TRACK_LEFT;
+    const trackRight = CONFIG.TRACK_RIGHT;
+    const mid = (trackLeft + trackRight) * 0.5;
+    const openingW = Math.max(72, (trackRight - trackLeft) * 0.28);
+    const leftSpan = { x: trackLeft, width: Math.max(24, mid - openingW * 0.5 - trackLeft) };
+    const rightSpan = {
+      x: mid + openingW * 0.5,
+      width: Math.max(24, trackRight - (mid + openingW * 0.5))
+    };
+    const opening = {
+      x: mid - openingW * 0.5,
+      width: openingW,
+      y: worldY,
+      type: 'SAFE',
+      height: CONFIG.CHOICE_GATE_HEIGHT
+    };
+
+    const prop = this.allocProp();
+    prop.kind = 'fence-row';
+    prop.role = 'planter';
+    prop.spans = [leftSpan, rightSpan];
+    prop.openings = [opening];
+    prop.choice = true;
+    prop.classScale = 1;
+    prop.screenY = road.screenY;
+    prop.groundY = road.drawY;
+    prop.worldY = worldY;
+    prop.x = road.roadCenter;
+    prop.w = road.roadWidth;
+    prop.h = occH;
+    prop.alpha = 1;
+    prop.scale = road.s;
+    prop.s = road.s;
+    prop.layer = ROLE_LAYER.planter;
+    prop._revealTest = stage;
+
+    if (typeof window !== 'undefined') {
+      const occ = this.objectOcclusion(road.roadCenter, road.drawY, occH);
+      window.__omrRevealTest = {
+        stage,
+        worldY,
+        screenY: road.screenY,
+        s: road.s,
+        scale: road.s,
+        occ: occ.state,
+        ratio: occ.visibleRatio,
+        crest
+      };
+    }
   }
 
   fenceRowHeight(screenY) {
@@ -2347,7 +2647,7 @@ export class GardenArt {
     const horizon = this.horizonY();
     this.walkGameplay(cam, period, (slot, y) => {
       const projected = this.roadAt(y);
-      if (projected.linearScreenY < horizon - 4) return;
+      if (projected.linearScreenY < horizon - 28) return;
       const besideMass = this.usePack()
         && this.sideMassItem(side)
         && this.nearSideMass(side, y, cam.progress || 0);
@@ -2368,7 +2668,7 @@ export class GardenArt {
     const horizon = this.horizonY();
     this.walkGameplay(cam, this.usePack() ? 44 : 38, (slot, y) => {
       const projected = this.roadAt(y);
-      if (projected.linearScreenY < horizon - 2) return;
+      if (projected.linearScreenY < horizon - 24) return;
       const groundY = y + 10;
       [-1, 1].forEach((side) => {
         const roll = hash01(slot * 3.17 + side * 5.1);
@@ -2412,7 +2712,7 @@ export class GardenArt {
     [-1, 1].forEach((side) => {
       this.walkGameplay(cam, pack ? 40 : 32, (slot, y) => {
         const projected = this.roadAt(y);
-        if (projected.linearScreenY < this.horizonY() - 10) return;
+        if (projected.linearScreenY < this.horizonY() - 28) return;
         if (hash01(slot * 4.1 + side) < 0.38) return;
         const path = side < 0 ? projected.roadLeft : projected.roadRight;
         const inner = this.hedgeInnerX(side, y, shift, progress);
@@ -2468,7 +2768,7 @@ export class GardenArt {
     const cam = camera || dummyCamera();
     this.walkGameplay(cam, this.usePack() ? 44 : 36, (slot, y) => {
       const projected = this.roadAt(y);
-      if (projected.linearScreenY < this.horizonY() - 10) return;
+      if (projected.linearScreenY < this.horizonY() - 28) return;
       if (hash01(slot * 9.13) < 0.32) return;
       const side = hash01(slot + 2.4) > 0.5 ? 1 : -1;
       const groundY = y + 15;

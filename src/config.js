@@ -199,9 +199,16 @@ export const CONFIG = {
       ROAD_SECTIONS: 18,
       CREST_PEAK: 16,
       CREST_SIDE: 6,
-      CREST_ASYM: 3.2
+      CREST_ASYM: 3.2,
+      // Occlusion-only crest (road silhouette keeps CREST_PEAK).
+      REVEAL_CREST_PEAK: 48,
+      // Stretch HIDDEN→FULL past the geometric crest so tip/mid linger a bit.
+      REVEAL_SPAN: 1.32
     },
-    FAR_SKYLINE_T: 0.925,
+    // Keep enough FAR lower meadow below the skyline to cover the sky gap;
+    // softenFarLowerField dissolves the plastic look without exposing backdrop.
+    // Tuck FAR plate so less flat lower meadow hangs below the skyline.
+    FAR_SKYLINE_T: 0.935,
     COIN_DRAW_SIZE: 42,
     USE_ENVIRONMENT_ASSET_PACK: true,
     LOAF_REAR: {
