@@ -797,46 +797,16 @@ export class GardenArt {
     return this.objectOcclusion(screenX, groundDrawY, spriteHeight).state === 'VISIBLE';
   }
 
-  clipCrestRevealBand(x0, x1, visibleH) {
-    const ctx = this.ctx;
-    const shift = this.lastShift || 0;
-    const pad = 36;
-    const left = Math.min(x0, x1) - pad;
-    const right = Math.max(x0, x1) + pad;
-    const steps = 16;
-    const band = Math.max(2, visibleH + 2);
-    // Soft geometric lip: crest curve + slight scallop, not a flat screen cut.
-    ctx.beginPath();
-    for (let i = 0; i <= steps; i += 1) {
-      const u = i / steps;
-      const x = left + (right - left) * u;
-      const base = revealCrestYAt(x, this.width) - shift;
-      const scallop = Math.sin(u * Math.PI * 2.2) * 1.6 + Math.sin(u * Math.PI * 5.1) * 0.7;
-      const y = base - 1.2 + scallop;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    for (let i = steps; i >= 0; i -= 1) {
-      const u = i / steps;
-      const x = left + (right - left) * u;
-      const base = revealCrestYAt(x, this.width) - shift;
-      const scallop = Math.sin(u * Math.PI * 2.2) * 1.2;
-      ctx.lineTo(x, base + band + 2.5 + scallop);
-    }
-    ctx.closePath();
-    ctx.clip();
-  }
-
-  beginHorizonReveal(x, groundDrawY, width, height, x0, x1) {
+  beginHorizonReveal(x, groundDrawY, width, height) {
     const occ = this.objectOcclusion(x, groundDrawY, height);
     occ.clipped = false;
     if (occ.state === 'HIDDEN') return null;
     if (occ.state === 'PARTIAL') {
+      // Fade objects in as they cross the horizon instead of clipping/lifting
+      // them past an invisible hill — no painted crest exists to sell that
+      // illusion, so a clip just reads as objects popping out of flat ground.
       this.ctx.save();
-      const left = x0 == null ? x - width * 0.5 : x0;
-      const right = x1 == null ? x + width * 0.5 : x1;
-      this.clipCrestRevealBand(left, right, occ.visibleH);
-      if (occ.lift > 0.5) this.ctx.translate(0, occ.lift);
+      this.ctx.globalAlpha *= occ.visibleRatio;
       occ.clipped = true;
     }
     return occ;
@@ -1981,7 +1951,6 @@ export class GardenArt {
       const worldV = ((planted % tileWorld) + tileWorld) % tileWorld;
       const srcY = (worldV / tileWorld) * th;
       const srcH = Math.max(0.8, (Math.abs(b.worldY - a.worldY) / tileWorld) * th);
-      ctx.globalAlpha = 0.78 + a.t * 0.22;
       this.blitPathSandStrip(ctx, img, tw, th, srcY, srcH, left, a.drawY - 0.5, destW, destH);
       ctx.restore();
     }
@@ -2545,14 +2514,7 @@ export class GardenArt {
       ? this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * scale
       : 0;
     const occH = Math.max(h, gateH);
-    const occ = this.beginHorizonReveal(
-      road.roadCenter,
-      groundY,
-      road.roadWidth,
-      occH,
-      road.roadLeft,
-      road.roadRight
-    );
+    const occ = this.beginHorizonReveal(road.roadCenter, groundY, road.roadWidth, occH);
     if (!occ) return;
 
     prop.spans.forEach((span) => {
