@@ -205,8 +205,9 @@ check('Loaf render preserves the 30x30 hitbox, canonical anchor, and no mirror',
 check('HUD names the score multiplier', () => {
   const { context, renderer } = makeRenderer();
   renderer.drawHUD(100, 2.5, 300, 4, 2, null, false);
-  assert(context.texts.includes('SCORE x2.5'));
-  assert(context.texts.includes('STREAK 4'));
+  assert(context.texts.includes('x2.5'));
+  assert(context.texts.includes('STREAK'));
+  assert(context.texts.includes('4'));
 });
 
 check('Game Over motivates honestly and marks persistent Coins', () => {

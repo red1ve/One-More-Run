@@ -10,7 +10,7 @@ html, body {
   height: 100%;
   background-color: #D5E5EA;
   color: #4A3428;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: 'Fredoka', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow: hidden;
   display: flex;
   justify-content: center;

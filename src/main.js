@@ -1,4 +1,7 @@
 import './style.css';
+import '@fontsource/fredoka/500.css';
+import '@fontsource/fredoka/600.css';
+import '@fontsource/fredoka/700.css';
 import { Game } from './game/Game.js';
 import { YandexService } from './services/YandexService.js';
 
@@ -47,6 +50,11 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   game.render();
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(() => {
+      if (game.state === 'START') game.render();
+    });
+  }
   yandex.notifyGameReady();
   yandex.init().then(() => {
     document.documentElement.lang = yandex.getLanguage();

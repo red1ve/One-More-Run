@@ -1,6 +1,7 @@
 import { CONFIG, isRiskPathType } from '../config.js';
 import { GardenArt } from './GardenArt.js';
 
+const FONT_FAMILY = "'Fredoka', system-ui, sans-serif";
 const LOAF_FRONT_URL = new URL('../../assets/characters/loaf-front.svg', import.meta.url).href;
 const LOAF_RUN_URLS = [
   new URL('../../assets/characters/run/loaf-run-01.svg', import.meta.url).href,
@@ -247,7 +248,7 @@ export class Renderer {
 
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.font = 'bold 22px system-ui, sans-serif';
+      this.ctx.font = `700 22px ${FONT_FAMILY}`;
       const plateW = Math.max(56, this.ctx.measureText ? this.ctx.measureText(text).width + 22 : 60);
       const plateH = 28;
       this.garden.plate(labelX - plateW / 2, labelY - plateH / 2, plateW, plateH, 12);
@@ -338,10 +339,10 @@ export class Renderer {
         ? CONFIG.COLORS.COIN
         : (isRisk ? CONFIG.COLORS.RISKY_LABEL : CONFIG.COLORS.SAFE_LABEL);
       const size = isRisk ? 26 : (isCoin ? 18 : 20);
-      this.ctx.font = `bold ${size}px system-ui, sans-serif`;
+      this.ctx.font = `700 ${size}px ${FONT_FAMILY}`;
       this.ctx.fillText(`+${r.value}`, r.x, r.y);
       if (r.subtitle) {
-        this.ctx.font = 'bold 13px system-ui, sans-serif';
+        this.ctx.font = `700 13px ${FONT_FAMILY}`;
         this.ctx.fillText(r.subtitle, r.x, r.y + 16);
       }
     });
@@ -351,64 +352,107 @@ export class Renderer {
 
   drawHUD(score, multiplier, bestScore, riskStreak = 0, coins = 0, feel = null, muted = false) {
     const pulse = feel?.hudPulse || { streak: 0, multiplier: 0, coins: 0 };
+    const ctx = this.ctx;
     const measure = (text, font) => {
-      this.ctx.font = font;
-      return this.ctx.measureText ? this.ctx.measureText(text).width : String(text).length * 8;
+      ctx.font = font;
+      return ctx.measureText ? ctx.measureText(text).width : String(text).length * 8;
     };
+    const top = 10;
 
-    this.garden.badge(12, 8, 96, 44, 10);
-    this.ctx.textAlign = 'left';
-    this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-    this.ctx.font = 'bold 18px system-ui, sans-serif';
-    this.ctx.fillText(`${score}`, 22, 28);
-    this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.font = '9px system-ui, sans-serif';
-    this.ctx.fillText('SCORE', 22, 40);
-    this.ctx.fillText(`BEST ${bestScore}`, 22, 50);
+    // --- Score / best pill (left) ---
+    const scoreText = `${score}`;
+    const bestText = `BEST ${bestScore}`;
+    const scoreTextW = Math.max(
+      measure(scoreText, `700 20px ${FONT_FAMILY}`),
+      measure(bestText, `600 11px ${FONT_FAMILY}`)
+    );
+    const scoreIconR = 16;
+    const scorePillH = 46;
+    const scorePillW = 14 + scoreIconR * 2 + 8 + scoreTextW + 14;
+    this.garden.hudPill(12, top, scorePillW, scorePillH);
+    const scoreIconCX = 12 + 14 + scoreIconR;
+    const scoreIconCY = top + scorePillH / 2;
+    this.garden.hudPawIcon(scoreIconCX, scoreIconCY, scoreIconR);
+    const scoreTextX = scoreIconCX + scoreIconR + 8;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
+    ctx.font = `700 20px ${FONT_FAMILY}`;
+    ctx.fillText(scoreText, scoreTextX, top + 22);
+    ctx.fillStyle = CONFIG.COLORS.UI_HUD;
+    ctx.font = `600 11px ${FONT_FAMILY}`;
+    ctx.fillText(bestText, scoreTextX, top + 37);
 
-    const coinScale = 1 + (pulse.coins || 0) * 0.18;
-    const coinLabel = `COINS ${coins}`;
-    const coinW = Math.max(86, measure(coinLabel, 'bold 13px system-ui, sans-serif') + 18);
-    this.garden.badge(12, 56, coinW, 22, 10);
-    this.ctx.save();
-    this.ctx.translate(22, 71);
-    this.ctx.scale(coinScale, coinScale);
-    this.ctx.fillStyle = CONFIG.COLORS.COIN;
-    this.ctx.font = 'bold 13px system-ui, sans-serif';
-    this.ctx.fillText(coinLabel, 0, 0);
-    this.ctx.restore();
-
-    this.ctx.textAlign = 'right';
-    const streakActive = riskStreak > 0;
-    const streakScale = 1 + (pulse.streak || 0) * 0.22;
-    const streakLabel = `STREAK ${riskStreak}`;
-    const streakW = Math.max(96, measure(streakLabel, 'bold 14px system-ui, sans-serif') + 18);
-    this.garden.badge(this.width - 10 - streakW, 8, streakW, 22, 10);
-    this.ctx.save();
-    this.ctx.translate(this.width - 20, 24);
-    this.ctx.scale(streakScale, streakScale);
-    this.ctx.fillStyle = streakActive ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD;
-    this.ctx.font = 'bold 14px system-ui, sans-serif';
-    this.ctx.fillText(streakLabel, 0, 0);
-    this.ctx.restore();
+    // --- Right cluster: multiplier, streak, coins ---
+    const pillH = 38;
+    const pillY = top + (scorePillH - pillH) / 2;
+    let cursorRight = this.width - 12;
 
     const maxed = multiplier >= CONFIG.MULTIPLIER_MAX;
-    const multScale = 1 + (pulse.multiplier || 0) * (maxed ? 0.32 : 0.2);
-    const multLabel = `SCORE x${multiplier.toFixed(1)}`;
-    const multW = Math.max(108, measure(multLabel, 'bold 16px system-ui, sans-serif') + 18);
-    this.garden.badge(this.width - 10 - multW, 34, multW, 24, 10);
-    this.ctx.save();
-    this.ctx.translate(this.width - 20, 51);
-    this.ctx.scale(multScale, multScale);
-    this.ctx.fillStyle = maxed ? CONFIG.COLORS.COIN : (multiplier > 1 ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD);
-    this.ctx.font = 'bold 16px system-ui, sans-serif';
-    this.ctx.fillText(multLabel, 0, 0);
-    this.ctx.restore();
+    const multScale = 1 + (pulse.multiplier || 0) * (maxed ? 0.28 : 0.18);
+    const multLabel = `x${multiplier.toFixed(1)}`;
+    const multFont = `700 18px ${FONT_FAMILY}`;
+    const multW = Math.max(64, measure(multLabel, multFont) + 26);
+    const multX = cursorRight - multW;
+    this.garden.hudPill(multX, pillY, multW, pillH);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.translate(multX + multW / 2, pillY + pillH / 2 + 6);
+    ctx.scale(multScale, multScale);
+    ctx.fillStyle = maxed ? CONFIG.COLORS.COIN : (multiplier > 1 ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_TEXT);
+    ctx.font = multFont;
+    ctx.fillText(multLabel, 0, 0);
+    ctx.restore();
+    cursorRight = multX - 8;
 
-    this.ctx.textAlign = 'left';
-    this.ctx.fillStyle = muted ? CONFIG.COLORS.UI_HUD : CONFIG.COLORS.UI_TEXT;
-    this.ctx.font = '11px system-ui, sans-serif';
-    this.ctx.fillText(muted ? 'M MUTED' : 'M SOUND', 20, this.height - 18);
+    const streakActive = riskStreak > 0;
+    const streakScale = 1 + (pulse.streak || 0) * 0.2;
+    const streakNumFont = `700 16px ${FONT_FAMILY}`;
+    const streakLabelFont = `600 9px ${FONT_FAMILY}`;
+    const streakIconR = 13;
+    const streakTextW = Math.max(
+      measure('STREAK', streakLabelFont),
+      measure(`${riskStreak}`, streakNumFont)
+    );
+    const streakW = 10 + streakIconR * 2 + 6 + streakTextW + 12;
+    const streakX = cursorRight - streakW;
+    this.garden.hudPill(streakX, pillY, streakW, pillH);
+    this.garden.hudStreakIcon(streakX + 10 + streakIconR, pillY + pillH / 2, streakIconR, streakActive);
+    ctx.save();
+    ctx.textAlign = 'left';
+    const streakTextX = streakX + 10 + streakIconR * 2 + 6;
+    ctx.translate(streakTextX, pillY + pillH / 2);
+    ctx.scale(streakScale, streakScale);
+    ctx.fillStyle = streakActive ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD;
+    ctx.font = streakLabelFont;
+    ctx.fillText('STREAK', 0, -6);
+    ctx.fillStyle = streakActive ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_TEXT;
+    ctx.font = streakNumFont;
+    ctx.fillText(`${riskStreak}`, 0, 11);
+    ctx.restore();
+    cursorRight = streakX - 8;
+
+    const coinScale = 1 + (pulse.coins || 0) * 0.16;
+    const coinFont = `700 16px ${FONT_FAMILY}`;
+    const coinIconR = 13;
+    const coinLabel = `${coins}`;
+    const coinTextW = measure(coinLabel, coinFont);
+    const coinW = 10 + coinIconR * 2 + 6 + coinTextW + 12;
+    const coinX = cursorRight - coinW;
+    this.garden.hudPill(coinX, pillY, coinW, pillH);
+    this.garden.hudCoinIcon(coinX + 10 + coinIconR, pillY + pillH / 2, coinIconR);
+    ctx.save();
+    ctx.textAlign = 'left';
+    ctx.translate(coinX + 10 + coinIconR * 2 + 6, pillY + pillH / 2 + 6);
+    ctx.scale(coinScale, coinScale);
+    ctx.fillStyle = CONFIG.COLORS.COIN;
+    ctx.font = coinFont;
+    ctx.fillText(coinLabel, 0, 0);
+    ctx.restore();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = muted ? CONFIG.COLORS.UI_HUD : CONFIG.COLORS.UI_TEXT;
+    ctx.font = `600 11px ${FONT_FAMILY}`;
+    ctx.fillText(muted ? 'M MUTED' : 'M SOUND', 20, this.height - 18);
   }
 
   drawStartScreen(muted = false, showFirstRunHints = false) {
@@ -434,27 +478,27 @@ export class Renderer {
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
     this.ctx.textAlign = 'center';
 
-    this.ctx.font = 'bold 48px system-ui, sans-serif';
+    this.ctx.font = `700 48px ${FONT_FAMILY}`;
     this.ctx.fillText('ONE MORE RUN', this.width / 2, this.height / 2 - 70);
 
-    this.ctx.font = '20px system-ui, sans-serif';
+    this.ctx.font = `600 20px ${FONT_FAMILY}`;
     this.ctx.fillText('TAP TO START', this.width / 2, this.height / 2 + 15);
 
     this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.font = '15px system-ui, sans-serif';
+    this.ctx.font = `500 15px ${FONT_FAMILY}`;
     this.ctx.fillText('A/D or ←/→  •  TAP LEFT/RIGHT', this.width / 2, this.height / 2 + 50);
 
     if (showFirstRunHints) {
       this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-      this.ctx.font = 'bold 15px system-ui, sans-serif';
+      this.ctx.font = `700 15px ${FONT_FAMILY}`;
       this.ctx.fillText('SAFE = SURVIVE  •  RISK = BIG SCORE', this.width / 2, this.height / 2 + 88);
       this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-      this.ctx.font = '14px system-ui, sans-serif';
+      this.ctx.font = `500 14px ${FONT_FAMILY}`;
       this.ctx.fillText('RISK BUILDS STREAK → SCORE x', this.width / 2, this.height / 2 + 114);
       this.ctx.fillText('COINS STAY BETWEEN RUNS', this.width / 2, this.height / 2 + 138);
     }
 
-    this.ctx.font = '13px system-ui, sans-serif';
+    this.ctx.font = `500 13px ${FONT_FAMILY}`;
     this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
     this.ctx.fillText(
       muted ? 'M MUTED' : 'M SOUND',
@@ -476,7 +520,7 @@ export class Renderer {
     this.ctx.textAlign = 'center';
     this.ctx.globalAlpha = fade;
 
-    this.ctx.font = 'bold 42px system-ui, sans-serif';
+    this.ctx.font = `700 42px ${FONT_FAMILY}`;
     this.ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 130);
 
     if (isNewBest) {
@@ -485,33 +529,33 @@ export class Renderer {
       this.ctx.translate(this.width / 2, this.height / 2 - 78);
       this.ctx.scale(pulse, pulse);
       this.ctx.fillStyle = CONFIG.COLORS.COIN;
-      this.ctx.font = 'bold 22px system-ui, sans-serif';
+      this.ctx.font = `700 22px ${FONT_FAMILY}`;
       this.ctx.fillText('NEW BEST', 0, 0);
       this.ctx.restore();
     } else {
       const pointsToBest = Math.max(1, bestScore + 1 - score);
       this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-      this.ctx.font = 'bold 14px system-ui, sans-serif';
+      this.ctx.font = `700 14px ${FONT_FAMILY}`;
       this.ctx.fillText(`${pointsToBest} TO NEW BEST`, this.width / 2, this.height / 2 - 78);
     }
 
-    this.ctx.font = 'bold 36px system-ui, sans-serif';
+    this.ctx.font = `700 36px ${FONT_FAMILY}`;
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
     this.ctx.fillText(`${score}`, this.width / 2, this.height / 2 - 40);
-    this.ctx.font = '14px system-ui, sans-serif';
+    this.ctx.font = `600 14px ${FONT_FAMILY}`;
     this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
     this.ctx.fillText('SCORE', this.width / 2, this.height / 2 - 16);
 
-    this.ctx.font = '20px system-ui, sans-serif';
+    this.ctx.font = `600 20px ${FONT_FAMILY}`;
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
     this.ctx.fillText(`BEST ${bestScore}`, this.width / 2, this.height / 2 + 28);
     this.ctx.fillStyle = CONFIG.COLORS.COIN;
     this.ctx.fillText(`COINS ${coins}  •  SAVED`, this.width / 2, this.height / 2 + 60);
 
-    this.ctx.font = 'bold 19px system-ui, sans-serif';
+    this.ctx.font = `700 19px ${FONT_FAMILY}`;
     this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
     this.ctx.fillText('TAP / R TO RESTART', this.width / 2, this.height / 2 + 118);
-    this.ctx.font = '12px system-ui, sans-serif';
+    this.ctx.font = `500 12px ${FONT_FAMILY}`;
     this.ctx.fillText(extras.muted ? 'M MUTED' : 'M SOUND', this.width / 2, this.height / 2 + 144);
     this.ctx.globalAlpha = 1;
   }

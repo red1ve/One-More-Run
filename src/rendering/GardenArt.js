@@ -539,6 +539,72 @@ export class GardenArt {
     ctx.restore();
   }
 
+  hudPill(x, y, w, h) {
+    const ctx = this.ctx;
+    const r = h / 2;
+    ctx.fillStyle = this.c.ShadowDust;
+    this.roundedRectPath(x + 2, y + 3, w, h, r);
+    ctx.fill();
+    ctx.fillStyle = this.c.SkyPaper;
+    this.roundedRectPath(x, y, w, h, r);
+    ctx.fill();
+    ctx.strokeStyle = this.c.InkBrown;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+  hudIconDisc(cx, cy, r, fill) {
+    const ctx = this.ctx;
+    ctx.fillStyle = this.c.ShadowDust;
+    ctx.beginPath();
+    ctx.arc(cx + 1, cy + 1.5, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = this.c.InkBrown;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  hudPawIcon(cx, cy, r) {
+    const ctx = this.ctx;
+    this.hudIconDisc(cx, cy, r, mixHex(this.c.FloorSand, this.c.SkyPaper, 0.3));
+    ctx.fillStyle = this.c.InkBrown;
+    this.oval(cx, cy + r * 0.2, r * 0.42, r * 0.34);
+    this.oval(cx - r * 0.42, cy - r * 0.26, r * 0.19, r * 0.24);
+    this.oval(cx - r * 0.02, cy - r * 0.48, r * 0.19, r * 0.24);
+    this.oval(cx + r * 0.42, cy - r * 0.26, r * 0.19, r * 0.24);
+  }
+
+  hudCoinIcon(cx, cy, r) {
+    const ctx = this.ctx;
+    this.hudIconDisc(cx, cy, r, this.coinGold);
+    ctx.strokeStyle = this.coinRim;
+    ctx.lineWidth = Math.max(1.4, r * 0.22);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = this.coinHi;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.22, cy - r * 0.22, r * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  hudStreakIcon(cx, cy, r, active) {
+    const ctx = this.ctx;
+    const bg = active ? this.c.CatGinger : mixHex(this.c.FloorSand, this.c.SkyPaper, 0.3);
+    this.hudIconDisc(cx, cy, r, bg);
+    ctx.fillStyle = active ? this.c.SkyPaper : this.c.InkBrown;
+    this.oval(cx - r * 0.4, cy + r * 0.3, r * 0.15, r * 0.15);
+    this.oval(cx, cy + r * 0.04, r * 0.19, r * 0.19);
+    this.oval(cx + r * 0.42, cy - r * 0.32, r * 0.24, r * 0.24);
+  }
+
   horizonY() {
     return corridorHorizonY();
   }
@@ -2713,7 +2779,7 @@ export class GardenArt {
       this.walkGameplay(cam, pack ? 40 : 32, (slot, y) => {
         const projected = this.roadAt(y);
         if (projected.linearScreenY < this.horizonY() - 28) return;
-        if (hash01(slot * 4.1 + side) < 0.38) return;
+        if (hash01(slot * 4.1 + side) < 0.24) return;
         const path = side < 0 ? projected.roadLeft : projected.roadRight;
         const inner = this.hedgeInnerX(side, y, shift, progress);
         const u = 0.28 + hash01(slot + 3) * 0.42;
@@ -2726,7 +2792,7 @@ export class GardenArt {
           role = 'smallBush';
           kind = 'bush';
           h = pack ? catH * 0.32 * projected.scale : 14;
-        } else if (roll > 0.74) {
+        } else if (roll > 0.52) {
           role = 'flower';
           kind = 'flower';
           h = pack ? catH * 0.18 * projected.scale : 11;
