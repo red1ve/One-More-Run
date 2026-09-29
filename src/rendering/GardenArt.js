@@ -1,3 +1,4 @@
+import { HedgeArt } from './HedgeArt.js';
 import { CONFIG } from '../config.js';
 import { getGardenSheets } from './gardenAssets.js';
 import {
@@ -150,6 +151,7 @@ export class GardenArt {
     this.onReady = options.onReady || null;
     const c = CONFIG.COLORS;
     this.c = c;
+    this.hedges = new HedgeArt(this);
     this.sky = c.GardenSky;
     this.lawnFar = mixHex(c.HedgeSage, c.GardenSky, 0.58);
     this.lawnMid = mixHex(c.HedgeSage, c.SafeLawn, 0.28);
@@ -1007,8 +1009,12 @@ export class GardenArt {
     this.lastProgress = cam.progress || 0;
     this.drawLawn(camera);
     this.drawPath(camera);
-    this.drawSandShoulder(camera);
-    this.drawGardenBorders(camera);
+    if (this.useHedgeWall()) {
+      this.hedges.draw(cam);
+    } else {
+      this.drawSandShoulder(camera);
+      this.drawGardenBorders(camera);
+    }
     this.drawCrestLandform();
     this.collectAndDrawWorld(camera, segments, playerY);
     this.drawRevealCrestFeather();
@@ -1198,15 +1204,25 @@ export class GardenArt {
     return prop;
   }
 
+  // New hedge wall (HedgeArt.js) replaces the old border band, hedge tufts,
+  // road-edge plants and the big side-mass sprites.
+  useHedgeWall() {
+    return !!CONFIG.VISUAL.HEDGE_WALL?.ENABLED;
+  }
+
   collectAndDrawWorld(camera, segments, playerY) {
     this.resetWorldProps();
     this.markFenceClearance(segments);
-    this.collectSideMasses(camera);
-    this.collectMidGarden(camera);
-    this.collectSideGroups(camera);
-    this.collectUnderstory(camera);
-    this.collectRoadEdge(camera);
-    this.collectHedgeFoliage(camera);
+    const hedgeWall = this.useHedgeWall();
+    // Old side decor overlaps the new hedge; Phase 1 step 5 redraws it.
+    if (!hedgeWall) {
+      this.collectSideMasses(camera);
+      this.collectMidGarden(camera);
+      this.collectSideGroups(camera);
+      this.collectUnderstory(camera);
+      this.collectRoadEdge(camera);
+      this.collectHedgeFoliage(camera);
+    }
     if (this.usePack()) {
       if (!this.revealTestStage()) this.collectFenceRows(segments);
     } else this.collectObstacles(segments);

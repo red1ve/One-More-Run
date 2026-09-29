@@ -153,6 +153,17 @@ export const CONFIG = {
     OUTLINE_WIDTH: 4,
     SHADOW_OFFSET: 5,
     HEDGE_BAND: 28,
+    // Живая изгородь с бордюром (HedgeArt.js). Размеры — у кота, дальше по перспективе.
+    HEDGE_WALL: {
+      ENABLED: true,
+      SHOULDER_NEAR: 8,
+      CURB_NEAR: 12,
+      WIDTH_NEAR: 74,
+      CLUMP_PERIOD: 22,
+      CLUMP_RADIUS_NEAR: 17,
+      POST_PERIOD: 130,
+      FLOWER_CHANCE: 0.12
+    },
     HEDGE_BORDER_NEAR: 48,
     HEDGE_BORDER_FAR: 26,
     HEDGE_HEIGHT_NEAR: 82,
