@@ -467,6 +467,10 @@ Bush and grass tufts sit on the hedge band itself so the border reads as a livin
 
 Since 2026-09 the ground outside the hedges is `src/rendering/LawnArt.js` (`VISUAL.LAWN`): an opaque GardenLawn fill that fades to a light haze at the horizon, world-anchored soft LawnShade blobs (two overlapping ovals, never a flat pale ellipse that reads as water), rare LawnLight blobs and three-blade LawnTuft strokes, all shrinking with the road perspective.
 
+### Sky and far tree line
+
+Since Phase 1 step 6 (2026-09) the baked warm `distant-garden-horizon.png` is off while `VISUAL.SKY.ENABLED`. `src/rendering/SkyArt.js` paints once into an offscreen canvas: a GardenSky sky that turns to SkyHaze near the horizon, three flat-bottomed CloudWhite clouds with a CloudShade underside (placed between the HUD pills), and a far tree line of two rows (FarTree haze row, NearTree row with HedgeSage highlights; round crowns and a few conifers) standing on the horizon. Each frame it is a single `drawImage`, shifted with the world camera so the tree line always meets the road horizon; the canvas is rebuilt only if the horizon changes. The hedge narrows to zero over the last `HEDGE_WALL.HORIZON_TAPER` px so it blends into the trees instead of ending in dark wedges, and side trees are not thinned with distance so they frame the horizon.
+
 ### Side decor
 
 Since Phase 1 step 5 (2026-09) the lawn outside the hedges carries `src/rendering/SideDecorArt.js` (`VISUAL.SIDE_DECOR`): trees (WoodShade trunk with two branches, InkBrown outline, leaf canopy), plain and flowering bushes (BushLeaf, sparse flowers), StoneLight / StoneShade rocks, three-post wooden fences with pointed tops, and small flower stems. Every leaf mass uses the same recipe as the hedge: a HedgeShade scalloped outline, a HedgeShade crescent bottom-right, the body colour, a HedgeLeafLight highlight top-left. Items are world-anchored, painter-ordered far to near, thinned out with distance and drawn before the hedge so the hedge always sits in front. The hedge got the same dark scalloped outline in this step.
@@ -557,6 +561,10 @@ Named tokens. New colours are not allowed without updating this bible.
 | BushLeaf | HedgeSage toward GardenLawn, `#96B552` | Flowering side bushes, lighter than the hedge |
 | StoneLight | SkyPaper toward ShadowDust, `#D2C3A8` | Lit top of garden rocks |
 | StoneShade | ShadowDust lightened, `#B3A38A` | Garden rock body |
+| SkyHaze | GardenSky toward CloudWhite, `#C6E9EF` | Sky just above the horizon |
+| CloudShade | CloudWhite toward GardenSky, `#DCEEF0` | Flat underside of clouds |
+| FarTree | HedgeSage into GardenSky haze, `#8DBF9D` | Back row of the far tree line |
+| NearTree | HedgeSage toward HedgeShade, `#6A8D44` | Front row of the far tree line |
 
 ### Why each core colour exists
 
