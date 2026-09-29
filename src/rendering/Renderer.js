@@ -2,7 +2,7 @@ import { CONFIG, isRiskPathType } from '../config.js';
 import { GardenArt } from './GardenArt.js';
 
 const FONT_FAMILY = "'Fredoka', system-ui, sans-serif";
-const LOAF_FRONT_URL = new URL('../../assets/characters/loaf-front.svg', import.meta.url).href;
+const LOAF_SIT_URL = new URL('../../assets/characters/loaf-sit.svg', import.meta.url).href;
 const LOAF_RUN_URLS = [
   new URL('../../assets/characters/run/loaf-run-01.svg', import.meta.url).href,
   new URL('../../assets/characters/run/loaf-run-02.svg', import.meta.url).href,
@@ -72,7 +72,7 @@ export class Renderer {
       this.bindSpriteImage(createImage(), url, `run-${index}`)
     ));
     this.playerSprite = this.runFrames[0] || null;
-    this.playerFrontSprite = this.bindSpriteImage(createImage(), LOAF_FRONT_URL, 'front');
+    this.playerFrontSprite = this.bindSpriteImage(createImage(), LOAF_SIT_URL, 'front');
   }
 
   runFrameIndex(time) {
@@ -355,7 +355,7 @@ export class Renderer {
     this.ctx.restore();
   }
 
-  drawHUD(score, multiplier, bestScore, riskStreak = 0, coins = 0, feel = null, muted = false) {
+  drawHUD(score, multiplier, bestScore, riskStreak = 0, coins = 0, feel = null, muted = false, showSound = true) {
     const pulse = feel?.hudPulse || { streak: 0, multiplier: 0, coins: 0 };
     const ctx = this.ctx;
     const measure = (text, font) => {
@@ -454,114 +454,161 @@ export class Renderer {
     ctx.fillText(coinLabel, 0, 0);
     ctx.restore();
 
+    if (!showSound) return;
     ctx.textAlign = 'left';
     ctx.fillStyle = muted ? CONFIG.COLORS.UI_HUD : CONFIG.COLORS.UI_TEXT;
     ctx.font = `600 11px ${FONT_FAMILY}`;
     ctx.fillText(muted ? 'M MUTED' : 'M SOUND', 20, this.height - 18);
   }
 
-  drawStartScreen(muted = false, showFirstRunHints = false) {
-    this.ctx.fillStyle = CONFIG.COLORS.OVERLAY;
-    this.ctx.globalAlpha = 0.82;
+  // --- Экраны START и Game Over (Фаза 3): карточка и капсулы в стиле HUD ---
+
+  screenCfg() {
+    return CONFIG.VISUAL.SCREENS || {};
+  }
+
+  // Лёгкое затемнение вместо бледной кремовой заливки: сад остаётся ярким.
+  dimScreen(alpha) {
+    this.ctx.fillStyle = CONFIG.COLORS.InkBrown;
+    this.ctx.globalAlpha = alpha;
     this.ctx.fillRect(0, 0, this.width, this.height);
     this.ctx.globalAlpha = 1;
+  }
 
-    const panelH = showFirstRunHints ? 318 : 214;
-    this.garden.plate(this.width / 2 - 214, this.height / 2 - 118, 428, panelH, 16);
-
-    if (this.playerFrontReady && this.playerFrontSprite) {
-      const layout = this.spriteLayout(CONFIG.VISUAL.LOAF_FRONT);
-      this.ctx.drawImage(
-        this.playerFrontSprite,
-        this.width / 2 + layout.x,
-        this.height / 2 - 168 + layout.y,
-        layout.width,
-        layout.height
-      );
+  // Строка по центру; если не влезает в maxWidth, шрифт уменьшается (запас под русский).
+  fitText(text, x, y, weight, size, maxWidth, color) {
+    const ctx = this.ctx;
+    const minFont = this.screenCfg().MIN_FONT ?? 16;
+    let font = size;
+    ctx.font = `${weight} ${font}px ${FONT_FAMILY}`;
+    const measured = typeof ctx.measureText === 'function' ? ctx.measureText(text).width : 0;
+    if (measured > maxWidth) {
+      font = Math.max(minFont, Math.floor(size * (maxWidth / measured)));
+      ctx.font = `${weight} ${font}px ${FONT_FAMILY}`;
     }
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.fillText(text, x, y);
+  }
 
-    this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-    this.ctx.textAlign = 'center';
+  // Капсула как в HUD: жёсткая тень ShadowDust, заливка, коричневая обводка.
+  screenPill(cx, cy, w, h, fill) {
+    const ctx = this.ctx;
+    const x = cx - w / 2;
+    const y = cy - h / 2;
+    ctx.fillStyle = CONFIG.COLORS.ShadowDust;
+    this.garden.roundedRectPath(x + 3, y + 4, w, h, h / 2);
+    ctx.fill();
+    ctx.fillStyle = fill;
+    this.garden.roundedRectPath(x, y, w, h, h / 2);
+    ctx.fill();
+    ctx.strokeStyle = CONFIG.COLORS.InkBrown;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
 
-    this.ctx.font = `700 48px ${FONT_FAMILY}`;
-    this.ctx.fillText('ONE MORE RUN', this.width / 2, this.height / 2 - 70);
-
-    this.ctx.font = `600 20px ${FONT_FAMILY}`;
-    this.ctx.fillText('TAP TO START', this.width / 2, this.height / 2 + 15);
-
-    this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.font = `500 15px ${FONT_FAMILY}`;
-    this.ctx.fillText('A/D or ←/→  •  TAP LEFT/RIGHT', this.width / 2, this.height / 2 + 50);
-
-    if (showFirstRunHints) {
-      this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-      this.ctx.font = `700 15px ${FONT_FAMILY}`;
-      this.ctx.fillText('SAFE = SURVIVE  •  RISK = BIG SCORE', this.width / 2, this.height / 2 + 88);
-      this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-      this.ctx.font = `500 14px ${FONT_FAMILY}`;
-      this.ctx.fillText('RISK BUILDS STREAK → SCORE x', this.width / 2, this.height / 2 + 114);
-      this.ctx.fillText('COINS STAY BETWEEN RUNS', this.width / 2, this.height / 2 + 138);
-    }
-
-    this.ctx.font = `500 13px ${FONT_FAMILY}`;
-    this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.fillText(
-      muted ? 'M MUTED' : 'M SOUND',
-      this.width / 2,
-      this.height / 2 + (showFirstRunHints ? 174 : 86)
+  // Сидящий Loaf стоит на верхнем крае карточки.
+  drawSitLoaf(groundY) {
+    if (!this.playerFrontReady || !this.playerFrontSprite) return;
+    const layout = this.spriteLayout(CONFIG.VISUAL.LOAF_SIT);
+    this.ctx.drawImage(
+      this.playerFrontSprite,
+      this.width / 2 + layout.x,
+      groundY + layout.y,
+      layout.width,
+      layout.height
     );
   }
 
-  drawGameOver(score, bestScore, coins = 0, age = 1, extras = {}) {
-    const fade = Math.min(1, age / 0.25);
-    const isNewBest = !!extras.isNewBest;
-    this.ctx.fillStyle = CONFIG.COLORS.SkyPaper;
-    this.ctx.globalAlpha = 0.58 + fade * 0.18;
-    this.ctx.fillRect(0, 0, this.width, this.height);
-    this.ctx.globalAlpha = fade;
-    this.garden.plate(this.width / 2 - 200, this.height / 2 - 168, 400, 340, 16);
+  drawStartScreen(muted = false, showFirstRunHints = false) {
+    const cfg = this.screenCfg();
+    const cx = this.width / 2;
+    const cardX = cfg.CARD_X ?? 36;
+    const cardW = cfg.CARD_W ?? this.width - cardX * 2;
+    const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
+    const cardH = showFirstRunHints ? 374 : 262;
+    const cardY = showFirstRunHints ? 340 : 380;
 
-    this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-    this.ctx.textAlign = 'center';
-    this.ctx.globalAlpha = fade;
+    this.dimScreen(cfg.DIM_START ?? 0.12);
+    this.garden.plate(cardX, cardY, cardW, cardH, 26);
+    this.drawSitLoaf(cardY + 14);
 
-    this.ctx.font = `700 42px ${FONT_FAMILY}`;
-    this.ctx.fillText('GAME OVER', this.width / 2, this.height / 2 - 130);
+    this.fitText('ONE MORE RUN', cx, cardY + 78, 700, 52, textW, CONFIG.COLORS.UI_TEXT);
 
-    if (isNewBest) {
-      const pulse = 1 + 0.08 * Math.sin(age * 10);
-      this.ctx.save();
-      this.ctx.translate(this.width / 2, this.height / 2 - 78);
-      this.ctx.scale(pulse, pulse);
-      this.ctx.fillStyle = CONFIG.COLORS.COIN;
-      this.ctx.font = `700 22px ${FONT_FAMILY}`;
-      this.ctx.fillText('NEW BEST', 0, 0);
-      this.ctx.restore();
-    } else {
-      const pointsToBest = Math.max(1, bestScore + 1 - score);
-      this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-      this.ctx.font = `700 14px ${FONT_FAMILY}`;
-      this.ctx.fillText(`${pointsToBest} TO NEW BEST`, this.width / 2, this.height / 2 - 78);
+    this.screenPill(cx, cardY + 136, 320, 64, CONFIG.COLORS.CoinAmber);
+    this.fitText('TAP TO START', cx, cardY + 146, 700, 28, 280, CONFIG.COLORS.UI_TEXT);
+
+    this.fitText('A/D or ←/→  •  TAP LEFT/RIGHT', cx, cardY + 208, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+
+    if (showFirstRunHints) {
+      this.fitText('SAFE = SURVIVE  •  RISK = BIG SCORE', cx, cardY + 258, 700, 21, textW, CONFIG.COLORS.UI_TEXT);
+      this.fitText('RISK BUILDS STREAK → SCORE x', cx, cardY + 294, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+      this.fitText('COINS STAY BETWEEN RUNS', cx, cardY + 326, 600, 20, textW, CONFIG.COLORS.UI_HUD);
     }
 
-    this.ctx.font = `700 36px ${FONT_FAMILY}`;
-    this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-    this.ctx.fillText(`${score}`, this.width / 2, this.height / 2 - 40);
-    this.ctx.font = `600 14px ${FONT_FAMILY}`;
-    this.ctx.fillStyle = CONFIG.COLORS.UI_HUD;
-    this.ctx.fillText('SCORE', this.width / 2, this.height / 2 - 16);
+    const soundY = cardY + cardH + 44;
+    this.screenPill(cx, soundY, 176, 44, CONFIG.COLORS.SkyPaper);
+    this.fitText(muted ? 'M MUTED' : 'M SOUND', cx, soundY + 7, 600, 20, 150, CONFIG.COLORS.UI_TEXT);
+  }
 
-    this.ctx.font = `600 20px ${FONT_FAMILY}`;
-    this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-    this.ctx.fillText(`BEST ${bestScore}`, this.width / 2, this.height / 2 + 28);
-    this.ctx.fillStyle = CONFIG.COLORS.COIN;
-    this.ctx.fillText(`COINS ${coins}  •  SAVED`, this.width / 2, this.height / 2 + 60);
+  drawGameOver(score, bestScore, coins = 0, age = 1, extras = {}) {
+    const cfg = this.screenCfg();
+    const fade = Math.min(1, age / 0.25);
+    const isNewBest = !!extras.isNewBest;
+    const cx = this.width / 2;
+    const cardX = cfg.CARD_X ?? 36;
+    const cardW = cfg.CARD_W ?? this.width - cardX * 2;
+    const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
+    const cardY = 320;
+    const cardH = 466;
 
-    this.ctx.font = `700 19px ${FONT_FAMILY}`;
-    this.ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
-    this.ctx.fillText('TAP / R TO RESTART', this.width / 2, this.height / 2 + 118);
-    this.ctx.font = `500 12px ${FONT_FAMILY}`;
-    this.ctx.fillText(extras.muted ? 'M MUTED' : 'M SOUND', this.width / 2, this.height / 2 + 144);
+    this.dimScreen((cfg.DIM_GAME_OVER ?? 0.28) * fade);
+    this.ctx.globalAlpha = fade;
+    this.garden.plate(cardX, cardY, cardW, cardH, 26);
+    this.drawSitLoaf(cardY + 14);
+    this.ctx.globalAlpha = fade;
+
+    this.fitText('GAME OVER', cx, cardY + 74, 700, 48, textW, CONFIG.COLORS.UI_TEXT);
+
+    if (isNewBest) {
+      const pulse = 1 + 0.06 * Math.sin(age * 10);
+      this.ctx.save();
+      this.ctx.translate(cx, cardY + 116);
+      this.ctx.scale(pulse, pulse);
+      this.screenPill(0, 0, 200, 42, CONFIG.COLORS.CoinAmber);
+      this.fitText('NEW BEST', 0, 8, 700, 24, 170, CONFIG.COLORS.UI_TEXT);
+      this.ctx.restore();
+      this.ctx.globalAlpha = fade;
+    } else {
+      const pointsToBest = Math.max(1, bestScore + 1 - score);
+      this.fitText(`${pointsToBest} TO NEW BEST`, cx, cardY + 124, 700, 22, textW, CONFIG.COLORS.UI_HUD);
+    }
+
+    this.fitText(`${score}`, cx, cardY + 204, 700, 68, textW, CONFIG.COLORS.UI_TEXT);
+    this.fitText('SCORE', cx, cardY + 232, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+
+    // Две капсулы друг под другом: рекорд (лапка) и монеты (монетка), как в HUD.
+    // Широкие, чтобы влезли и русские надписи.
+    const pillW = 360;
+    const pillX = cx - pillW / 2;
+    const rows = [
+      [cardY + 276, `BEST ${bestScore}`, 'paw'],
+      [cardY + 334, `COINS ${coins}  •  SAVED`, 'coin']
+    ];
+    for (const [pillY, label, icon] of rows) {
+      this.screenPill(cx, pillY, pillW, 46, CONFIG.COLORS.SkyPaper);
+      if (icon === 'paw') this.garden.hudPawIcon(pillX + 28, pillY, 15);
+      else this.garden.hudCoinIcon(pillX + 28, pillY, 15);
+      this.fitText(label, cx + 14, pillY + 7, 700, 21, pillW - 84, CONFIG.COLORS.UI_TEXT);
+    }
+
+    this.screenPill(cx, cardY + 412, 340, 62, CONFIG.COLORS.CoinAmber);
+    this.fitText('TAP / R TO RESTART', cx, cardY + 421, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
+
+    const soundY = cardY + cardH + 44;
+    this.screenPill(cx, soundY, 176, 44, CONFIG.COLORS.SkyPaper);
+    this.fitText(extras.muted ? 'M MUTED' : 'M SOUND', cx, soundY + 7, 600, 20, 150, CONFIG.COLORS.UI_TEXT);
     this.ctx.globalAlpha = 1;
   }
 }

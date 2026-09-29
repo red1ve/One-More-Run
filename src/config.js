@@ -288,12 +288,24 @@ export const CONFIG = {
       ANCHOR_Y: 797,
       FLOAT_CLEARANCE: 139
     },
-    LOAF_FRONT: {
-      SOURCE_WIDTH: 1024,
-      SOURCE_HEIGHT: 1024,
-      DRAW_HEIGHT: 112,
-      ANCHOR_X: 487,
-      ANCHOR_Y: 523
+    // Сидящий Loaf для START и Game Over (assets/characters/loaf-sit.svg, 300×360).
+    // Якорь — точка на земле под котом (центр тени).
+    LOAF_SIT: {
+      SOURCE_WIDTH: 300,
+      SOURCE_HEIGHT: 360,
+      DRAW_HEIGHT: 170,
+      ANCHOR_X: 155,
+      ANCHOR_Y: 330
+    },
+    // Экраны START и Game Over: карточка в стиле HUD, крупные надписи.
+    // Текст сам уменьшается до MIN_FONT, если строка шире карточки (запас под русский язык).
+    SCREENS: {
+      CARD_X: 36,
+      CARD_W: 468,
+      DIM_START: 0.12,
+      DIM_GAME_OVER: 0.28,
+      TEXT_PAD: 28,
+      MIN_FONT: 16
     }
   },
 

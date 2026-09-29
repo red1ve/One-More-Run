@@ -119,7 +119,7 @@ check('Loaf rear and front load once from production assets', () => {
   assert(created === 5);
   const srcs = images.map((image) => String(image.src).replaceAll('\\', '/'));
   assert(srcs.filter((src) => src.includes('/assets/characters/run/loaf-run-')).length === 4);
-  assert(srcs.some((src) => src.endsWith('/assets/characters/loaf-front.svg')));
+  assert(srcs.some((src) => src.endsWith('/assets/characters/loaf-sit.svg'))); // Phase 3: sitting Loaf
   assert(!srcs.some((src) => src.includes('loaf-rear-tail.svg')));
   assert(renderer.runFrames.length === 4);
   assert(renderer.playerSprite === images[0]);
