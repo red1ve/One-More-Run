@@ -153,6 +153,29 @@ check('cat strafe speed grows with the track, never below the generator assumpti
   }
 });
 
+check('generator never falls back to widened or empty rows over long runs', () => {
+  const original = Track.prototype.placeReachableGap;
+  const stats = { calls: 0, widened: 0 };
+  Track.prototype.placeReachableGap = function patched(minWidth, y, preferred) {
+    const gap = original.call(this, minWidth, y, preferred);
+    stats.calls += 1;
+    if (gap.width > minWidth) stats.widened += 1;
+    return gap;
+  };
+  try {
+    for (let run = 0; run < 8; run += 1) {
+      const track = new Track();
+      for (let time = 0; time < 240; time += 1 / 30) {
+        track.update(1 / 30, getTrackSpeed(time), time);
+      }
+    }
+  } finally {
+    Track.prototype.placeReachableGap = original;
+  }
+  assert(stats.calls > 300, `too few rows generated: ${stats.calls}`);
+  assert(stats.widened === 0, `${stats.widened}/${stats.calls} rows had to be widened`);
+});
+
 console.log(results.join('\n'));
 const failed = results.filter((line) => line.startsWith('FAIL'));
 if (failed.length) {
