@@ -7,6 +7,9 @@ export const CONFIG = {
   TRACK_LEFT: 70,
   TRACK_RIGHT: 470,
   TRACK_WIDTH: 400,
+  // Опорная линия для ширины игровой дорожки (Corridor.js). Отдельна от
+  // нарисованного горизонта VISUAL.SKY_BAND, чтобы перенос горизонта не менял игру.
+  CORRIDOR_ORIGIN_Y: 232,
 
   // Настройки игрока
   PLAYER_WIDTH: 30,
@@ -150,6 +153,26 @@ export const CONFIG = {
     OUTLINE_WIDTH: 4,
     SHADOW_OFFSET: 5,
     HEDGE_BAND: 28,
+    // Высота (px) ровного песка у горизонта, прячет полоски сжатой текстуры.
+    FAR_SAND_VEIL: 70,
+    // Арка в розах на горизонте (assets/environment/garden/landmarks/rose-arch.svg).
+    ROSE_ARCH: {
+      RASTER_WIDTH: 240,
+      WIDTH_OF_FAR_ROAD: 0.72,
+      TOP_MARGIN: 10,
+      ALPHA: 0.88
+    },
+    // Живая изгородь с бордюром (HedgeArt.js). Размеры — у кота, дальше по перспективе.
+    HEDGE_WALL: {
+      ENABLED: true,
+      SHOULDER_NEAR: 8,
+      CURB_NEAR: 12,
+      WIDTH_NEAR: 74,
+      CLUMP_PERIOD: 22,
+      CLUMP_RADIUS_NEAR: 17,
+      POST_PERIOD: 130,
+      FLOWER_CHANCE: 0.12
+    },
     HEDGE_BORDER_NEAR: 48,
     HEDGE_BORDER_FAR: 26,
     HEDGE_HEIGHT_NEAR: 82,
@@ -185,18 +208,14 @@ export const CONFIG = {
     CAMERA_LAG: 14,
     CAMERA_FAR: 0.12,
     PATH_SAND_TILE: 2600,
-    SKY_BAND: 232,
+    SKY_BAND: 130,
     PATH_INSET_NEAR: 26,
     PATH_INSET_FAR: 108,
     PROJECTOR: {
-      FAR_ROAD_WIDTH: 200,
-      X_SCALE_FAR: 0.75,
-      SCALE_FAR: 0.88,
-      SCALE_MID: 0.94,
-      SCALE_NEAR: 1,
-      FAR_Y_SPEED: 0.58,
+      FAR_ROAD_WIDTH: 170,
+      // Object scale = road width ratio (true perspective), capped here.
+      SCALE_MAX: 1.3,
       READ_ZONE_ABOVE: 280,
-      ROAD_SECTIONS: 18,
       CREST_PEAK: 16,
       CREST_SIDE: 6,
       CREST_ASYM: 3.2,
