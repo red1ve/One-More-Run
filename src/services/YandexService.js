@@ -266,9 +266,11 @@ export class YandexService {
     this.adPromise = new Promise((resolve) => {
       let rewarded = false;
       let settled = false;
+      let graceTimer = null;
       const finish = (result) => {
         if (settled) return;
         settled = true;
+        if (graceTimer) clearTimeout(graceTimer);
         callbacks.onClose?.(result);
         resolve(result);
       };
@@ -286,8 +288,21 @@ export class YandexService {
             onOpen: () => callbacks.onOpen?.(),
             onRewarded: () => {
               rewarded = true;
+              // onRewarded мог прийти уже после onClose (порядок в документации
+              // не указан): если окно ждёт — сразу засчитываем награду.
+              if (graceTimer) finish({ attempted: true, rewarded: true });
             },
-            onClose: () => finish({ attempted: true, rewarded }),
+            onClose: () => {
+              if (rewarded) {
+                finish({ attempted: true, rewarded: true });
+                return;
+              }
+              // Ждём немного: onRewarded может прийти чуть позже onClose.
+              graceTimer = setTimeout(
+                () => finish({ attempted: true, rewarded }),
+                this.config.REWARDED_CLOSE_GRACE_MS ?? 250
+              );
+            },
             onError: (error) => {
               this.log('Yandex rewarded ad was not shown.', error);
               finish({ attempted: true, rewarded: false, error });

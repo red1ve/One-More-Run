@@ -121,6 +121,9 @@ export const CONFIG = {
     ADS_ENABLED: true,
     // Имитация рекламы за награду без SDK. Включается только в npm run dev (main.js).
     DEV_REWARDED_STUB: false,
+    // Сколько ждать onRewarded после onClose, прежде чем решить, что награды нет
+    // (порядок колбэков в документации Яндекса не указан).
+    REWARDED_CLOSE_GRACE_MS: 250,
     INTERSTITIAL_COOLDOWN_RUNS: 3
   },
 

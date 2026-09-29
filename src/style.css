@@ -12,6 +12,8 @@ html, body {
   color: #4A3428;
   font-family: 'Fredoka', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow: hidden;
+  /* Телефон: без «потянуть вниз, чтобы обновить» и прокрутки страницы (требование Яндекса). */
+  overscroll-behavior: none;
   display: flex;
   justify-content: center;
   align-items: center;

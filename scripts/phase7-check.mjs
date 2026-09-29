@@ -681,6 +681,42 @@ await check('rewarded ad grants the reward only after onRewarded', async () => {
   }
 });
 
+await check('onRewarded arriving shortly after onClose still grants the reward', async () => {
+  const late = makeReadySdk({
+    adv: {
+      showFullscreenAdv() {},
+      showRewardedVideo({ callbacks }) {
+        callbacks.onOpen?.();
+        callbacks.onClose?.();
+        setTimeout(() => callbacks.onRewarded?.(), 100);
+      }
+    }
+  });
+  const service = await readyService(late);
+  const started = Date.now();
+  const result = await service.showRewarded();
+  assert(result.rewarded === true, 'late onRewarded within the grace window must reward');
+  assert(Date.now() - started < CONFIG.YANDEX.REWARDED_CLOSE_GRACE_MS, 'resolves as soon as the reward arrives');
+
+  const closedOnly = await readyService(rewardedSdk('closed'));
+  const t0 = Date.now();
+  const none = await closedOnly.showRewarded();
+  assert(none.rewarded === false, 'no onRewarded at all gives no reward');
+  assert(Date.now() - t0 >= CONFIG.YANDEX.REWARDED_CLOSE_GRACE_MS - 20, 'waits the grace window before deciding');
+
+  const tooLate = makeReadySdk({
+    adv: {
+      showFullscreenAdv() {},
+      showRewardedVideo({ callbacks }) {
+        callbacks.onClose?.();
+        setTimeout(() => callbacks.onRewarded?.(), CONFIG.YANDEX.REWARDED_CLOSE_GRACE_MS + 150);
+      }
+    }
+  });
+  const slow = await readyService(tooLate);
+  assert((await slow.showRewarded()).rewarded === false, 'a reward after the grace window is ignored');
+});
+
 await check('rewarded ad is unavailable without SDK unless the dev stub is on', async () => {
   const standalone = new YandexService({ environment: {}, document: null, config: makeConfig(), logger: silentLogger() });
   await standalone.init();
