@@ -115,7 +115,10 @@ export class Game {
   }
 
   tryLaunch() {
-    if (this.state === 'PLAYING' || this.launchPending) return false;
+    if (this.state === 'PLAYING' || this.launchPending || this.rewardPending) return false;
+    // Первые мгновения после проигрыша нажатия не перезапускают игру:
+    // игрок успевает увидеть экран и кнопки «за рекламу».
+    if (this.state === 'GAMEOVER' && this.gameOverInputLocked?.()) return false;
     if (this.state === 'START' || !this.platform?.shouldShowInterstitial?.()) {
       this.start();
       return true;
@@ -167,6 +170,9 @@ export class Game {
     this.feel?.reset();
 
     this.player.reset();
+    this.runCoins = 0;
+    this.coinsDoubled = false;
+    this.rewardPending = false;
     this.reviveUsed = false;
     this.invulnerableTime = 0;
     this.player.invulnerable = 0;
@@ -282,6 +288,68 @@ export class Game {
       return false;
     }
     return this.track.checkCollision(this.player);
+  }
+
+  // --- Экран проигрыша: кнопки «за рекламу» (Фаза 5) ---
+
+  gameOverInputLocked() {
+    const age = this.feel?.gameOverAge;
+    return Number.isFinite(age) && age < CONFIG.GAME_OVER_INPUT_LOCK;
+  }
+
+  canOfferRevive() {
+    return this.canRevive() && !this.rewardPending && !!this.platform?.canShowRewarded?.();
+  }
+
+  canOfferDoubleCoins() {
+    return this.state === 'GAMEOVER'
+      && (this.runCoins || 0) > 0
+      && !this.coinsDoubled
+      && !this.rewardPending
+      && !this.launchPending
+      && !this.isGameplayPaused()
+      && !!this.platform?.canShowRewarded?.();
+  }
+
+  // Нажатие на экран (мышь или палец) в логических координатах холста.
+  handleTap(x, y) {
+    if (this.state === 'GAMEOVER') {
+      if (this.gameOverInputLocked() || this.rewardPending) return false;
+      const hit = this.renderer?.hitGameOverButton?.(x, y);
+      if (hit === 'revive') return this.requestRevive();
+      if (hit === 'double') return this.requestDoubleCoins();
+    }
+    return this.tryLaunch();
+  }
+
+  // Показ рекламы за награду: игра и звук на паузе, награда — только после onRewarded.
+  showRewardedAd(onRewarded) {
+    this.rewardPending = true;
+    this.setAdPaused(true);
+    return Promise.resolve(this.platform.showRewarded())
+      .catch(() => ({ attempted: true, rewarded: false }))
+      .then((result) => {
+        this.rewardPending = false;
+        this.setAdPaused(false);
+        if (result?.rewarded) onRewarded();
+        return !!result?.rewarded;
+      });
+  }
+
+  requestRevive() {
+    if (!this.canOfferRevive()) return false;
+    this.showRewardedAd(() => this.revive());
+    return true;
+  }
+
+  requestDoubleCoins() {
+    if (!this.canOfferDoubleCoins()) return false;
+    this.showRewardedAd(() => {
+      if (this.coinsDoubled || this.state !== 'GAMEOVER') return;
+      this.coinsDoubled = true;
+      this.coins = this.storage.addCoins(this.runCoins || 0);
+    });
+    return true;
   }
 
   // Возрождение: один раз за забег, только с экрана проигрыша.
@@ -407,6 +475,7 @@ export class Game {
     const gained = Math.floor(Number(amount) || 0);
     if (gained <= 0) return;
     this.coins = this.storage.addCoins(gained);
+    this.runCoins = (this.runCoins || 0) + gained;
     const float = {
       x: this.player.x,
       y: this.player.y - CONFIG.VISUAL.LOAF_REAR.FLOAT_CLEARANCE,
@@ -481,7 +550,14 @@ export class Game {
         this.bestScore,
         this.coins,
         this.feel?.gameOverAge ?? 1,
-        { isNewBest: this.isNewBest, muted: this.audio?.muted }
+        {
+          isNewBest: this.isNewBest,
+          muted: this.audio?.muted,
+          offerRevive: this.canOfferRevive(),
+          offerDouble: this.canOfferDoubleCoins(),
+          runCoins: this.runCoins || 0,
+          coinsDoubled: !!this.coinsDoubled
+        }
       );
     } else if (this.state === 'START') {
       this.renderer.drawStartScreen(this.audio?.muted, this.showFirstRunHints);

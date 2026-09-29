@@ -247,6 +247,64 @@ export class YandexService {
     });
   }
 
+  // --- Реклама за вознаграждение (возрождение, ×2 монеты) ---
+  // Награда выдаётся ТОЛЬКО если SDK вызвал onRewarded (реклама досмотрена).
+  // В режиме разработки без SDK можно включить имитацию (config.DEV_REWARDED_STUB).
+
+  canShowRewarded() {
+    if (!this.config.ADS_ENABLED || this.adPromise) return false;
+    if (this.isReady()) return typeof this.ysdk?.adv?.showRewardedVideo === 'function';
+    return !!this.config.DEV_REWARDED_STUB;
+  }
+
+  showRewarded(callbacks = {}) {
+    if (!this.canShowRewarded()) {
+      return Promise.resolve({ attempted: false, rewarded: false });
+    }
+    // После рекламы за награду не показываем межстраничную на ближайшем рестарте.
+    this.lastAdAttemptRun = this.completedRuns;
+    this.adPromise = new Promise((resolve) => {
+      let rewarded = false;
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        callbacks.onClose?.(result);
+        resolve(result);
+      };
+
+      if (!this.isReady()) {
+        // Имитация для npm run dev: как будто реклама показана и досмотрена.
+        callbacks.onOpen?.();
+        setTimeout(() => finish({ attempted: true, rewarded: true, simulated: true }), 400);
+        return;
+      }
+
+      try {
+        this.ysdk.adv.showRewardedVideo({
+          callbacks: {
+            onOpen: () => callbacks.onOpen?.(),
+            onRewarded: () => {
+              rewarded = true;
+            },
+            onClose: () => finish({ attempted: true, rewarded }),
+            onError: (error) => {
+              this.log('Yandex rewarded ad was not shown.', error);
+              finish({ attempted: true, rewarded: false, error });
+            }
+          }
+        });
+      } catch (error) {
+        this.log('Yandex rewarded ad call failed.', error);
+        finish({ attempted: true, rewarded: false, error });
+      }
+    });
+
+    return this.adPromise.finally(() => {
+      this.adPromise = null;
+    });
+  }
+
   log(message, error) {
     this.logger?.warn?.(message, error);
   }

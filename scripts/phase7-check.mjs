@@ -643,6 +643,80 @@ await check('production service contains no deprecated leaderboard API', () => {
   assert(source.includes('leaderboards.setScore'), 'current leaderboard API missing');
 });
 
+// --- Phase 5: реклама за вознаграждение ---
+function rewardedSdk(mode) {
+  return makeReadySdk({
+    adv: {
+      showFullscreenAdv({ callbacks }) { callbacks.onOpen?.(); callbacks.onClose?.(true); },
+      showRewardedVideo({ callbacks }) {
+        callbacks.onOpen?.();
+        if (mode === 'watched') { callbacks.onRewarded?.(); callbacks.onClose?.(); }
+        if (mode === 'closed') callbacks.onClose?.();
+        if (mode === 'error') callbacks.onError?.(new Error('no fill'));
+        if (mode === 'throws') throw new Error('broken');
+      }
+    }
+  });
+}
+
+async function readyService(sdk) {
+  const service = new YandexService({
+    environment: { YaGames: { init: async () => sdk } },
+    config: makeConfig(),
+    logger: silentLogger()
+  });
+  await service.init();
+  return service;
+}
+
+await check('rewarded ad grants the reward only after onRewarded', async () => {
+  const watched = await readyService(rewardedSdk('watched'));
+  assert(watched.canShowRewarded());
+  assert((await watched.showRewarded()).rewarded === true, 'watched ad should reward');
+  for (const mode of ['closed', 'error', 'throws']) {
+    const service = await readyService(rewardedSdk(mode));
+    const result = await service.showRewarded();
+    assert(result.rewarded === false, `${mode} must not reward`);
+    assert(service.adPromise === null, `${mode} must release the ad lock`);
+  }
+});
+
+await check('rewarded ad is unavailable without SDK unless the dev stub is on', async () => {
+  const standalone = new YandexService({ environment: {}, document: null, config: makeConfig(), logger: silentLogger() });
+  await standalone.init();
+  assert(standalone.canShowRewarded() === false, 'no rewarded ads in standalone production');
+  assert((await standalone.showRewarded()).attempted === false);
+  const dev = new YandexService({ environment: {}, document: null, config: makeConfig({ DEV_REWARDED_STUB: true }), logger: silentLogger() });
+  await dev.init();
+  assert(dev.canShowRewarded() === true, 'dev stub offers rewarded ads');
+  const result = await dev.showRewarded();
+  assert(result.rewarded === true && result.simulated === true);
+});
+
+await check('no interstitial right after a rewarded ad', async () => {
+  const service = await readyService(rewardedSdk('watched'));
+  for (let i = 0; i < CONFIG.YANDEX.INTERSTITIAL_COOLDOWN_RUNS; i += 1) service.recordRunCompleted();
+  assert(service.shouldShowInterstitial(), 'interstitial due by cooldown');
+  await service.showRewarded();
+  assert(!service.shouldShowInterstitial(), 'rewarded ad resets the interstitial cooldown');
+});
+
+await check('rewarded ad cannot start while another ad is showing', async () => {
+  let release;
+  const sdk = makeReadySdk({
+    adv: {
+      showFullscreenAdv() {},
+      showRewardedVideo({ callbacks }) { release = () => { callbacks.onRewarded(); callbacks.onClose(); }; }
+    }
+  });
+  const service = await readyService(sdk);
+  const first = service.showRewarded();
+  assert(!service.canShowRewarded(), 'second ad blocked while the first is open');
+  assert((await service.showRewarded()).attempted === false);
+  release();
+  assert((await first).rewarded === true);
+});
+
 console.log(results.join('\n'));
 const failed = results.filter((line) => line.startsWith('FAIL'));
 if (failed.length) {
