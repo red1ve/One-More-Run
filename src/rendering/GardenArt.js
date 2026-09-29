@@ -2513,8 +2513,9 @@ export class GardenArt {
     });
   }
 
+  // Тестовый режим ?reveal= работает только в npm run dev: в игре для игроков его нет.
   revealTestStage() {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === 'undefined' || !import.meta.env?.DEV) return null;
     const params = new URLSearchParams(window.location.search || '');
     const raw = (params.get('c2reveal') || params.get('reveal') || '').toUpperCase();
     if (!raw) return null;

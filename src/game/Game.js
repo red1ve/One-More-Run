@@ -469,7 +469,9 @@ export class Game {
       this.riskStreak,
       this.coins,
       this.feel,
-      this.audio?.muted
+      this.audio?.muted,
+      // На экранах START и Game Over звук показан отдельной капсулой.
+      this.state === 'PLAYING'
     );
 
     if (this.state === 'GAMEOVER') {
