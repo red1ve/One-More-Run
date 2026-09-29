@@ -9,7 +9,8 @@ export function systemRandom() {
 
 // mulberry32: короткий и быстрый генератор с хорошим распределением.
 export function createSeededRandom(seed) {
-  let state = (Number(seed) >>> 0) || 1;
+  // Целый seed: 42 и 42.7 — один и тот же забег, 0 и 1 — разные.
+  let state = Math.floor(Number(seed) || 0) >>> 0;
   return function seededRandom() {
     state = (state + 0x6d2b79f5) >>> 0;
     let t = state;

@@ -286,7 +286,12 @@ export class Game {
   // Возрождение: один раз за забег, только с экрана проигрыша.
   // Счёт продолжается, серия и множитель уже сброшены проигрышем.
   canRevive() {
-    return this.state === 'GAMEOVER' && !this.reviveUsed;
+    // Не во время рекламы/паузы и не когда уже запрошен рестарт (иначе рестарт
+    // после следующей смерти заблокируется).
+    return this.state === 'GAMEOVER'
+      && !this.reviveUsed
+      && !this.launchPending
+      && !this.isGameplayPaused?.();
   }
 
   revive() {
@@ -299,6 +304,7 @@ export class Game {
     this.isNewBest = false;
     this.keyboardInput?.reset?.();
     this.mouseInput?.reset?.();
+    this.touchInput?.reset?.();
     this.syncGameplayLifecycle?.();
     return true;
   }

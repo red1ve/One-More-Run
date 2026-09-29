@@ -105,40 +105,53 @@ check('low FPS (10) gives the same crash outcome as 120 FPS', () => {
   assert(mismatches === 0, `mismatches ${mismatches}/${total}`);
 });
 
-check('an obstacle row never passes through the cat without a hit, even at 10 FPS', () => {
-  for (let seed = 1; seed <= 200; seed += 1) {
-    // Кот стоит в середине сплошного ряда (прохода нет под ним).
-    const crashed = (() => {
-      const r = rng(seed);
-      const height = r() < 0.5 ? 40 : 64;
-      const player = new Player();
-      const obstacles = [{ x: CONFIG.TRACK_LEFT, y: CONFIG.PLAYER_START_Y - 200 - r() * 80, width: CONFIG.TRACK_WIDTH, height }];
-      const game = {
-        state: 'PLAYING', runTime: 300, currentSpeed: 0, distanceScore: 0, pathReward: 0, score: 0,
-        player, camera: null, feel: { update() {} }, floatingRewards: [],
-        track: {
-          segments: [{ obstacles }],
-          update(dt, speed) { for (const obs of obstacles) obs.y += speed * dt; },
-          checkPassed: () => ({}), collectCoins: () => 0, checkCollision: Track.prototype.checkCollision
-        },
-        keyboardInput: { isLeftPressed: () => false, isRightPressed: () => false },
-        mouseInput: null, touchInput: { getTouchX: () => null }, isGameplayPaused: () => false,
-        applyReward() {}, applyCoinPickup() {}, updateFloating: Game.prototype.updateFloating,
-        simulateStep: Game.prototype.simulateStep, crashed: false,
-        gameOver() { this.crashed = true; this.state = 'GAMEOVER'; }
-      };
-      for (let t = 0; t < 1.5 && !game.crashed; t += 0.1) Game.prototype.update.call(game, 0.1);
-      return game.crashed;
-    })();
-    assert(crashed, `seed ${seed}: solid row passed through the cat`);
+function makeSolidRowGame(rowY, rowHeight, runTime) {
+  const player = new Player();
+  const obstacles = [{ x: CONFIG.TRACK_LEFT, y: rowY, width: CONFIG.TRACK_WIDTH, height: rowHeight }];
+  const game = {
+    state: 'PLAYING', runTime, currentSpeed: 0, distanceScore: 0, pathReward: 0, score: 0,
+    player, camera: null, feel: { update() {} }, floatingRewards: [],
+    track: {
+      segments: [{ obstacles }],
+      update(dt, speed) { for (const obs of obstacles) obs.y += speed * dt; },
+      checkPassed: () => ({}), collectCoins: () => 0, checkCollision: Track.prototype.checkCollision
+    },
+    keyboardInput: { isLeftPressed: () => false, isRightPressed: () => false },
+    mouseInput: null, touchInput: { getTouchX: () => null }, isGameplayPaused: () => false,
+    applyReward() {}, applyCoinPickup() {}, updateFloating: Game.prototype.updateFloating,
+    simulateStep: Game.prototype.simulateStep, steps: 0, crashed: false,
+    gameOver() { this.crashed = true; this.state = 'GAMEOVER'; }
+  };
+  return game;
+}
+
+check('a thin row never passes through the cat at 10 FPS and max speed', () => {
+  // Ряд 10 px + кот 36 px = окно 46 px, а за кадр 0.1 с мир сдвигается на 72 px:
+  // без деления кадра часть рядов «проскакивала» бы сквозь кота.
+  for (let offset = 0; offset < 72; offset += 3) {
+    const game = makeSolidRowGame(CONFIG.PLAYER_START_Y - 160 - offset, 10, 1000);
+    for (let t = 0; t < 1.5 && !game.crashed; t += 0.1) Game.prototype.update.call(game, 0.1);
+    assert(game.crashed, `row at offset ${offset} passed through the cat`);
   }
 });
 
-check('physics substeps are small enough at max speed and the 0.1 s frame cap', () => {
-  const worst = Math.max(CONFIG.TRACK_SPEED_MAX, CONFIG.PLAYER_SPEED_MAX) * 0.1;
-  const steps = Math.min(CONFIG.SUBSTEP_MAX_COUNT, Math.ceil(worst / CONFIG.SUBSTEP_MAX_PX));
-  assert(worst / steps <= CONFIG.SUBSTEP_MAX_PX + 0.01, `step ${worst / steps}px`);
+check('a long frame is split into small physics steps', () => {
+  const game = makeSolidRowGame(-5000, 10, 1000);
+  const step = Game.prototype.simulateStep;
+  const moves = [];
+  game.simulateStep = function counted(dt) {
+    moves.push(Math.max(getTrackSpeed(this.runTime), this.player.speed) * dt);
+    return step.call(this, dt);
+  };
+  Game.prototype.update.call(game, 0.1);
+  assert(moves.length > 1, `only ${moves.length} step(s) for a 0.1 s frame`);
+  assert(Math.max(...moves) <= CONFIG.SUBSTEP_MAX_PX + 0.5, `step ${Math.max(...moves).toFixed(1)} px`);
   assert(CONFIG.SUBSTEP_MAX_PX < CONFIG.PLAYER_WIDTH, 'substep must be smaller than the cat');
+  const smooth = makeSolidRowGame(-5000, 10, 0);
+  let smoothSteps = 0;
+  smooth.simulateStep = function counted(dt) { smoothSteps += 1; return step.call(this, dt); };
+  Game.prototype.update.call(smooth, 1 / 60);
+  assert(smoothSteps === 1, 'a normal 60 FPS frame stays one step');
 });
 
 check('cat strafe speed grows with the track, never below the generator assumption', () => {
@@ -165,6 +178,8 @@ check('generator never falls back to widened or empty rows over long runs', () =
   try {
     for (let run = 0; run < 8; run += 1) {
       const track = new Track();
+      track.setSeed(run + 1);
+      track.init();
       for (let time = 0; time < 240; time += 1 / 30) {
         track.update(1 / 30, getTrackSpeed(time), time);
       }
@@ -200,13 +215,14 @@ function makeReviveGame() {
   track.checkPassed = () => ({});
   track.collectCoins = () => 0;
   let recorded = 0;
+  let submitted = 0;
   const game = {
     state: 'PLAYING', runTime: 0, currentSpeed: 0, distanceScore: 0, pathReward: 0, score: 0,
     bestScore: 0, multiplier: 1, riskStreak: 0, reviveUsed: false, invulnerableTime: 0,
     player, track, camera: null, floatingRewards: [],
     feel: { update() {}, onGameOver() {}, onNewBest() {} },
     storage: { set() {} },
-    platform: { submitScore() {}, recordRunCompleted() { recorded += 1; } },
+    platform: { submitScore() { submitted += 1; }, recordRunCompleted() { recorded += 1; } },
     keyboardInput: { isLeftPressed: () => false, isRightPressed: () => false, reset() {} },
     mouseInput: null, touchInput: { getTouchX: () => null }, isGameplayPaused: () => false,
     applyReward() {}, applyCoinPickup() {},
@@ -221,16 +237,22 @@ function makeReviveGame() {
       Game.prototype.update.call(game, 1 / 60);
     }
   };
-  return { game, track, tick, recorded: () => recorded };
+  return { game, track, tick, recorded: () => recorded, submitted: () => submitted };
 }
 
 check('revive works once, clears rows ahead and grants short invulnerability', () => {
   const originalLog = console.log;
   console.log = () => {};
   try {
-    const { game, track, tick, recorded } = makeReviveGame();
+    const { game, track, tick, recorded, submitted } = makeReviveGame();
     tick(0.5);
     assert(game.state === 'GAMEOVER', 'cat should crash into the row at its feet');
+    game.launchPending = true;
+    assert(!game.canRevive(), 'no revive while a restart (and its ad) is pending');
+    game.launchPending = false;
+    game.isGameplayPaused = () => true;
+    assert(!game.canRevive(), 'no revive while paused or during an ad');
+    game.isGameplayPaused = () => false;
     assert(game.canRevive(), 'first revive is available');
     assert(game.revive() === true, 'revive should succeed');
     assert(game.state === 'PLAYING', 'revive resumes play');
@@ -249,6 +271,8 @@ check('revive works once, clears rows ahead and grants short invulnerability', (
     assert(game.state === 'GAMEOVER', 'second crash ends the run');
     assert(!game.canRevive() && game.revive() === false, 'only one revive per run');
     assert(recorded() === 1, `run counted ${recorded()} times for ad pacing`);
+    assert(track.segments[0].isPassed && track.segments[0].paths.length === 0, 'cleared rows give no reward');
+    assert(submitted() <= 1, `best score submitted ${submitted()} times`);
   } finally {
     console.log = originalLog;
   }

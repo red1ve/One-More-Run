@@ -14,11 +14,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const yandex = new YandexService();
   const game = new Game(canvas, yandex);
-  // Номер забега для проверки: ?seed=42 даёт одну и ту же трассу при каждом старте.
-  const seedParam = new URLSearchParams(window.location.search).get('seed');
-  if (seedParam !== null && Number.isFinite(Number(seedParam))) game.runSeed = Number(seedParam);
-  // Только для разработки (npm run dev): доступ к игре из консоли и тестов. В сборку не попадает.
-  if (import.meta.env?.DEV) window.__omrGame = game;
+  // Только для разработки (npm run dev), в сборку не попадает:
+  // ?seed=42 — одна и та же трасса при каждом старте; window.__omrGame — доступ из консоли.
+  // В игре для игроков seed из адреса не работает, чтобы нельзя было выучить трассу для рекорда.
+  if (import.meta.env?.DEV) {
+    const seedParam = new URLSearchParams(window.location.search).get('seed');
+    if (seedParam !== null && Number.isFinite(Number(seedParam))) game.runSeed = Number(seedParam);
+    window.__omrGame = game;
+  }
   const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');
 
