@@ -279,6 +279,10 @@ export class Renderer {
     const stride = even ? bob : -bob * 0.45;
 
     this.ctx.save();
+    // После возрождения кот мигает, пока неуязвим.
+    if (player.invulnerable > 0 && Math.floor(player.invulnerable * 8) % 2 === 1) {
+      this.ctx.globalAlpha = 0.4;
+    }
     this.ctx.translate(player.x, player.y);
     this.ctx.translate(0, stride);
     this.ctx.scale(stretchX, stretchY);

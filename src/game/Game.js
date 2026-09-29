@@ -1,4 +1,4 @@
-import { CONFIG, getTrackSpeed } from '../config.js';
+import { CONFIG, getTrackSpeed, getPlayerSpeed } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WorldCamera } from '../rendering/WorldCamera.js';
 import { Player } from './Player.js';
@@ -166,6 +166,11 @@ export class Game {
     this.feel?.reset();
 
     this.player.reset();
+    this.reviveUsed = false;
+    this.invulnerableTime = 0;
+    this.player.invulnerable = 0;
+    // runSeed задан (например ?seed=42 в адресе) — трасса каждый раз одинаковая.
+    this.track.setSeed?.(this.runSeed ?? null);
     this.track.reset();
     this.camera?.reset?.();
     this.keyboardInput?.reset?.();
@@ -222,6 +227,30 @@ export class Game {
     }
 
     this.player.setMoveDirection(moveDirection);
+
+    // Защита от «проскоков»: если за кадр мир или кот сдвигаются больше чем на
+    // SUBSTEP_MAX_PX (лаг, слабый телефон), кадр делится на мелкие шаги и
+    // столкновение проверяется в каждом. При 60 FPS шаг обычно один.
+    const fastest = Math.max(getTrackSpeed(this.runTime), this.player.speed);
+    const steps = Math.min(
+      CONFIG.SUBSTEP_MAX_COUNT,
+      Math.max(1, Math.ceil((fastest * deltaTime) / CONFIG.SUBSTEP_MAX_PX))
+    );
+    const stepTime = deltaTime / steps;
+    for (let i = 0; i < steps; i += 1) {
+      if (this.simulateStep(stepTime)) {
+        this.gameOver();
+        return;
+      }
+    }
+
+    this.updateFloating(deltaTime);
+    this.feel.update(deltaTime, this.currentSpeed);
+  }
+
+  // Один шаг физики: движение, трасса, награды, монеты. true = столкновение.
+  simulateStep(deltaTime) {
+    this.player.speed = getPlayerSpeed(getTrackSpeed(this.runTime));
     const screenY = this.player.y + (this.camera?.gameplayShift?.() || 0);
     this.player.update(deltaTime, playableXBounds(screenY, this.player.width));
 
@@ -245,12 +274,39 @@ export class Game {
       this.applyCoinPickup(coinsGained);
     }
 
-    this.updateFloating(deltaTime);
-    this.feel.update(deltaTime, this.currentSpeed);
-
-    if (this.track.checkCollision(this.player)) {
-      this.gameOver();
+    // После возрождения кот какое-то время неуязвим.
+    if (this.invulnerableTime > 0) {
+      this.invulnerableTime = Math.max(0, this.invulnerableTime - deltaTime);
+      this.player.invulnerable = this.invulnerableTime;
+      return false;
     }
+    return this.track.checkCollision(this.player);
+  }
+
+  // Возрождение: один раз за забег, только с экрана проигрыша.
+  // Счёт продолжается, серия и множитель уже сброшены проигрышем.
+  canRevive() {
+    // Не во время рекламы/паузы и не когда уже запрошен рестарт (иначе рестарт
+    // после следующей смерти заблокируется).
+    return this.state === 'GAMEOVER'
+      && !this.reviveUsed
+      && !this.launchPending
+      && !this.isGameplayPaused?.();
+  }
+
+  revive() {
+    if (!this.canRevive()) return false;
+    this.reviveUsed = true;
+    this.track.clearAhead(this.player.y, CONFIG.REVIVE_CLEAR_AHEAD);
+    this.invulnerableTime = CONFIG.REVIVE_INVULNERABLE_SECONDS;
+    this.player.invulnerable = this.invulnerableTime;
+    this.state = 'PLAYING';
+    this.isNewBest = false;
+    this.keyboardInput?.reset?.();
+    this.mouseInput?.reset?.();
+    this.touchInput?.reset?.();
+    this.syncGameplayLifecycle?.();
+    return true;
   }
 
   updateFloating(deltaTime) {
@@ -375,7 +431,8 @@ export class Game {
       const submission = this.platform?.submitScore?.(totalScore);
       Promise.resolve(submission).catch(() => {});
     }
-    this.platform?.recordRunCompleted?.();
+    // После возрождения это тот же забег: для частоты рекламы не считаем дважды.
+    if (!this.reviveUsed) this.platform?.recordRunCompleted?.();
     this.syncGameplayLifecycle?.();
     this.feel?.onGameOver(this.player.x, this.player.y);
     if (this.isNewBest) this.feel?.onNewBest?.(this.player.x, this.player.y);

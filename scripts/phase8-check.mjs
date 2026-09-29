@@ -151,7 +151,7 @@ check('sprite onload notifies once without creating extra images', () => {
   assert(created === 5);
 });
 
-check('Loaf render preserves the 30x30 hitbox, canonical anchor, and no mirror', () => {
+check('Loaf render preserves the 36x36 hitbox, canonical anchor, and no mirror', () => {
   let created = 0;
   const calls = { translates: [], scales: [], rotates: [], drawImages: [] };
   const context = {
@@ -177,7 +177,7 @@ check('Loaf render preserves the 30x30 hitbox, canonical anchor, and no mirror',
   const layout = renderer.playerSpriteLayout();
   const sprite = CONFIG.VISUAL.LOAF_REAR;
   const sourceScale = sprite.DRAW_HEIGHT / sprite.SOURCE_HEIGHT;
-  assert(CONFIG.PLAYER_WIDTH === 30 && CONFIG.PLAYER_HEIGHT === 30);
+  assert(CONFIG.PLAYER_WIDTH === 36 && CONFIG.PLAYER_HEIGHT === 36); // Phase 1b: bigger cat
   assert(calls.translates[0][0] === 270 && calls.translates[0][1] === 840);
   assert(calls.scales[0][0] === 1 && calls.scales[0][1] === 1, 'idle frame should not squash');
   assert(Math.abs(calls.rotates[0] + 0.08) < 1e-9);
@@ -188,8 +188,8 @@ check('Loaf render preserves the 30x30 hitbox, canonical anchor, and no mirror',
   assert(Math.abs(layout.y + sprite.ANCHOR_Y * sourceScale) < 1e-9);
   assert(Math.abs(layout.width - sprite.SOURCE_WIDTH * sourceScale) < 1e-9);
   assert(layout.height === sprite.DRAW_HEIGHT);
-  assert(layout.height === 127);
-  assert(CONFIG.VISUAL.LOAF_REAR.FLOAT_CLEARANCE === 118);
+  assert(layout.height === 150); // Phase 1b: bigger cat
+  assert(CONFIG.VISUAL.LOAF_REAR.FLOAT_CLEARANCE === 139); // scaled with the cat
   assert(CONFIG.FEEL.PLAYER_RUN_FPS === 10);
 
   const afterLoad = created;

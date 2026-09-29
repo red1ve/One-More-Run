@@ -126,8 +126,16 @@ export class ObstacleArt {
         const cx = x0 + step * (i + row * 0.5) + (hash(k) - 0.5) * step * 0.3;
         const lift = row === 0 ? 0.62 : 0.2;
         const cy = baseY - r * (lift + hash(k + 1) * 0.25);
-        const rr = r * (row === 0 ? 0.82 : 0.9) * (0.88 + hash(k + 2) * 0.24);
-        clumps.push(cx, cy, rr);
+        // У узкого ящика клочок не шире самого ящика (+3 px с каждой стороны).
+        const rr = Math.min(
+          r * (row === 0 ? 0.82 : 0.9) * (0.88 + hash(k + 2) * 0.24),
+          (x1 - x0) / 2 + 3
+        );
+        // Листва не свисает в проход больше чем на 3 px: видимый проход = настоящий.
+        const lo = x0 + rr - 3;
+        const hi = x1 - rr + 3;
+        const x = lo <= hi ? Math.min(hi, Math.max(lo, cx)) : (x0 + x1) / 2;
+        clumps.push(x, cy, rr);
       }
     }
     const pass = (color, dx, dy, k) => {

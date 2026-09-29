@@ -1,3 +1,4 @@
+import { systemRandom, createSeededRandom } from './Random.js';
 import { CONFIG, getCoinChance, isIntentionalRiskType } from '../config.js';
 import { VariationDirector } from './VariationDirector.js';
 
@@ -49,7 +50,15 @@ export class Track {
     this.lastCoinZone = null;
     this.lastCoinYSlot = null;
     this.director = new VariationDirector();
+    this.random = systemRandom;
     this.init();
+  }
+
+  // Номер забега: одинаковый seed — одинаковая трасса. null — обычная случайность.
+  setSeed(seed) {
+    this.seed = seed == null || !Number.isFinite(Number(seed)) ? null : Number(seed);
+    this.random = this.seed == null ? systemRandom : createSeededRandom(this.seed);
+    this.director.random = this.random;
   }
 
   init() {
@@ -166,7 +175,7 @@ export class Track {
     if (bias === 'LEFT') target = centered * 0.35 + left * 0.65;
     else if (bias === 'RIGHT') target = centered * 0.35 + right * 0.65;
     else target = centered * 0.55 + mid * 0.45;
-    target += (Math.random() - 0.5) * 28;
+    target += (this.random() - 0.5) * 28;
     return Math.max(minFork, Math.min(maxFork, target));
   }
 
@@ -409,7 +418,8 @@ export class Track {
         : this.director.choosePattern({ runTime: this.runTime, segmentType, lastType })
     );
 
-    const segmentId = Date.now() + Math.random();
+    // С seed id тоже повторяемый (он же — зерно для картинки препятствий).
+    const segmentId = this.seed == null ? Date.now() + this.random() : Math.floor(this.random() * 1e9);
     const segment = {
       id: segmentId,
       y,
@@ -508,7 +518,7 @@ export class Track {
 
     const obsHeight = 40;
     const gapY = segmentY + 300;
-    const preferred = this.lastGapX + (Math.random() - 0.5) * 80;
+    const preferred = this.lastGapX + (this.random() - 0.5) * 80;
     const gap = this.placeReachableGap(this.getBreathingWidth(), gapY, preferred);
     const obstacles = [];
 
@@ -634,7 +644,7 @@ export class Track {
       item === lastValue ? CONFIG.COIN_ZONE_REPEAT_WEIGHT : 1
     ));
     const total = weights.reduce((sum, weight) => sum + weight, 0);
-    let roll = Math.random() * total;
+    let roll = this.random() * total;
     for (let i = 0; i < items.length; i += 1) {
       roll -= weights[i];
       if (roll <= 0) return items[i];
@@ -676,7 +686,7 @@ export class Track {
     return { min: minX + third, max: maxX - third };
   }
 
-  coinXForZone(zone, path, size, jitter = Math.random()) {
+  coinXForZone(zone, path, size, jitter = this.random()) {
     const available = this.coinAvailableX(path, size);
     if (!available) return null;
     const { minX, maxX } = available;
@@ -708,7 +718,7 @@ export class Track {
     };
   }
 
-  coinYForSlot(segment, path, size, slot, jitter = Math.random()) {
+  coinYForSlot(segment, path, size, slot, jitter = this.random()) {
     const slots = this.coinYSlots(segment, path, size);
     const range = slots[slot];
     if (!range || range[0] > range[1]) return null;
@@ -763,8 +773,8 @@ export class Track {
     const size = CONFIG.COIN_SIZE;
     const zone = options.zone || this.pickCoinZone();
     const ySlot = options.ySlot || this.pickCoinYSlot();
-    const xJitter = options.xJitter ?? Math.random();
-    const yJitter = options.yJitter ?? Math.random();
+    const xJitter = options.xJitter ?? this.random();
+    const yJitter = options.yJitter ?? this.random();
 
     const x = this.coinXForZone(zone, path, size, xJitter);
     const y = this.coinYForSlot(segment, path, size, ySlot, yJitter);
@@ -793,7 +803,7 @@ export class Track {
 
   maybePlaceCoin(segment) {
     if (segment.type !== 'NORMAL') return;
-    if (Math.random() >= getCoinChance(this.runTime) * this.director.coinChanceScale()) return;
+    if (this.random() >= getCoinChance(this.runTime) * this.director.coinChanceScale()) return;
 
     const zones = ['LEFT', 'CENTER', 'RIGHT'];
     const slots = ['AHEAD', 'MID', 'APPROACH'];
@@ -814,7 +824,7 @@ export class Track {
       const { safe, risk } = this.getChoiceWidths();
       const safeDef = { width: safe, type: 'SAFE', baseReward: CONFIG.REWARDS.SAFE };
       const riskDef = { width: risk, type: 'RISKY', baseReward: CONFIG.REWARDS.RISKY };
-      return Math.random() > 0.5 ? [riskDef, safeDef] : [safeDef, riskDef];
+      return this.random() > 0.5 ? [riskDef, safeDef] : [safeDef, riskDef];
     }
 
     if (segmentType === 'DUAL_RISK') {
@@ -828,7 +838,7 @@ export class Track {
         type: 'RISKY_HARD',
         baseReward: CONFIG.REWARDS.RISKY_HARD
       };
-      return Math.random() > 0.5 ? [hard, easy] : [easy, hard];
+      return this.random() > 0.5 ? [hard, easy] : [easy, hard];
     }
 
     return null;
@@ -983,7 +993,7 @@ export class Track {
     const maxFork = CONFIG.TRACK_RIGHT - forkW;
     const preferredFork = this.preferredChoiceForkX(forkW);
     const startFork = Math.max(minFork, Math.min(maxFork, preferredFork));
-    const riskyLeftFirst = Math.random() > 0.5;
+    const riskyLeftFirst = this.random() > 0.5;
 
     const tryLayout = (riskyLeft, forkX) => {
       let safeX;
@@ -1100,7 +1110,7 @@ export class Track {
     const maxFork = CONFIG.TRACK_RIGHT - forkW;
     const preferredFork = this.preferredChoiceForkX(forkW);
     const startFork = Math.max(minFork, Math.min(maxFork, preferredFork));
-    const hardLeftFirst = Math.random() > 0.5;
+    const hardLeftFirst = this.random() > 0.5;
 
     const tryLayout = (hardLeft, forkX) => {
       let easyX;
@@ -1262,6 +1272,25 @@ export class Track {
     if (segment.obstacles.length === 0) return false;
     const playerBottom = player.y + player.height / 2;
     return segment.obstacles.every((obs) => obs.y > playerBottom);
+  }
+
+  // Возрождение: убрать ряды, которые перед котом ближе distance (и тот, в который
+  // он врезался). Ряд считается пройденным без награды.
+  clearAhead(playerY, distance) {
+    let cleared = 0;
+    for (const segment of this.segments) {
+      if (segment.isPassed) continue;
+      const near = segment.obstacles.some((obs) => (
+        obs.y + obs.height > playerY - distance && obs.y < playerY + CONFIG.PLAYER_HEIGHT
+      ));
+      if (!near) continue;
+      segment.obstacles = [];
+      segment.paths = [];
+      segment.isPassed = true;
+      segment.clearedForRevive = true;
+      cleared += 1;
+    }
+    return cleared;
   }
 
   checkPassed(player) {

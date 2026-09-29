@@ -141,7 +141,7 @@ PATCH          x 1.55–4.55   y 1.10–5.85
 ANCHOR         (5.0, 7.9)
 ```
 
-The body centre at `ANCHOR (5.0, 7.9)` maps to the current player centre. The future **30 × 30 gameplay hitbox** maps approximately to grid bounds `x 1.25–8.75`, `y 4.15–11.65`. Ears and crown may extend visually beyond it; the solid torso and paw span must stay close to the hitbox so collisions remain believable.
+The body centre at `ANCHOR (5.0, 7.9)` maps to the current player centre. The **gameplay hitbox** (30 × 30 originally, 36 × 36 since Phase 1b with the cat drawn at 150 px) maps approximately to grid bounds `x 1.25–8.75`, `y 4.15–11.65`. Ears and crown may extend visually beyond it; the solid torso and paw span must stay close to the hitbox so collisions remain believable.
 
 Recommended first export: **40 × 48 logical px** (4 px per grid unit). A 2× source may be used for cleaner raster downsampling. Do not change the player hitbox to fit the art.
 
@@ -294,7 +294,7 @@ If a skin needs a new head, longer body, different ears, or different eye layout
 
 ### Production gameplay assets
 
-PLAYING uses four run frames built from `assets/characters/loaf-rear.svg` (1024 source, drawn at 127 px, visual silhouette about 38×101, paws aligned to the 30×30 hitbox bottom). Floating reward numbers spawn 118 px above the hitbox centre so they clear the ears. START may show `assets/characters/loaf-front.svg` above the existing title without moving copy. Hitbox stays 30×30. Player x/y are unchanged. Successful RISK / DUAL_RISK crossings play `assets/audio/meow.ogg` through AudioService.
+PLAYING uses four run frames built from `assets/characters/loaf-rear.svg` (1024 source, drawn at 150 px since Phase 1b (was 127) to match the reference, torso about 43 px wide, paws aligned to the 36×36 hitbox bottom). Floating reward numbers spawn 139 px above the hitbox centre so they clear the ears. START may show `assets/characters/loaf-front.svg` above the existing title without moving copy. Hitbox is 36×36 since Phase 1b (about 85% of the drawn torso width). Player x/y are unchanged. Successful RISK / DUAL_RISK crossings play `assets/audio/meow.ogg` through AudioService.
 
 ### Production asset rules
 
@@ -982,7 +982,7 @@ Do this order. Each layer assumes the previous is locked.
 1. **Visual tokens / palette** — add named colours to config. Triangle player may remain, but the world already uses SkyPaper/FloorSand. Proves the light corridor at speed.
 2. **World / background** — canvas fill, side gardens, remove black page.
 3. **Track materials** — floor, hedge edges, planter obstacles, stitch dashes. Patterns unchanged.
-4. **Master Cat** — Loaf sprite on the existing 30×30 hitbox. Bob/lean/squash only.
+4. **Master Cat** — Loaf sprite on the gameplay hitbox (36×36 since Phase 1b). Bob/lean/squash only.
 5. **Coin** — button disc in CoinAmber.
 6. **Effects** — retint particles, flashes, floating numbers.
 7. **HUD / START / Game Over** — plates, sit pose, same copy.

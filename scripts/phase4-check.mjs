@@ -1169,13 +1169,19 @@ check('Variation Director avoids long Choice or Breathing-only streaks', () => {
 });
 
 check('Choice fork position can vary without breaking reachability', () => {
+  // Одинаковый seed у обоих забегов: отличается только смещение развилки
+  // (раньше проверка иногда падала из-за разной случайности).
   const leftTrack = new Track();
+  leftTrack.setSeed(1171);
+  leftTrack.init();
   leftTrack.director.forcedForkBias = 'LEFT';
   const left = addChoiceOrRetry(leftTrack);
   assert(left.type === 'TWO_PATHS', 'LEFT bias should still make a Choice');
   const leftX = Math.min(...left.paths.map((path) => path.x));
 
   const rightTrack = new Track();
+  rightTrack.setSeed(1171);
+  rightTrack.init();
   rightTrack.director.forcedForkBias = 'RIGHT';
   const right = addChoiceOrRetry(rightTrack);
   const rightX = Math.min(...right.paths.map((path) => path.x));
