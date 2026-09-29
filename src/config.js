@@ -155,6 +155,13 @@ export const CONFIG = {
     HEDGE_BAND: 28,
     // Высота (px) ровного песка у горизонта, прячет полоски сжатой текстуры.
     FAR_SAND_VEIL: 70,
+    // Препятствия-кашпо и ворота (ObstacleArt.js). Высота — в долях роста кота у кота.
+    GARDEN_OBSTACLES: {
+      ENABLED: true,
+      PLANTER_NEAR_CAT: 0.36,
+      GATE_NEAR_CAT: 0.64,
+      FLOWER_CHANCE: 0.3
+    },
     // Газон за изгородью (LawnArt.js): пятна и пучки травы.
     LAWN: {
       PATCH_PERIOD: 34,

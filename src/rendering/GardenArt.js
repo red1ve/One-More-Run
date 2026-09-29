@@ -1,5 +1,6 @@
 import { HedgeArt } from './HedgeArt.js';
 import { LawnArt } from './LawnArt.js';
+import { ObstacleArt, obstacleLook } from './ObstacleArt.js';
 import { CONFIG } from '../config.js';
 import { getGardenSheets } from './gardenAssets.js';
 import {
@@ -154,6 +155,7 @@ export class GardenArt {
     this.c = c;
     this.hedges = new HedgeArt(this);
     this.lawn = new LawnArt(this);
+    this.obstacleArt = new ObstacleArt(ctx);
     this.roseArch = this.loadVectorArt(
       new URL('../../assets/environment/garden/landmarks/rose-arch.svg', import.meta.url).href,
       CONFIG.VISUAL.ROSE_ARCH?.RASTER_WIDTH ?? 240
@@ -2431,6 +2433,8 @@ export class GardenArt {
         ? segment.visualObstacleScale
         : 1;
       const choice = this.isChoiceVisual(segment);
+      const look = obstacleLook(this.obstacleFamilyFor(segment));
+      const lookSeed = Number(segment.visualObstacleSeed) || 1;
 
       rows.forEach((row) => {
         const spans = this.mergeFenceSpans(row.obstacles);
@@ -2438,8 +2442,10 @@ export class GardenArt {
         const sample = spans[0];
         const vis = this.projectTrackRect(sample.x, sample.y, sample.width, sample.height);
         if (!vis) return;
-        const h = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * vis.uniformScale;
-        const gateH = choice
+        const h = this.useGardenObstacles()
+          ? this.obstacleArt.height(look, this.catH(), vis.uniformScale)
+          : this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * vis.uniformScale;
+        const gateH = choice && !this.useGardenObstacles()
           ? this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * vis.uniformScale
           : 0;
         // Keep rows alive behind the reveal crest (HIDDEN) so they can emerge
@@ -2457,6 +2463,8 @@ export class GardenArt {
         prop.spans = spans;
         prop.openings = (row.paths || []).slice();
         prop.choice = choice;
+        prop.look = look;
+        prop.lookSeed = lookSeed;
         prop.classScale = classScale;
         prop.screenY = vis.screenY;
         prop.groundY = vis.groundY;
@@ -2577,17 +2585,25 @@ export class GardenArt {
     return this.catH() * nearCat * scale;
   }
 
+  // Planters and flower gates drawn by ObstacleArt.js instead of the fence kit.
+  useGardenObstacles() {
+    return !!CONFIG.VISUAL.GARDEN_OBSTACLES?.ENABLED;
+  }
+
   drawFenceRow(prop) {
     if (!prop || !prop.spans || !prop.spans.length) return;
     const kit = this.ensureFenceKit();
     if (!kit) return;
     const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
-    const h = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * scale;
+    const garden = this.useGardenObstacles();
+    const h = garden
+      ? this.obstacleArt.height(prop.look, this.catH(), scale)
+      : this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * scale;
     const groundY = prop.groundY;
     const worldY = Number.isFinite(prop.worldY) ? prop.worldY : groundY;
     const road = this.roadAt(worldY);
     const choice = !!(prop.choice && prop.openings && prop.openings.length >= 2);
-    const gateH = choice
+    const gateH = choice && !garden
       ? this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * scale
       : 0;
     const occH = Math.max(h, gateH);
@@ -2601,10 +2617,16 @@ export class GardenArt {
       if (occ.state === 'VISIBLE') {
         this.contactShadow((x0 + x1) / 2, groundY + 1, Math.max(16, x1 - x0), prop.screenY);
       }
-      this.drawFenceSpan(kit, x0, x1, groundY, h, 1, span, worldY);
+      if (garden) {
+        this.obstacleArt.drawSpan(prop.look, x0, x1, groundY, this.catH(), scale, prop.lookSeed + span.x * 0.37);
+      } else {
+        this.drawFenceSpan(kit, x0, x1, groundY, h, 1, span, worldY);
+      }
     });
 
-    if (choice) {
+    // The reference has no frames over choice openings: gap width, sills and
+    // reward values carry SAFE / RISK, so frames are off with garden obstacles.
+    if (choice && !garden) {
       const gateKit = this.ensureGatewayKit();
       if (gateKit) {
         prop.openings.forEach((path) => {
