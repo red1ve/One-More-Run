@@ -29,6 +29,9 @@ page.on('console', (msg) => {
   if (msg.type() === 'error') consoleErrors.push(msg.text());
 });
 page.on('pageerror', (err) => consoleErrors.push(String(err)));
+page.on('response', (res) => {
+  if (res.status() >= 400) consoleErrors.push(`HTTP ${res.status()} ${res.url()}`);
+});
 
 async function shot(name) {
   const data = await page.evaluate(() => document.getElementById('game-canvas').toDataURL('image/png'));
@@ -51,5 +54,5 @@ await page.waitForTimeout(1200);
 await shot('03-gameover');
 
 await browser.close();
-const unexpected = consoleErrors.filter((t) => !/sdk\.js|Failed to load resource/.test(t));
+const unexpected = consoleErrors.filter((t) => !/sdk\.js/.test(t) && !/^Failed to load resource/.test(t));
 console.log(unexpected.length ? `Ошибки консоли:\n${unexpected.join('\n')}` : 'Ошибок консоли нет (кроме ожидаемого sdk.js).');
