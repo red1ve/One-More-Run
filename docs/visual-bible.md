@@ -463,6 +463,10 @@ Since Phase 1 step 2 (2026-09) the edge is `src/rendering/HedgeArt.js` (`VISUAL.
 
 Bush and grass tufts sit on the hedge band itself so the border reads as a living garden edge, not a pipe of identical blobs. A road-edge layer (grass / flowers / small bushes, with hooks for future `road-edge-*.png`) sits between sand and hedge. Pack side-mass sprites sit in the outer lawn behind those borders, are not mirrored, and share depth projection with other MAIN_WORLD plants. Left and right masses use different world-Y periods so they do not alternate as a stripe. Near trees may overflow the viewport edge. The playable sand stays clear except for gates and coins. The cat cannot leave the sand: LEFT_BORDER / RIGHT_BORDER are the road boundaries, not extra obstacles.
 
+### Horizon landmark
+
+Since Phase 1 step 3 (2026-09) the far end of the path is a rose-covered pergola, `assets/environment/garden/landmarks/rose-arch.svg`: two square PlanterWood posts with WoodLight / WoodShade sides, knee braces, a top beam buried in HedgeShade / HedgeSage / HedgeLeafLight foliage (heavier on the left), BlossomPink and CloudWhite roses, vine stems on the posts. One InkBrown outline on the wood only. It is rasterized once and drawn at `ALPHA` 0.88 so the sky shows through as distance haze (`VISUAL.ROSE_ARCH`). The tiled sand fades into plain sand over the last `FAR_SAND_VEIL` px so the path runs smoothly into the arch.
+
 ### Obstacles / gates
 
 Obstacle rects use one visual family per segment as a shell over existing geometry. The family is stored on the segment (`FLOWER_GATE`, `STANDING_PLANTER`, or `GARDEN_FENCE`) when the segment is created and does not change while that segment is alive. Pack rendering uses one continuous `garden-fence` construction for every barrier row, with openings left as gaps. TWO_PATHS and DUAL_RISK add a separate open gateway (`single-choice-arch` posts + beam) on each opening. SAFE and RISK openings in the same row share one barrier height. Pack off falls back to procedural wood. SAFE / RISK readability lives on gap width, inner-face material, and sills — not a bright accent strip.
@@ -534,6 +538,7 @@ Named tokens. New colours are not allowed without updating this bible.
 | CloudWhite | SkyPaper lightened, `#FBF8EA` | Clouds on GardenSky |
 | HedgeLeafLight | HedgeSage lightened, `#9DBB5C` | Lit top-left of hedge and planter leaf clumps |
 | BlossomPink | CatGinger toward SkyPaper, `#F4B3A2` | Pink hedge and planter flowers (white flowers use CloudWhite, centres CoinAmber) |
+| WoodShade | PlanterWood toward InkBrown, `#9A5F36` | Shaded side of posts and planks |
 
 ### Why each core colour exists
 
