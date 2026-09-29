@@ -112,7 +112,9 @@ export const CONFIG = {
   YANDEX: {
     SDK_URL: '/sdk.js',
     DEFAULT_LANGUAGE: 'en',
-    SUPPORTED_LANGUAGES: ['en'],
+    SUPPORTED_LANGUAGES: ['en', 'ru'],
+    // Языки, для которых показываем русский интерфейс (так советует Яндекс для СНГ).
+    RUSSIAN_UI_LANGUAGES: ['ru', 'be', 'kk', 'uk', 'uz'],
     LEADERBOARD_NAME: 'one_more_run_score',
     ADS_ENABLED: true,
     INTERSTITIAL_COOLDOWN_RUNS: 3

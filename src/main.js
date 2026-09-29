@@ -4,6 +4,8 @@ import '@fontsource/fredoka/600.css';
 import '@fontsource/fredoka/700.css';
 import { Game } from './game/Game.js';
 import { YandexService } from './services/YandexService.js';
+import { setLanguage } from './localization/i18n.js';
+import { loadCyrillicFont } from './localization/fonts.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('game-canvas');
@@ -64,7 +66,22 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
   yandex.notifyGameReady();
+  // Язык из Яндекса; без SDK — английский. В npm run dev можно проверить: ?lang=ru.
+  const devLang = import.meta.env?.DEV
+    ? new URLSearchParams(window.location.search).get('lang')
+    : null;
+  const applyLanguage = (lang) => {
+    setLanguage(lang);
+    // Русский шрифт грузится только для русского языка; перерисовываем, когда готов.
+    if (lang === 'ru') {
+      loadCyrillicFont().then(() => {
+        if (game.state === 'START') game.render();
+      });
+    }
+    if (game.state === 'START') game.render();
+  };
+  if (devLang) applyLanguage(devLang);
   yandex.init().then(() => {
-    document.documentElement.lang = yandex.getLanguage();
+    if (!devLang) applyLanguage(yandex.getLanguage());
   });
 });

@@ -78,7 +78,7 @@ await check('SDK language en selects the English UI', async () => {
   assert(service.getLanguage() === 'en');
 });
 
-await check('SDK language ru is detected with honest English fallback', async () => {
+await check('SDK language ru selects the Russian UI', async () => {
   const sdk = makeReadySdk({ environment: { i18n: { lang: 'ru' } } });
   const service = new YandexService({
     environment: { YaGames: { init: async () => sdk } },
@@ -87,7 +87,21 @@ await check('SDK language ru is detected with honest English fallback', async ()
   });
   await service.init();
   assert(service.getDetectedLanguage() === 'ru');
-  assert(service.getLanguage() === 'en', 'Russian UI is not implemented yet');
+  assert(service.getLanguage() === 'ru', 'Russian UI is available since Phase 4');
+});
+
+await check('CIS languages (uk, be, kk, uz) get the Russian UI', async () => {
+  for (const lang of ['uk', 'be', 'kk', 'uz']) {
+    const sdk = makeReadySdk({ environment: { i18n: { lang } } });
+    const service = new YandexService({
+      environment: { YaGames: { init: async () => sdk } },
+      config: makeConfig(),
+      logger: silentLogger()
+    });
+    await service.init();
+    assert(service.getDetectedLanguage() === lang);
+    assert(service.getLanguage() === 'ru', `${lang} should show Russian`);
+  }
 });
 
 await check('unknown SDK language falls back to English', async () => {

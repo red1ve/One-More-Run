@@ -1,3 +1,4 @@
+import { t } from '../localization/i18n.js';
 import { CONFIG, getTrackSpeed, getPlayerSpeed } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WorldCamera } from '../rendering/WorldCamera.js';
@@ -362,15 +363,15 @@ export class Game {
 
     let subtitle = null;
     if (isIntentional && this.multiplier > prevMultiplier) {
-      subtitle = `STREAK ${this.riskStreak} • SCORE x${this.multiplier.toFixed(1)}`;
+      subtitle = t('float.streakScore', { streak: this.riskStreak, mult: this.multiplier.toFixed(1) });
     } else if (isIntentional && !this.riskHintSeen) {
-      subtitle = 'RISK BUILDS STREAK';
+      subtitle = t('float.riskHint');
       this.riskHintSeen = true;
       this.storage?.set?.('riskHintSeen', true);
     } else if (isIntentional && prevMultiplier > 1) {
-      subtitle = `SCORE x${prevMultiplier.toFixed(1)}`;
+      subtitle = t('float.score', { mult: prevMultiplier.toFixed(1) });
     } else if (lostStreak) {
-      subtitle = 'STREAK RESET';
+      subtitle = t('float.streakReset');
     }
 
     const life = isIntentional ? CONFIG.FEEL.FLOAT_LIFE : CONFIG.FEEL.FLOAT_LIFE * 0.75;
