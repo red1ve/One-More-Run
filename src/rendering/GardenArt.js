@@ -2,6 +2,7 @@ import { HedgeArt } from './HedgeArt.js';
 import { LawnArt } from './LawnArt.js';
 import { SideDecorArt } from './SideDecorArt.js';
 import { SkyArt } from './SkyArt.js';
+import { SandArt } from './SandArt.js';
 import { ObstacleArt, obstacleLook } from './ObstacleArt.js';
 import { CONFIG } from '../config.js';
 import { getGardenSheets } from './gardenAssets.js';
@@ -159,6 +160,7 @@ export class GardenArt {
     this.lawn = new LawnArt(this);
     this.sideDecor = new SideDecorArt(this);
     this.skyArt = new SkyArt(this.width, this.height);
+    this.sandArt = new SandArt(this);
     this.obstacleArt = new ObstacleArt(ctx);
     this.roseArch = this.loadVectorArt(
       new URL('../../assets/environment/garden/landmarks/rose-arch.svg', import.meta.url).href,
@@ -1969,6 +1971,15 @@ export class GardenArt {
 
     const farSample = samples[0];
     const nearSample = samples[samples.length - 1];
+    // New look: light sand with soft spots (SandArt.js) instead of the streaky texture.
+    if (this.useHedgeWall()) {
+      ctx.save();
+      traceRibbon(0);
+      ctx.clip();
+      this.sandArt.draw(progress);
+      ctx.restore();
+      return;
+    }
     if (typeof ctx.createLinearGradient === 'function') {
       ctx.save();
       traceRibbon(0);
@@ -3003,7 +3014,7 @@ export class GardenArt {
   groundShadow(x, y, rx, ry) {
     const ctx = this.ctx;
     ctx.fillStyle = this.c.ShadowDust;
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = CONFIG.VISUAL.SHADOW_ALPHA ?? 0.5;
     ctx.beginPath();
     if (typeof ctx.ellipse === 'function') {
       ctx.ellipse(x + 3, y, rx, ry, 0, 0, Math.PI * 2);

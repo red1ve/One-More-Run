@@ -1,6 +1,6 @@
 import { CONFIG } from '../config.js';
 
-// Газон по бокам от изгороди, как на референсе: сплошной сочный GardenLawn,
+// Газон по бокам от изгороди, как на референсе: сплошной сочный GardenLawn без дымки,
 // мягкие пятна потемнее и посветлее, мелкие пучки травы. Пятна и пучки
 // привязаны к миру (едут вместе с дорогой) и уменьшаются по перспективе.
 
@@ -9,7 +9,6 @@ const LAWN = '#B4C05A'; // GardenLawn
 const LAWN_SHADE = '#9EB455'; // LawnShade
 const LAWN_LIGHT = '#BEC96A'; // LawnLight
 const TUFT = '#94A74F'; // LawnTuft
-const HAZE = '#B1C678'; // GardenLawn + GardenSky: газон у горизонта в дымке
 
 function hash(n) {
   const x = Math.sin(n * 91.7 + 47.3) * 43758.5453;
@@ -36,10 +35,7 @@ export class LawnArt {
     const ctx = art.ctx;
     const top = art.horizonY() - 2;
     ctx.save();
-    const fill = ctx.createLinearGradient(0, top, 0, top + 160);
-    fill.addColorStop(0, HAZE);
-    fill.addColorStop(1, LAWN);
-    ctx.fillStyle = fill;
+    ctx.fillStyle = LAWN;
     ctx.fillRect(0, top, art.width, art.height - top + 60);
     this.collect(camera?.progress || 0);
     this.drawPatches(ctx);

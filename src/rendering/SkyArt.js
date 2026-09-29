@@ -7,13 +7,13 @@ import { CONFIG } from '../config.js';
 
 // Палитра из docs/visual-bible.md §6 (2026-09).
 const SKY = '#9CDCEC'; // GardenSky
-const SKY_HAZE = '#C6E9EF'; // SkyHaze: небо у горизонта
+const SKY_HAZE = '#B4E4EE'; // SkyHaze: небо у горизонта
 const CLOUD = '#FBF8EA'; // CloudWhite
 const CLOUD_SHADE = '#DCEEF0'; // CloudShade
-const TREE_FAR = '#8DBF9D'; // FarTree: HedgeSage в дымке неба
+const TREE_FAR = '#7DB38A'; // FarTree: HedgeSage в дымке неба
 const TREE_NEAR = '#6A8D44'; // NearTree: HedgeSage к HedgeShade
-const TREE_NEAR_LIGHT = '#7EA24E'; // HedgeSage
-const LAWN_HAZE = '#B1C678'; // газон у горизонта (как в LawnArt)
+const TREE_NEAR_LIGHT = '#76A544'; // HedgeSage
+const LAWN_HAZE = '#B4C05A'; // газон у горизонта (как в LawnArt)
 
 // Запас сверху и снизу, чтобы при сдвиге камеры не было щелей.
 const PAD = 48;

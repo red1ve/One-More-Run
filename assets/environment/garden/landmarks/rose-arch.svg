@@ -23,17 +23,17 @@
   </g>
 
   <!-- лозы по столбам: вьющийся стебель, на нём листья -->
-  <g fill="none" stroke="#4B6D36" stroke-width="2.4" stroke-linecap="round">
+  <g fill="none" stroke="#43682F" stroke-width="2.4" stroke-linecap="round">
     <path d="M40 56 C54 66 32 80 48 92 C60 102 30 112 40 126 C50 138 32 146 42 166"/>
     <path d="M160 56 C146 70 168 84 152 100 C142 112 168 120 160 134 C152 146 166 154 156 166"/>
   </g>
-  <g fill="#4B6D36">
+  <g fill="#43682F">
     <circle cx="36" cy="72" r="7"/><circle cx="50" cy="92" r="6"/><circle cx="37" cy="112" r="7"/>
     <circle cx="49" cy="134" r="6"/><circle cx="38" cy="154" r="7"/>
     <circle cx="164" cy="80" r="6"/><circle cx="150" cy="104" r="7"/><circle cx="163" cy="128" r="6"/>
     <circle cx="151" cy="152" r="6"/>
   </g>
-  <g fill="#7EA24E">
+  <g fill="#76A544">
     <circle cx="35" cy="70" r="5.5"/><circle cx="49" cy="90" r="4.5"/><circle cx="36" cy="110" r="5.5"/>
     <circle cx="48" cy="132" r="4.5"/><circle cx="37" cy="152" r="5.5"/>
     <circle cx="163" cy="78" r="4.5"/><circle cx="149" cy="102" r="5.5"/><circle cx="162" cy="126" r="4.5"/>
@@ -41,23 +41,23 @@
   </g>
 
   <!-- зелень на балке: тень, основной цвет, блики. Слева гуще, как на референсе -->
-  <g fill="#4B6D36">
+  <g fill="#43682F">
     <circle cx="24" cy="44" r="14"/><circle cx="44" cy="36" r="17"/><circle cx="66" cy="32" r="15"/>
     <circle cx="88" cy="34" r="13"/><circle cx="108" cy="33" r="13"/><circle cx="128" cy="35" r="13"/>
     <circle cx="150" cy="34" r="14"/><circle cx="172" cy="40" r="12"/><circle cx="36" cy="58" r="10"/>
     <circle cx="164" cy="54" r="8"/>
   </g>
-  <g fill="#7EA24E">
+  <g fill="#76A544">
     <circle cx="22" cy="41" r="12"/><circle cx="42" cy="32" r="15"/><circle cx="64" cy="28" r="13"/>
     <circle cx="86" cy="31" r="11"/><circle cx="106" cy="30" r="11"/><circle cx="126" cy="32" r="11"/>
     <circle cx="148" cy="31" r="12"/><circle cx="170" cy="37" r="10"/><circle cx="34" cy="55" r="8"/>
     <circle cx="162" cy="52" r="6"/>
   </g>
-  <g fill="#7EA24E">
+  <g fill="#76A544">
     <circle cx="54" cy="18" r="8"/><circle cx="116" cy="20" r="7"/><circle cx="160" cy="24" r="6"/>
     <circle cx="10" cy="52" r="7"/><circle cx="186" cy="48" r="6"/>
   </g>
-  <g fill="#9DBB5C">
+  <g fill="#9CC456">
     <circle cx="17" cy="36" r="5"/><circle cx="36" cy="25" r="6"/><circle cx="58" cy="21" r="5"/>
     <circle cx="82" cy="25" r="4"/><circle cx="102" cy="24" r="4"/><circle cx="122" cy="26" r="4"/>
     <circle cx="143" cy="25" r="5"/><circle cx="166" cy="32" r="4"/>

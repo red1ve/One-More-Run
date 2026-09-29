@@ -10,9 +10,9 @@ const INK = '#4A3428'; // InkBrown
 const WOOD = '#BF7A45'; // PlanterWood
 const WOOD_LIGHT = '#D39048'; // WoodLight
 const WOOD_SHADE = '#9A5F36'; // WoodShade
-const LEAF = '#7EA24E'; // HedgeSage
-const LEAF_SHADE = '#4B6D36'; // HedgeShade
-const LEAF_LIGHT = '#9DBB5C'; // HedgeLeafLight
+const LEAF = '#76A544'; // HedgeSage
+const LEAF_SHADE = '#43682F'; // HedgeShade
+const LEAF_LIGHT = '#9CC456'; // HedgeLeafLight
 const PETAL = '#FBF8EA'; // CloudWhite
 const PETAL_PINK = '#F4B3A2'; // BlossomPink
 const POLLEN = '#E8B84A'; // CoinAmber
@@ -49,8 +49,15 @@ export class ObstacleArt {
   drawSpan(look, x0, x1, groundY, catH, scale, rawSeed) {
     if (x1 - x0 < 3) return;
     const seed = Number.isFinite(rawSeed) ? rawSeed : 1;
+    // save/restore: цвета, толщина линий и прозрачность не «утекают» дальше.
+    this.ctx.save();
+    // Слишком узкий для створки участок ворот выглядел бы как красные палки:
+    // такой участок рисуем узким кашпо.
+    const gateH = catH * (this.cfg().GATE_NEAR_CAT ?? 0.64) * scale;
+    if (look === 'gate' && x1 - x0 < gateH * (this.cfg().GATE_MIN_WIDTH ?? 0.9)) look = 'planter';
     if (look === 'gate') this.drawGate(x0, x1, groundY, catH * (this.cfg().GATE_NEAR_CAT ?? 0.64) * scale, seed);
     else this.drawPlanter(x0, x1, groundY, catH * (this.cfg().PLANTER_NEAR_CAT ?? 0.36) * scale, seed);
+    this.ctx.restore();
   }
 
   line() {
