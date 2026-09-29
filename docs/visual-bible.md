@@ -208,6 +208,8 @@ Left and right lean cannot be made by naive mirroring. The folded right ear and 
 
 #### Sit / Game Over view
 
+Production asset since Phase 3 (2026-09): `assets/characters/loaf-sit.svg` (300×360, 1 grid unit = 30). One outline weight, flat CatCream / CatGinger / InkBrown, a single ShadowDust cel shade on the body and one ground-shadow ellipse — never a duplicated offset copy of the cat (the rejected old `loaf-sit.svg` doubled because of that). The old realistic `loaf-front.svg` was removed.
+
 Sit pose is front three-quarter so the player reconnects with Loaf after failure.
 
 ```text
@@ -755,6 +757,8 @@ Phase 8 copy stays. This section is materials only.
 - Control line and first-run hints keep current wording, Caption size, InkMuted
 - Mute line stays `M SOUND` / `M MUTED`
 
+Since Phase 3 (2026-09): no cream wash over the world, only a light InkBrown dim (`VISUAL.SCREENS.DIM_START` 0.12). One SkyPaper card (`CARD_X` 36, `CARD_W` 468, radius 26, 3 px InkBrown, hard ShadowDust offset — the HUD kit scaled up) with the sitting Loaf (`assets/characters/loaf-sit.svg`, 170 px) standing on its top edge. CTA is a CoinAmber capsule, like the multiplier pill on the reference. Sound is its own SkyPaper capsule below the card; the tiny HUD mute caption shows only while PLAYING. Minimum text is 20 logical px (≈13 px on a 360×640 phone). Every line auto-shrinks to fit the card (`Renderer.fitText`, never below `MIN_FONT` 16) so Russian strings (~33% longer) fit without a relayout.
+
 ### HUD (PLAYING)
 
 Keep the current information map:
@@ -772,6 +776,8 @@ HUD badges are lighter than START / Game Over plates: ~62% SkyPaper, 2 px InkBro
 ### Game Over
 
 See §13. Same kit. Primary CTA **TAP / R TO RESTART**.
+
+Since Phase 3 (2026-09): same card and sitting Loaf as START, dim fades to `DIM_GAME_OVER` 0.28. Order: GAME OVER title → NEW BEST CoinAmber capsule (pulsing) or `N TO NEW BEST` → big score → two full-width SkyPaper capsules stacked (paw + BEST n, coin + COINS n • SAVED; stacked, not side by side, so Russian fits) → CoinAmber restart capsule → sound capsule below the card.
 
 ### Floating rewards
 

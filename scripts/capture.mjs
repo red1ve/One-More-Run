@@ -23,7 +23,9 @@ fs.mkdirSync(outDir, { recursive: true });
 
 const { chromium } = await loadPlaywright();
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 600, height: 1067 } });
+// Размер окна: по умолчанию 600×1067, можно задать VIEWPORT=360x640.
+const [vw, vh] = (process.env.VIEWPORT || '600x1067').split('x').map(Number);
+const page = await browser.newPage({ viewport: { width: vw, height: vh } });
 const consoleErrors = [];
 page.on('console', (msg) => {
   if (msg.type() === 'error') consoleErrors.push(msg.text());
