@@ -1,6 +1,33 @@
 {
-  "menu": {
-    "play": "PLAY",
-    "settings": "SETTINGS"
+  "start": {
+    "title": "ONE MORE RUN",
+    "play": "TAP TO START",
+    "controls": "A/D or ←/→  •  TAP LEFT/RIGHT",
+    "hintChoice": "SAFE = SURVIVE  •  RISK = BIG SCORE",
+    "hintStreak": "RISK BUILDS STREAK → SCORE x",
+    "hintCoins": "COINS STAY BETWEEN RUNS"
+  },
+  "sound": {
+    "on": "M SOUND",
+    "off": "M MUTED"
+  },
+  "over": {
+    "title": "GAME OVER",
+    "newBest": "NEW BEST",
+    "toBest": "{n} TO NEW BEST",
+    "score": "SCORE",
+    "best": "BEST {n}",
+    "coins": "COINS {n}  •  SAVED",
+    "restart": "TAP / R TO RESTART"
+  },
+  "hud": {
+    "best": "BEST {n}",
+    "streak": "STREAK"
+  },
+  "float": {
+    "streakScore": "STREAK {streak} • SCORE x{mult}",
+    "riskHint": "RISK BUILDS STREAK",
+    "score": "SCORE x{mult}",
+    "streakReset": "STREAK RESET"
   }
 }

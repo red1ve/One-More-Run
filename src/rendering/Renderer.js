@@ -1,7 +1,10 @@
+import { t } from '../localization/i18n.js';
 import { CONFIG, isRiskPathType } from '../config.js';
 import { GardenArt } from './GardenArt.js';
 
-const FONT_FAMILY = "'Fredoka', system-ui, sans-serif";
+// Fredoka — латиница и цифры; русские буквы браузер берёт из 'OMR Cyrillic'
+// (M PLUS Rounded 1c, см. src/localization/fonts.js).
+const FONT_FAMILY = "'Fredoka', 'OMR Cyrillic', system-ui, sans-serif";
 const LOAF_SIT_URL = new URL('../../assets/characters/loaf-sit.svg', import.meta.url).href;
 const LOAF_RUN_URLS = [
   new URL('../../assets/characters/run/loaf-run-01.svg', import.meta.url).href,
@@ -366,7 +369,7 @@ export class Renderer {
 
     // --- Score / best pill (left) ---
     const scoreText = `${score}`;
-    const bestText = `BEST ${bestScore}`;
+    const bestText = t('hud.best', { n: bestScore });
     const scoreTextW = Math.max(
       measure(scoreText, `700 20px ${FONT_FAMILY}`),
       measure(bestText, `600 11px ${FONT_FAMILY}`)
@@ -415,7 +418,7 @@ export class Renderer {
     const streakLabelFont = `600 9px ${FONT_FAMILY}`;
     const streakIconR = 13;
     const streakTextW = Math.max(
-      measure('STREAK', streakLabelFont),
+      measure(t('hud.streak'), streakLabelFont),
       measure(`${riskStreak}`, streakNumFont)
     );
     const streakW = 10 + streakIconR * 2 + 6 + streakTextW + 12;
@@ -429,7 +432,7 @@ export class Renderer {
     ctx.scale(streakScale, streakScale);
     ctx.fillStyle = streakActive ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_HUD;
     ctx.font = streakLabelFont;
-    ctx.fillText('STREAK', 0, -6);
+    ctx.fillText(t('hud.streak'), 0, -6);
     ctx.fillStyle = streakActive ? CONFIG.COLORS.UI_ACCENT : CONFIG.COLORS.UI_TEXT;
     ctx.font = streakNumFont;
     ctx.fillText(`${riskStreak}`, 0, 11);
@@ -458,7 +461,7 @@ export class Renderer {
     ctx.textAlign = 'left';
     ctx.fillStyle = muted ? CONFIG.COLORS.UI_HUD : CONFIG.COLORS.UI_TEXT;
     ctx.font = `600 11px ${FONT_FAMILY}`;
-    ctx.fillText(muted ? 'M MUTED' : 'M SOUND', 20, this.height - 18);
+    ctx.fillText(t(muted ? 'sound.off' : 'sound.on'), 20, this.height - 18);
   }
 
   // --- Экраны START и Game Over (Фаза 3): карточка и капсулы в стиле HUD ---
@@ -534,22 +537,22 @@ export class Renderer {
     this.garden.plate(cardX, cardY, cardW, cardH, 26);
     this.drawSitLoaf(cardY + 14);
 
-    this.fitText('ONE MORE RUN', cx, cardY + 78, 700, 52, textW, CONFIG.COLORS.UI_TEXT);
+    this.fitText(t('start.title'), cx, cardY + 78, 700, 52, textW, CONFIG.COLORS.UI_TEXT);
 
     this.screenPill(cx, cardY + 136, 320, 64, CONFIG.COLORS.CoinAmber);
-    this.fitText('TAP TO START', cx, cardY + 146, 700, 28, 280, CONFIG.COLORS.UI_TEXT);
+    this.fitText(t('start.play'), cx, cardY + 146, 700, 28, 280, CONFIG.COLORS.UI_TEXT);
 
-    this.fitText('A/D or ←/→  •  TAP LEFT/RIGHT', cx, cardY + 208, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+    this.fitText(t('start.controls'), cx, cardY + 208, 600, 20, textW, CONFIG.COLORS.UI_HUD);
 
     if (showFirstRunHints) {
-      this.fitText('SAFE = SURVIVE  •  RISK = BIG SCORE', cx, cardY + 258, 700, 21, textW, CONFIG.COLORS.UI_TEXT);
-      this.fitText('RISK BUILDS STREAK → SCORE x', cx, cardY + 294, 600, 20, textW, CONFIG.COLORS.UI_HUD);
-      this.fitText('COINS STAY BETWEEN RUNS', cx, cardY + 326, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+      this.fitText(t('start.hintChoice'), cx, cardY + 258, 700, 21, textW, CONFIG.COLORS.UI_TEXT);
+      this.fitText(t('start.hintStreak'), cx, cardY + 294, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+      this.fitText(t('start.hintCoins'), cx, cardY + 326, 600, 20, textW, CONFIG.COLORS.UI_HUD);
     }
 
     const soundY = cardY + cardH + 44;
-    this.screenPill(cx, soundY, 176, 44, CONFIG.COLORS.SkyPaper);
-    this.fitText(muted ? 'M MUTED' : 'M SOUND', cx, soundY + 7, 600, 20, 150, CONFIG.COLORS.UI_TEXT);
+    this.screenPill(cx, soundY, 210, 44, CONFIG.COLORS.SkyPaper);
+    this.fitText(t(muted ? 'sound.off' : 'sound.on'), cx, soundY + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
   }
 
   drawGameOver(score, bestScore, coins = 0, age = 1, extras = {}) {
@@ -569,32 +572,32 @@ export class Renderer {
     this.drawSitLoaf(cardY + 14);
     this.ctx.globalAlpha = fade;
 
-    this.fitText('GAME OVER', cx, cardY + 74, 700, 48, textW, CONFIG.COLORS.UI_TEXT);
+    this.fitText(t('over.title'), cx, cardY + 74, 700, 48, textW, CONFIG.COLORS.UI_TEXT);
 
     if (isNewBest) {
       const pulse = 1 + 0.06 * Math.sin(age * 10);
       this.ctx.save();
       this.ctx.translate(cx, cardY + 116);
       this.ctx.scale(pulse, pulse);
-      this.screenPill(0, 0, 200, 42, CONFIG.COLORS.CoinAmber);
-      this.fitText('NEW BEST', 0, 8, 700, 24, 170, CONFIG.COLORS.UI_TEXT);
+      this.screenPill(0, 0, 240, 42, CONFIG.COLORS.CoinAmber);
+      this.fitText(t('over.newBest'), 0, 8, 700, 24, 210, CONFIG.COLORS.UI_TEXT);
       this.ctx.restore();
       this.ctx.globalAlpha = fade;
     } else {
       const pointsToBest = Math.max(1, bestScore + 1 - score);
-      this.fitText(`${pointsToBest} TO NEW BEST`, cx, cardY + 124, 700, 22, textW, CONFIG.COLORS.UI_HUD);
+      this.fitText(t('over.toBest', { n: pointsToBest }), cx, cardY + 124, 700, 22, textW, CONFIG.COLORS.UI_HUD);
     }
 
     this.fitText(`${score}`, cx, cardY + 204, 700, 68, textW, CONFIG.COLORS.UI_TEXT);
-    this.fitText('SCORE', cx, cardY + 232, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+    this.fitText(t('over.score'), cx, cardY + 232, 600, 20, textW, CONFIG.COLORS.UI_HUD);
 
     // Две капсулы друг под другом: рекорд (лапка) и монеты (монетка), как в HUD.
     // Широкие, чтобы влезли и русские надписи.
     const pillW = 360;
     const pillX = cx - pillW / 2;
     const rows = [
-      [cardY + 276, `BEST ${bestScore}`, 'paw'],
-      [cardY + 334, `COINS ${coins}  •  SAVED`, 'coin']
+      [cardY + 276, t('over.best', { n: bestScore }), 'paw'],
+      [cardY + 334, t('over.coins', { n: coins }), 'coin']
     ];
     for (const [pillY, label, icon] of rows) {
       this.screenPill(cx, pillY, pillW, 46, CONFIG.COLORS.SkyPaper);
@@ -604,11 +607,11 @@ export class Renderer {
     }
 
     this.screenPill(cx, cardY + 412, 340, 62, CONFIG.COLORS.CoinAmber);
-    this.fitText('TAP / R TO RESTART', cx, cardY + 421, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
+    this.fitText(t('over.restart'), cx, cardY + 421, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
 
     const soundY = cardY + cardH + 44;
-    this.screenPill(cx, soundY, 176, 44, CONFIG.COLORS.SkyPaper);
-    this.fitText(extras.muted ? 'M MUTED' : 'M SOUND', cx, soundY + 7, 600, 20, 150, CONFIG.COLORS.UI_TEXT);
+    this.screenPill(cx, soundY, 210, 44, CONFIG.COLORS.SkyPaper);
+    this.fitText(t(extras.muted ? 'sound.off' : 'sound.on'), cx, soundY + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
     this.ctx.globalAlpha = 1;
   }
 }

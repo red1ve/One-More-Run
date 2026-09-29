@@ -83,8 +83,10 @@ export class YandexService {
       ? sdkLanguage.trim().toLowerCase().split('-')[0]
       : '';
     this.detectedLanguage = normalized || this.config.DEFAULT_LANGUAGE;
-    this.language = this.config.SUPPORTED_LANGUAGES.includes(this.detectedLanguage)
-      ? this.detectedLanguage
+    const russianUi = (this.config.RUSSIAN_UI_LANGUAGES || ['ru']).includes(this.detectedLanguage);
+    const language = russianUi ? 'ru' : this.detectedLanguage;
+    this.language = this.config.SUPPORTED_LANGUAGES.includes(language)
+      ? language
       : this.config.DEFAULT_LANGUAGE;
     return this.language;
   }
