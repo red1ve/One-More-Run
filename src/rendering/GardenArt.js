@@ -1,6 +1,7 @@
 import { HedgeArt } from './HedgeArt.js';
 import { LawnArt } from './LawnArt.js';
 import { SideDecorArt } from './SideDecorArt.js';
+import { SkyArt } from './SkyArt.js';
 import { ObstacleArt, obstacleLook } from './ObstacleArt.js';
 import { CONFIG } from '../config.js';
 import { getGardenSheets } from './gardenAssets.js';
@@ -157,6 +158,7 @@ export class GardenArt {
     this.hedges = new HedgeArt(this);
     this.lawn = new LawnArt(this);
     this.sideDecor = new SideDecorArt(this);
+    this.skyArt = new SkyArt(this.width, this.height);
     this.obstacleArt = new ObstacleArt(ctx);
     this.roseArch = this.loadVectorArt(
       new URL('../../assets/environment/garden/landmarks/rose-arch.svg', import.meta.url).href,
@@ -977,7 +979,7 @@ export class GardenArt {
     this.animTime = Number(time) || 0;
     if (this.usePack()) {
       const ctx = this.ctx;
-      ctx.fillStyle = this.sky;
+      ctx.fillStyle = this.useSkyArt() ? (CONFIG.VISUAL.SKY?.COLOR || this.sky) : this.sky;
       ctx.fillRect(0, 0, this.width, this.height);
       return;
     }
@@ -985,7 +987,21 @@ export class GardenArt {
     this.drawClouds(this.animTime);
   }
 
+  // Cached blue sky + far tree line (SkyArt.js) replaces the baked warm PNG.
+  useSkyArt() {
+    return !!CONFIG.VISUAL.SKY?.ENABLED && this.usePack();
+  }
+
   drawFarWorld(camera) {
+    if (this.useSkyArt()) {
+      const shift = typeof camera?.gameplayShift === 'function' ? camera.gameplayShift() : 0;
+      this.skyArt.draw(this.ctx, this.horizonY(), shift);
+      this.ctx.save();
+      this.ctx.translate(0, shift);
+      this.drawHorizonLandmark();
+      this.ctx.restore();
+      return;
+    }
     this.drawHorizonGarden(camera);
     this.drawDistantMeadow();
     this.drawHorizonLandmark();

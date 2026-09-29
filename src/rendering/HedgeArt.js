@@ -33,7 +33,8 @@ function settings() {
     period: h.CLUMP_PERIOD ?? 26,
     radius: h.CLUMP_RADIUS_NEAR ?? 15,
     postPeriod: h.POST_PERIOD ?? 130,
-    flowerChance: h.FLOWER_CHANCE ?? 0.22
+    flowerChance: h.FLOWER_CHANCE ?? 0.22,
+    horizonTaper: h.HORIZON_TAPER ?? 80
   };
 }
 
@@ -57,7 +58,10 @@ export class HedgeArt {
     for (let base = top; base <= bottom; base += base < top + 120 ? 3 : 6) {
       const worldY = art.screenToWorldY(base + shift);
       const p = art.roadAt(worldY);
-      const s = p.scale;
+      // У горизонта изгородь плавно сужается до нуля и сливается с деревьями,
+      // а не заканчивается тёмным клином.
+      const t = Math.max(0, Math.min(1, (p.drawY - art.horizonY()) / cfg.horizonTaper));
+      const s = p.scale * t * t * (3 - 2 * t);
       rows.push(p.drawY, p.roadLeft, p.roadRight, s);
     }
     return cfg;

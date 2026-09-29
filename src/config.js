@@ -167,6 +167,13 @@ export const CONFIG = {
       PERIOD: 70,
       CHANCE: 0.8
     },
+    // Голубое небо, облака и дальний ряд деревьев (SkyArt.js), рисуются один раз в кэш.
+    SKY: {
+      ENABLED: true,
+      COLOR: '#9CDCEC',
+      // [x, высота 0..1 от верха до горизонта, размер]
+      CLOUDS: [[150, 0.3, 0.75], [60, 0.66, 0.85], [420, 0.62, 1]]
+    },
     // Газон за изгородью (LawnArt.js): пятна и пучки травы.
     LAWN: {
       PATCH_PERIOD: 34,
@@ -189,7 +196,9 @@ export const CONFIG = {
       CLUMP_PERIOD: 22,
       CLUMP_RADIUS_NEAR: 17,
       POST_PERIOD: 130,
-      FLOWER_CHANCE: 0.12
+      FLOWER_CHANCE: 0.12,
+      // Сколько px от горизонта изгородь сужается до нуля.
+      HORIZON_TAPER: 80
     },
     HEDGE_BORDER_NEAR: 48,
     HEDGE_BORDER_FAR: 26,

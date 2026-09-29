@@ -84,10 +84,11 @@ export class SideDecorArt {
       prevY = p.drawY;
       for (const side of [-1, 1]) {
         const seed = k * 13.1 + side * 5.7;
-        // Вдали предметы стоят теснее на экране, поэтому их там реже.
-        const chance = (cfg.CHANCE ?? 0.8) * Math.max(0.35, Math.min(1, (p.scale - 0.45) / 0.4));
-        if (hash(seed) > chance) continue;
         const kind = Math.floor(hash(seed + 1) * KINDS.length) % KINDS.length;
+        // Вдали мелкие предметы стоят теснее на экране, поэтому их там реже.
+        // Деревья не прореживаем: они закрывают горизонт по бокам, как на референсе.
+        const thin = KINDS[kind] === 'tree' ? 1 : Math.max(0.35, Math.min(1, (p.scale - 0.45) / 0.4));
+        if (hash(seed) > (cfg.CHANCE ?? 0.8) * thin) continue;
         const outer = this.hedgeOuter(p, side);
         const room = Math.max(40, side < 0 ? outer : art.width - outer);
         const pad = (KINDS[kind] === 'tree' ? 34 : 14) * p.scale;

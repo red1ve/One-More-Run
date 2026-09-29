@@ -9,7 +9,7 @@ const LAWN = '#B4C05A'; // GardenLawn
 const LAWN_SHADE = '#9EB455'; // LawnShade
 const LAWN_LIGHT = '#BEC96A'; // LawnLight
 const TUFT = '#94A74F'; // LawnTuft
-const HAZE = '#ACCA8D'; // GardenLawn + GardenSky: газон у горизонта в дымке
+const HAZE = '#B1C678'; // GardenLawn + GardenSky: газон у горизонта в дымке
 
 function hash(n) {
   const x = Math.sin(n * 91.7 + 47.3) * 43758.5453;
