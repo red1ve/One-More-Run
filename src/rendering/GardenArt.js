@@ -1,4 +1,5 @@
 import { HedgeArt } from './HedgeArt.js';
+import { LawnArt } from './LawnArt.js';
 import { CONFIG } from '../config.js';
 import { getGardenSheets } from './gardenAssets.js';
 import {
@@ -152,6 +153,7 @@ export class GardenArt {
     const c = CONFIG.COLORS;
     this.c = c;
     this.hedges = new HedgeArt(this);
+    this.lawn = new LawnArt(this);
     this.roseArch = this.loadVectorArt(
       new URL('../../assets/environment/garden/landmarks/rose-arch.svg', import.meta.url).href,
       CONFIG.VISUAL.ROSE_ARCH?.RASTER_WIDTH ?? 240
@@ -1051,7 +1053,8 @@ export class GardenArt {
     this.lastCamera = cam;
     this.lastShift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     this.lastProgress = cam.progress || 0;
-    this.drawLawn(camera);
+    if (this.useHedgeWall()) this.lawn.draw(cam);
+    else this.drawLawn(camera);
     this.drawPath(camera);
     if (this.useHedgeWall()) {
       this.hedges.draw(cam);

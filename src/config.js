@@ -155,6 +155,12 @@ export const CONFIG = {
     HEDGE_BAND: 28,
     // Высота (px) ровного песка у горизонта, прячет полоски сжатой текстуры.
     FAR_SAND_VEIL: 70,
+    // Газон за изгородью (LawnArt.js): пятна и пучки травы.
+    LAWN: {
+      PATCH_PERIOD: 34,
+      PATCH_CHANCE: 0.26,
+      TUFT_CHANCE: 0.8
+    },
     // Арка в розах на горизонте (assets/environment/garden/landmarks/rose-arch.svg).
     ROSE_ARCH: {
       RASTER_WIDTH: 240,

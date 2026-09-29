@@ -43,6 +43,7 @@
   - `drawFarSandVeil`: последние `VISUAL.FAR_SAND_VEIL` = 70 px дороги у горизонта плавно переходят в ровный песок — убраны «доски» из сжатой текстуры.
   - Новый производный цвет WoodShade `#9A5F36` в bible.
   - Кадры: `docs/reference/progress/phase1/step3-*.png`.
+- Правка по просьбе пользователя (до шага 4): газон был полупрозрачным поверх бледного фона и выглядел как вода. Новый `src/rendering/LawnArt.js` + `VISUAL.LAWN`: сплошной GardenLawn с дымкой у горизонта, мягкие тёмные кляксы, пучки травы. Цвета LawnShade/LawnLight/LawnTuft в bible. 2 итерации. Кадр `step3b-lawn-play.png`.
 
 ## Решения пользователя (этот чат)
 
