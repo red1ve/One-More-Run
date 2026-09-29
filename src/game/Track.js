@@ -1274,6 +1274,25 @@ export class Track {
     return segment.obstacles.every((obs) => obs.y > playerBottom);
   }
 
+  // Возрождение: убрать ряды, которые перед котом ближе distance (и тот, в который
+  // он врезался). Ряд считается пройденным без награды.
+  clearAhead(playerY, distance) {
+    let cleared = 0;
+    for (const segment of this.segments) {
+      if (segment.isPassed) continue;
+      const near = segment.obstacles.some((obs) => (
+        obs.y + obs.height > playerY - distance && obs.y < playerY + CONFIG.PLAYER_HEIGHT
+      ));
+      if (!near) continue;
+      segment.obstacles = [];
+      segment.paths = [];
+      segment.isPassed = true;
+      segment.clearedForRevive = true;
+      cleared += 1;
+    }
+    return cleared;
+  }
+
   checkPassed(player) {
     let result = { rewardType: null, isIntentional: false, isChoice: false };
 

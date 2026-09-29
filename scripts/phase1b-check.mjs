@@ -188,6 +188,72 @@ check('same run seed gives the same track, different seeds differ', () => {
   assert(build(42) !== build(43), 'different seeds produced the same track');
 });
 
+function makeReviveGame() {
+  const player = new Player();
+  const row = (y) => ({ obstacles: [{ x: CONFIG.TRACK_LEFT, y, width: CONFIG.TRACK_WIDTH, height: 40 }], paths: [{ x: 0, y, width: 1, height: 40, type: 'SAFE' }], coins: [], isPassed: false });
+  const track = new Track();
+  // Три сплошных ряда: у кота, в 300 px и в 1200 px впереди.
+  track.segments = [row(CONFIG.PLAYER_START_Y - 30), row(CONFIG.PLAYER_START_Y - 300), row(CONFIG.PLAYER_START_Y - 1200)];
+  track.update = function update(dt, speed) {
+    for (const segment of this.segments) for (const obs of segment.obstacles) obs.y += speed * dt;
+  };
+  track.checkPassed = () => ({});
+  track.collectCoins = () => 0;
+  let recorded = 0;
+  const game = {
+    state: 'PLAYING', runTime: 0, currentSpeed: 0, distanceScore: 0, pathReward: 0, score: 0,
+    bestScore: 0, multiplier: 1, riskStreak: 0, reviveUsed: false, invulnerableTime: 0,
+    player, track, camera: null, floatingRewards: [],
+    feel: { update() {}, onGameOver() {}, onNewBest() {} },
+    storage: { set() {} },
+    platform: { submitScore() {}, recordRunCompleted() { recorded += 1; } },
+    keyboardInput: { isLeftPressed: () => false, isRightPressed: () => false, reset() {} },
+    mouseInput: null, touchInput: { getTouchX: () => null }, isGameplayPaused: () => false,
+    applyReward() {}, applyCoinPickup() {},
+    updateFloating: Game.prototype.updateFloating,
+    simulateStep: Game.prototype.simulateStep,
+    gameOver: Game.prototype.gameOver,
+    canRevive: Game.prototype.canRevive,
+    revive: Game.prototype.revive
+  };
+  const tick = (seconds) => {
+    for (let t = 0; t < seconds - 1e-9 && game.state === 'PLAYING'; t += 1 / 60) {
+      Game.prototype.update.call(game, 1 / 60);
+    }
+  };
+  return { game, track, tick, recorded: () => recorded };
+}
+
+check('revive works once, clears rows ahead and grants short invulnerability', () => {
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    const { game, track, tick, recorded } = makeReviveGame();
+    tick(0.5);
+    assert(game.state === 'GAMEOVER', 'cat should crash into the row at its feet');
+    assert(game.canRevive(), 'first revive is available');
+    assert(game.revive() === true, 'revive should succeed');
+    assert(game.state === 'PLAYING', 'revive resumes play');
+    assert(track.segments[0].obstacles.length === 0 && track.segments[1].obstacles.length === 0, 'near rows cleared');
+    assert(track.segments[2].obstacles.length === 1, 'far row kept');
+    assert(Math.abs(game.invulnerableTime - CONFIG.REVIVE_INVULNERABLE_SECONDS) < 1e-9, 'invulnerable');
+    // Ставим дальний ряд прямо на кота: пока кот неуязвим, удара нет.
+    track.segments[2].obstacles[0].y = CONFIG.PLAYER_START_Y - 20;
+    tick(1.0);
+    assert(game.state === 'PLAYING', 'no crash while invulnerable');
+    // Этот ряд уезжает за спину; после 2 с неуязвимость должна закончиться.
+    tick(1.5);
+    assert(game.invulnerableTime === 0 && game.player.invulnerable === 0, 'invulnerability ends after 2 s');
+    track.segments.push({ obstacles: [{ x: CONFIG.TRACK_LEFT, y: CONFIG.PLAYER_START_Y - 30, width: CONFIG.TRACK_WIDTH, height: 40 }], paths: [], coins: [], isPassed: false });
+    tick(1.0);
+    assert(game.state === 'GAMEOVER', 'second crash ends the run');
+    assert(!game.canRevive() && game.revive() === false, 'only one revive per run');
+    assert(recorded() === 1, `run counted ${recorded()} times for ad pacing`);
+  } finally {
+    console.log = originalLog;
+  }
+});
+
 console.log(results.join('\n'));
 const failed = results.filter((line) => line.startsWith('FAIL'));
 if (failed.length) {

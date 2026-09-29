@@ -166,6 +166,9 @@ export class Game {
     this.feel?.reset();
 
     this.player.reset();
+    this.reviveUsed = false;
+    this.invulnerableTime = 0;
+    this.player.invulnerable = 0;
     // runSeed задан (например ?seed=42 в адресе) — трасса каждый раз одинаковая.
     this.track.setSeed?.(this.runSeed ?? null);
     this.track.reset();
@@ -271,7 +274,33 @@ export class Game {
       this.applyCoinPickup(coinsGained);
     }
 
+    // После возрождения кот какое-то время неуязвим.
+    if (this.invulnerableTime > 0) {
+      this.invulnerableTime = Math.max(0, this.invulnerableTime - deltaTime);
+      this.player.invulnerable = this.invulnerableTime;
+      return false;
+    }
     return this.track.checkCollision(this.player);
+  }
+
+  // Возрождение: один раз за забег, только с экрана проигрыша.
+  // Счёт продолжается, серия и множитель уже сброшены проигрышем.
+  canRevive() {
+    return this.state === 'GAMEOVER' && !this.reviveUsed;
+  }
+
+  revive() {
+    if (!this.canRevive()) return false;
+    this.reviveUsed = true;
+    this.track.clearAhead(this.player.y, CONFIG.REVIVE_CLEAR_AHEAD);
+    this.invulnerableTime = CONFIG.REVIVE_INVULNERABLE_SECONDS;
+    this.player.invulnerable = this.invulnerableTime;
+    this.state = 'PLAYING';
+    this.isNewBest = false;
+    this.keyboardInput?.reset?.();
+    this.mouseInput?.reset?.();
+    this.syncGameplayLifecycle?.();
+    return true;
   }
 
   updateFloating(deltaTime) {
@@ -396,7 +425,8 @@ export class Game {
       const submission = this.platform?.submitScore?.(totalScore);
       Promise.resolve(submission).catch(() => {});
     }
-    this.platform?.recordRunCompleted?.();
+    // После возрождения это тот же забег: для частоты рекламы не считаем дважды.
+    if (!this.reviveUsed) this.platform?.recordRunCompleted?.();
     this.syncGameplayLifecycle?.();
     this.feel?.onGameOver(this.player.x, this.player.y);
     if (this.isNewBest) this.feel?.onNewBest?.(this.player.x, this.player.y);

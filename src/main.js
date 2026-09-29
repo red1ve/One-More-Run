@@ -17,6 +17,8 @@ window.addEventListener('DOMContentLoaded', () => {
   // Номер забега для проверки: ?seed=42 даёт одну и ту же трассу при каждом старте.
   const seedParam = new URLSearchParams(window.location.search).get('seed');
   if (seedParam !== null && Number.isFinite(Number(seedParam))) game.runSeed = Number(seedParam);
+  // Только для разработки (npm run dev): доступ к игре из консоли и тестов. В сборку не попадает.
+  if (import.meta.env?.DEV) window.__omrGame = game;
   const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');
 
