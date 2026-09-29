@@ -459,6 +459,8 @@ Gameplay objects live in a world Y where planted position is `entity.y - progres
 
 ### Track edges
 
+Since Phase 1 step 2 (2026-09) the edge is `src/rendering/HedgeArt.js` (`VISUAL.HEDGE_WALL`): a sand strip, a wooden curb (PlanterWood face, WoodLight top, one InkBrown line on the road side, ShadowDust shadow on the sand, post ticks), then a clipped hedge made of world-anchored leaf clumps (HedgeShade crescent bottom-right, HedgeSage body, HedgeLeafLight highlight top-left) over a deep base so the gaps read darker, with sparse CloudWhite / BlossomPink flowers that thin out with distance. Width and clump size follow the road perspective. The older band, hedge tufts, road-edge plants, side masses and side trees are off while `HEDGE_WALL.ENABLED`; the paragraph below describes that older layer.
+
 Bush and grass tufts sit on the hedge band itself so the border reads as a living garden edge, not a pipe of identical blobs. A road-edge layer (grass / flowers / small bushes, with hooks for future `road-edge-*.png`) sits between sand and hedge. Pack side-mass sprites sit in the outer lawn behind those borders, are not mirrored, and share depth projection with other MAIN_WORLD plants. Left and right masses use different world-Y periods so they do not alternate as a stripe. Near trees may overflow the viewport edge. The playable sand stays clear except for gates and coins. The cat cannot leave the sand: LEFT_BORDER / RIGHT_BORDER are the road boundaries, not extra obstacles.
 
 ### Obstacles / gates
@@ -530,6 +532,8 @@ Named tokens. New colours are not allowed without updating this bible.
 | GatePaint | PlanterWood toward HighRiskClay, `#D8724A` | Painted panels of decorative garden gates only (reference gates). Not a difficulty colour |
 | GardenLawn | HedgeSage lightened and warmed, `#B4C05A` | Open lawn outside the hedges |
 | CloudWhite | SkyPaper lightened, `#FBF8EA` | Clouds on GardenSky |
+| HedgeLeafLight | HedgeSage lightened, `#9DBB5C` | Lit top-left of hedge and planter leaf clumps |
+| BlossomPink | CatGinger toward SkyPaper, `#F4B3A2` | Pink hedge and planter flowers (white flowers use CloudWhite, centres CoinAmber) |
 
 ### Why each core colour exists
 
