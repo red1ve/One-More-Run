@@ -21,7 +21,14 @@ Immediately after `YaGames.init()`, the service reads `ysdk.environment.i18n.lan
 - `detectedLanguage` — normalized Yandex portal language;
 - `language` — language currently supported by the game UI.
 
-The current UI is English-only. Therefore `en` selects English, while `ru` and all other codes honestly fall back to English. Russian must not be declared as a translated game language in the Developer Console until the complete UI is actually localized. Standalone mode also defaults to English.
+Since Phase 4 the whole UI is localized (START, Game Over, HUD, hints, sound, floating subtitles): every string lives in `src/localization/en.json` and `ru.json`, and `src/localization/i18n.js` picks one via `t(key, params)`. `main.js` calls `setLanguage(yandex.getLanguage())` after `YaGames.init()`.
+
+- `ru` selects Russian. `be`, `kk`, `uk`, `uz` also get the Russian UI (`YANDEX.RUSSIAN_UI_LANGUAGES`), as Yandex recommends for the CIS audience.
+- `en` and every other code select English. Standalone mode (no SDK) defaults to English.
+- Russian glyphs come from the Cyrillic subset of M PLUS Rounded 1c (`src/localization/fonts.js`, ~14 KB), loaded only when the language is Russian; Latin and digits stay in Fredoka.
+- Dev only (`npm run dev`): `?lang=ru` forces a language for testing.
+
+Russian and English can both be declared in the Developer Console. Adding a language later means adding a dictionary with the same keys (`scripts/l10n-check.mjs` checks keys and placeholders) and a font that covers its script.
 
 ## Loading and gameplay markup
 
@@ -105,7 +112,7 @@ Verify:
 - [ ] Open the draft with the official debug panel.
 - [ ] Confirm SDK initialization and `LoadingAPI.ready()`.
 - [ ] Confirm automatic language detection in the debug panel.
-- [ ] Declare only English until Russian UI localization is complete.
+- [ ] Declare Russian and English (both fully localized since Phase 4); fill the catalogue name and description in both languages.
 - [ ] Create a numeric descending leaderboard.
 - [ ] Set its Technical leaderboard name to `one_more_run_score`.
 - [ ] Test leaderboard submission as an authorized player.
