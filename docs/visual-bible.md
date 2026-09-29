@@ -467,6 +467,10 @@ Bush and grass tufts sit on the hedge band itself so the border reads as a livin
 
 Since 2026-09 the ground outside the hedges is `src/rendering/LawnArt.js` (`VISUAL.LAWN`): an opaque GardenLawn fill that fades to a light haze at the horizon, world-anchored soft LawnShade blobs (two overlapping ovals, never a flat pale ellipse that reads as water), rare LawnLight blobs and three-blade LawnTuft strokes, all shrinking with the road perspective.
 
+### Side decor
+
+Since Phase 1 step 5 (2026-09) the lawn outside the hedges carries `src/rendering/SideDecorArt.js` (`VISUAL.SIDE_DECOR`): trees (WoodShade trunk with two branches, InkBrown outline, leaf canopy), plain and flowering bushes (BushLeaf, sparse flowers), StoneLight / StoneShade rocks, three-post wooden fences with pointed tops, and small flower stems. Every leaf mass uses the same recipe as the hedge: a HedgeShade scalloped outline, a HedgeShade crescent bottom-right, the body colour, a HedgeLeafLight highlight top-left. Items are world-anchored, painter-ordered far to near, thinned out with distance and drawn before the hedge so the hedge always sits in front. The hedge got the same dark scalloped outline in this step.
+
 ### Horizon landmark
 
 Since Phase 1 step 3 (2026-09) the far end of the path is a rose-covered pergola, `assets/environment/garden/landmarks/rose-arch.svg`: two square PlanterWood posts with WoodLight / WoodShade sides, knee braces, a top beam buried in HedgeShade / HedgeSage / HedgeLeafLight foliage (heavier on the left), BlossomPink and CloudWhite roses, vine stems on the posts. One InkBrown outline on the wood only. It is rasterized once and drawn at `ALPHA` 0.88 so the sky shows through as distance haze (`VISUAL.ROSE_ARCH`). The tiled sand fades into plain sand over the last `FAR_SAND_VEIL` px so the path runs smoothly into the arch.
@@ -550,6 +554,9 @@ Named tokens. New colours are not allowed without updating this bible.
 | LawnTuft | GardenLawn toward HedgeShade, `#94A74F` | Grass tuft strokes |
 | GatePaintLight | GatePaint toward SkyPaper, `#DF8E69` | Lit arched top of gate panels, post caps |
 | GatePaintShade | GatePaint toward InkBrown, `#C36845` | Gate bottom rail, shaded side of gate posts |
+| BushLeaf | HedgeSage toward GardenLawn, `#96B552` | Flowering side bushes, lighter than the hedge |
+| StoneLight | SkyPaper toward ShadowDust, `#D2C3A8` | Lit top of garden rocks |
+| StoneShade | ShadowDust lightened, `#B3A38A` | Garden rock body |
 
 ### Why each core colour exists
 
