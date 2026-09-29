@@ -12,8 +12,9 @@ export const CONFIG = {
   CORRIDOR_ORIGIN_Y: 232,
 
   // Настройки игрока
-  PLAYER_WIDTH: 30,
-  PLAYER_HEIGHT: 30,
+  // Хитбокс ≈85% ширины нарисованного тела кота (тело ≈43 px при росте 150).
+  PLAYER_WIDTH: 36,
+  PLAYER_HEIGHT: 36,
   PLAYER_SPEED: 420,
   PLAYER_START_Y: 840,
 
@@ -43,19 +44,19 @@ export const CONFIG = {
   MULTIPLIER_MAX: 5.0,
   RISK_STREAK_TO_GROW: 2,
   DIFFICULTY_GROWTH: 0.05,
-  MIN_GAP: 70, // Минимально возможный проход для игрока
+  MIN_GAP: 76, // Минимально возможный проход для игрока
   REACHABILITY_MARGIN: 0.75, // Запас при проверке, успеет ли игрок доехать до прохода
 
   // Геометрия Breathing / Choice
   BREATHING_GAP_WIDTH: 200,
   SAFE_GAP_TUTORIAL: 200,
-  RISKY_GAP_TUTORIAL: 90,
+  RISKY_GAP_TUTORIAL: 96,
   SAFE_GAP_WIDTH: 180,
-  RISKY_GAP_WIDTH: 86,
+  RISKY_GAP_WIDTH: 92,
   SAFE_GAP_LATE: 160,
-  RISKY_GAP_LATE: 82,
-  RISK_EASY_GAP_WIDTH: 116,
-  RISK_HARD_GAP_WIDTH: 90,
+  RISKY_GAP_LATE: 88,
+  RISK_EASY_GAP_WIDTH: 122,
+  RISK_HARD_GAP_WIDTH: 96,
   DUAL_RISK_UNLOCK_TIME: 30,
   DUAL_RISK_CHANCE_EARLY: 0.12,
   DUAL_RISK_CHANCE_MID: 0.22,
@@ -247,8 +248,9 @@ export const CONFIG = {
     CAMERA_FAR: 0.12,
     PATH_SAND_TILE: 2600,
     SKY_BAND: 130,
-    PATH_INSET_NEAR: 26,
-    PATH_INSET_FAR: 108,
+    // Дорога у кота ≈364 px (как на референсе, было 331).
+    PATH_INSET_NEAR: 9,
+    PATH_INSET_FAR: 95,
     PROJECTOR: {
       FAR_ROAD_WIDTH: 170,
       // Object scale = road width ratio (true perspective), capped here.
@@ -271,10 +273,10 @@ export const CONFIG = {
     LOAF_REAR: {
       SOURCE_WIDTH: 1024,
       SOURCE_HEIGHT: 1024,
-      DRAW_HEIGHT: 127,
+      DRAW_HEIGHT: 150,
       ANCHOR_X: 513,
       ANCHOR_Y: 797,
-      FLOAT_CLEARANCE: 118
+      FLOAT_CLEARANCE: 139
     },
     LOAF_FRONT: {
       SOURCE_WIDTH: 1024,

@@ -411,7 +411,7 @@ check('pattern selection preserves VariationDirector Choice rules', () => {
 
 check('Phase 9 preserves all balance constants', () => {
   assert(CONFIG.PLAYER_SPEED === 420);
-  assert(CONFIG.PLAYER_WIDTH === 30 && CONFIG.PLAYER_HEIGHT === 30);
+  assert(CONFIG.PLAYER_WIDTH === 36 && CONFIG.PLAYER_HEIGHT === 36); // Phase 1b: bigger cat
   assert(CONFIG.TRACK_SPEED_START === 300);
   assert(CONFIG.TRACK_SPEED_MAX === 720);
   assert(CONFIG.TRACK_SPEED_TAU === 70);

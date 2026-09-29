@@ -127,7 +127,11 @@ export class ObstacleArt {
         const lift = row === 0 ? 0.62 : 0.2;
         const cy = baseY - r * (lift + hash(k + 1) * 0.25);
         const rr = r * (row === 0 ? 0.82 : 0.9) * (0.88 + hash(k + 2) * 0.24);
-        clumps.push(cx, cy, rr);
+        // Листва не свисает в проход больше чем на 3 px: видимый проход = настоящий.
+        const lo = x0 + rr - 3;
+        const hi = x1 - rr + 3;
+        const x = lo <= hi ? Math.min(hi, Math.max(lo, cx)) : (x0 + x1) / 2;
+        clumps.push(x, cy, rr);
       }
     }
     const pass = (color, dx, dy, k) => {
