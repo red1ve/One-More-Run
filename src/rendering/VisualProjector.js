@@ -9,10 +9,9 @@ export function projectorConfig() {
   const vis = CONFIG.VISUAL.PROJECTOR || {};
   return {
     farRoadWidth: vis.FAR_ROAD_WIDTH ?? 120,
-    scaleFar: vis.SCALE_FAR ?? 0.88,
-    scaleNear: vis.SCALE_NEAR ?? 1,
+    // Objects just past the player keep growing, but not without limit.
+    scaleMax: vis.SCALE_MAX ?? 1.3,
     readZoneAbove: vis.READ_ZONE_ABOVE ?? CONFIG.CHOICE_SHOW_HEIGHT ?? 280,
-    roadSections: vis.ROAD_SECTIONS ?? 18,
     // World-distance (from the player) at which depth reaches u = 0.5.
     // Smaller = perspective falls off faster close to the camera.
     falloffDistance: vis.FALLOFF_DISTANCE ?? 460
@@ -68,13 +67,21 @@ function depthRatioToWorldOffset(u, cfg) {
   return D * (1 / clamped - 1);
 }
 
-function scaleAt(u, cfg) {
-  return cfg.scaleFar + (cfg.scaleNear - cfg.scaleFar) * u;
+// Road width at the player row. Gameplay X is measured against this one
+// constant width, so an object keeps the same share of the road at any depth.
+function nearRoadWidth() {
+  return gameplayRoadAt(CONFIG.PLAYER_START_Y, CONFIG.CANVAS_HEIGHT).width;
 }
 
 function roadWidthAt(u, cfg) {
-  const nearWidth = gameplayRoadAt(CONFIG.PLAYER_START_Y, CONFIG.CANVAS_HEIGHT).width;
+  const nearWidth = nearRoadWidth();
   return cfg.farRoadWidth + (nearWidth - cfg.farRoadWidth) * u;
+}
+
+// True perspective: an object shrinks exactly as much as the road does,
+// so it grows in place instead of sliding out from behind the hedges.
+function scaleAt(u, cfg) {
+  return Math.min(cfg.scaleMax, roadWidthAt(u, cfg) / nearRoadWidth());
 }
 
 /** Shift-independent screen Y for a given depth ratio (0 = horizon, 1 = player). */
@@ -116,7 +123,7 @@ export function projectWorldToScreen(
   const roadLeft = roadCenter - roadWidth * 0.5;
   const roadRight = roadCenter + roadWidth * 0.5;
   const gameplay = gameplayRoadAt(screenY, height);
-  const xScale = roadWidth / Math.max(1, gameplay.width);
+  const xScale = roadWidth / nearRoadWidth();
   const screenX = vanishX + (worldX - vanishX) * xScale;
   const readStart = readZoneStartWorldY();
   const inReadZone = worldY >= readStart;
@@ -167,7 +174,7 @@ export function projectTrackX(
   height = CONFIG.CANVAS_HEIGHT
 ) {
   const projected = projectWorldToScreen(gameplayX, worldY, shift, height);
-  const u = roadUFromGameplayX(gameplayX, projected.gameplayWidth, projected.roadCenter);
+  const u = roadUFromGameplayX(gameplayX, nearRoadWidth(), projected.roadCenter);
   const roadU = clamp(u, -1, 1);
   return {
     ...projected,

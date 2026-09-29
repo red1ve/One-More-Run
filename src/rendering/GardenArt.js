@@ -991,7 +991,9 @@ export class GardenArt {
     const src = this.sourceRect(item);
     const aspect = src.sh / Math.max(1, src.sw);
     const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH ?? 200;
-    const w = farW * 0.82;
+    // Small and distant, as on the reference; never taller than the sky band.
+    const maxH = Math.max(24, this.horizonY() - 10);
+    const w = Math.min(farW * 0.62, maxH / aspect);
     const h = w * aspect;
     const x = this.width * 0.5;
     const y = this.horizonY() + 2;

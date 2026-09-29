@@ -8,8 +8,10 @@ export function corridorHorizonY() {
   return CONFIG.VISUAL.SKY_BAND;
 }
 
+// Gameplay road shape (inset, hedge width) is measured from a fixed origin,
+// not from the painted horizon, so moving the horizon never changes play.
 export function corridorNearT(screenY, height = CONFIG.CANVAS_HEIGHT) {
-  const horizon = corridorHorizonY();
+  const horizon = CONFIG.CORRIDOR_ORIGIN_Y;
   return clamp01((screenY - horizon) / Math.max(1, height - horizon));
 }
 
