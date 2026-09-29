@@ -17,6 +17,9 @@ export const CONFIG = {
   PLAYER_HEIGHT: 36,
   PLAYER_SPEED: 420,
   PLAYER_START_Y: 840,
+  // Защита от «проскоков» (Game.simulateStep): макс. сдвиг за шаг физики и макс. число шагов за кадр.
+  SUBSTEP_MAX_PX: 12,
+  SUBSTEP_MAX_COUNT: 10,
 
   // Настройки геймплея
   // Скорость трассы (px/s). Стрейф игрока фиксирован — сложность растёт из-за нехватки времени.

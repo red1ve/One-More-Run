@@ -222,6 +222,29 @@ export class Game {
     }
 
     this.player.setMoveDirection(moveDirection);
+
+    // Защита от «проскоков»: если за кадр мир или кот сдвигаются больше чем на
+    // SUBSTEP_MAX_PX (лаг, слабый телефон), кадр делится на мелкие шаги и
+    // столкновение проверяется в каждом. При 60 FPS шаг обычно один.
+    const fastest = Math.max(getTrackSpeed(this.runTime), this.player.speed);
+    const steps = Math.min(
+      CONFIG.SUBSTEP_MAX_COUNT,
+      Math.max(1, Math.ceil((fastest * deltaTime) / CONFIG.SUBSTEP_MAX_PX))
+    );
+    const stepTime = deltaTime / steps;
+    for (let i = 0; i < steps; i += 1) {
+      if (this.simulateStep(stepTime)) {
+        this.gameOver();
+        return;
+      }
+    }
+
+    this.updateFloating(deltaTime);
+    this.feel.update(deltaTime, this.currentSpeed);
+  }
+
+  // Один шаг физики: движение, трасса, награды, монеты. true = столкновение.
+  simulateStep(deltaTime) {
     const screenY = this.player.y + (this.camera?.gameplayShift?.() || 0);
     this.player.update(deltaTime, playableXBounds(screenY, this.player.width));
 
@@ -245,12 +268,7 @@ export class Game {
       this.applyCoinPickup(coinsGained);
     }
 
-    this.updateFloating(deltaTime);
-    this.feel.update(deltaTime, this.currentSpeed);
-
-    if (this.track.checkCollision(this.player)) {
-      this.gameOver();
-    }
+    return this.track.checkCollision(this.player);
   }
 
   updateFloating(deltaTime) {
