@@ -467,6 +467,8 @@ Obstacle rects use one visual family per segment as a shell over existing geomet
 
 Never paint obstacles red. Red was debug danger. In this world, danger is **narrowness**, not colour-of-death.
 
+Exception (2026-09, reference match): garden gates may use **GatePaint** `#D8724A` (a painted terracotta wood) on their panels, with a small flower motif, as on the reference. GatePaint is decoration, not a danger signal: it must not change with SAFE / RISK / HIGH RISK, and it is never used on the path, sills or HUD.
+
 ### Depth
 
 Visual vanishing is presentation-only. Path edges, grass, and vegetation share `worldDepth(screenY)` so a tree’s ground point moves down the screen while uniform scale stays in about `0.90–1.06`. It must not stretch vertically, scale from a fixed ground point, or grow `0.2→1.0`. Player draw origin, hitboxes, and gate geometry stay unprojected. Objects still use a single contact-shadow blob. No AO. Reward plates sit in front of gates and behind HUD.
@@ -498,10 +500,10 @@ Named tokens. New colours are not allowed without updating this bible.
 | Token | Hex | Job |
 | --- | --- | --- |
 | SkyPaper | `#F3E4C7` | Paper plates, overlays, cream UI |
-| GardenSky | `#D5E5EA` | Morning sky wash only. Environment token, not a gameplay colour |
-| FloorSand | `#E2C992` | Track bed |
-| HedgeSage | `#6F9A5E` | Edges, obstacle fills, garden |
-| PlanterWood | `#C4A06A` | Alternate obstacle material (crates). Mix of FloorSand + Ginger family |
+| GardenSky | `#9CDCEC` | Clear morning sky (flat fill behind clouds). Environment token, not a gameplay colour. Updated 2026-09 to match `docs/reference/reference.webp` (was `#D5E5EA`) |
+| FloorSand | `#F7DCA0` | Track bed. Updated 2026-09 to the lighter reference sand (was `#E2C992`) |
+| HedgeSage | `#7EA24E` | Hedges, planter greenery, garden. Updated 2026-09 to the reference hedge (was `#6F9A5E`) |
+| PlanterWood | `#BF7A45` | Planter boxes, hedge curb, fences, arch. Warm wood of the Ginger family. Updated 2026-09 to the reference crates (was `#C4A06A`) |
 | CatCream | `#F6E7C8` | Default coat. Slightly lighter than SkyPaper so Loaf reads on the path |
 | CatGinger | `#E39A4F` | Patch, nose, tail tip, warm accent |
 | SafeLawn | `#A8C98B` | SAFE gate face / sill |
@@ -523,6 +525,11 @@ Named tokens. New colours are not allowed without updating this bible.
 | FlashRisk | RiskApricot at 16% | RISK feel flash |
 | FlashCoin | CoinAmber at 14% | Coin / NEW BEST flash |
 | FlashFail | HighRiskClay at 14% | Game Over flash — keep short and soft |
+| HedgeShade | HedgeSage darkened to `#4B6D36` | Shadow side and inner clumps of hedges and planter greenery |
+| WoodLight | PlanterWood lightened to `#D39048` | Lit top edge of the hedge curb and planter rims |
+| GatePaint | PlanterWood toward HighRiskClay, `#D8724A` | Painted panels of decorative garden gates only (reference gates). Not a difficulty colour |
+| GardenLawn | HedgeSage lightened and warmed, `#B4C05A` | Open lawn outside the hedges |
+| CloudWhite | SkyPaper lightened, `#FBF8EA` | Clouds on GardenSky |
 
 ### Why each core colour exists
 
@@ -540,7 +547,7 @@ Named tokens. New colours are not allowed without updating this bible.
 
 ### Forbidden uses
 
-- Do not put HighRiskClay on obstacles.
+- Do not put HighRiskClay on obstacles (GatePaint on garden gates is the only warm-red allowed on obstacles).
 - Do not put CoinAmber on SAFE.
 - Do not put HedgeSage on the cat (except the Sage Paws skin socks).
 - Do not use the old debug pair (blue player `#3a86ff`, danger red `#ff4d4d`) after the overhaul.
