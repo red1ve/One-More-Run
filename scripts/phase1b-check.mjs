@@ -176,6 +176,18 @@ check('generator never falls back to widened or empty rows over long runs', () =
   assert(stats.widened === 0, `${stats.widened}/${stats.calls} rows had to be widened`);
 });
 
+check('same run seed gives the same track, different seeds differ', () => {
+  const build = (seed) => {
+    const track = new Track();
+    track.setSeed(seed);
+    track.init();
+    for (let time = 0; time < 90; time += 1 / 30) track.update(1 / 30, getTrackSpeed(time), time);
+    return JSON.stringify(track.segments.map((segment) => [segment.type, segment.obstacles, segment.coins.length]));
+  };
+  assert(build(42) === build(42), 'same seed produced different tracks');
+  assert(build(42) !== build(43), 'different seeds produced the same track');
+});
+
 console.log(results.join('\n'));
 const failed = results.filter((line) => line.startsWith('FAIL'));
 if (failed.length) {

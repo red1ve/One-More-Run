@@ -14,6 +14,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const yandex = new YandexService();
   const game = new Game(canvas, yandex);
+  // Номер забега для проверки: ?seed=42 даёт одну и ту же трассу при каждом старте.
+  const seedParam = new URLSearchParams(window.location.search).get('seed');
+  if (seedParam !== null && Number.isFinite(Number(seedParam))) game.runSeed = Number(seedParam);
   const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');
 

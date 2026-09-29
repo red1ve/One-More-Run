@@ -1,7 +1,9 @@
+import { systemRandom } from './Random.js';
 import { CONFIG, getChoiceIntervalRange, getDualRiskChance } from '../config.js';
 
 export class VariationDirector {
   constructor() {
+    this.random = systemRandom;
     this.reset();
   }
 
@@ -66,10 +68,10 @@ export class VariationDirector {
     if (breathingSinceChoice >= 7) choiceProb = Math.max(choiceProb, late ? 0.78 : 0.9);
     if (this.dualBlocked && breathingSinceChoice < 3) choiceProb *= 0.55;
 
-    if (Math.random() >= choiceProb) return 'NORMAL';
+    if (this.random() >= choiceProb) return 'NORMAL';
 
     const dualChance = this.dualBlocked ? 0 : getDualRiskChance(runTime);
-    if (Math.random() < dualChance) return 'DUAL_RISK';
+    if (this.random() < dualChance) return 'DUAL_RISK';
     return 'TWO_PATHS';
   }
 
@@ -81,7 +83,7 @@ export class VariationDirector {
       zone === this.lastForkBias ? CONFIG.CHOICE_FORK_REPEAT_WEIGHT : 1
     ));
     const total = weights.reduce((sum, weight) => sum + weight, 0);
-    let roll = Math.random() * total;
+    let roll = this.random() * total;
     let picked = zones[zones.length - 1];
     for (let i = 0; i < zones.length; i += 1) {
       roll -= weights[i];
@@ -135,7 +137,7 @@ export class VariationDirector {
   pickWeightedPattern(weights) {
     const entries = Object.entries(weights).filter(([, weight]) => weight > 0);
     const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
-    let roll = Math.random() * total;
+    let roll = this.random() * total;
     for (const [pattern, weight] of entries) {
       roll -= weight;
       if (roll <= 0) return pattern;
@@ -146,11 +148,11 @@ export class VariationDirector {
   pickDriftDirection() {
     if (this.forcedDriftDirection) return Math.sign(this.forcedDriftDirection);
 
-    const same = this.lastDriftDirection || (Math.random() < 0.5 ? -1 : 1);
+    const same = this.lastDriftDirection || (this.random() < 0.5 ? -1 : 1);
     const opposite = -same;
     const repeatWeight = 1;
     const reverseWeight = CONFIG.PATTERN_REVERSE_WEIGHT;
-    const picked = Math.random() * (repeatWeight + reverseWeight) < repeatWeight
+    const picked = this.random() * (repeatWeight + reverseWeight) < repeatWeight
       ? same
       : opposite;
     this.lastDriftDirection = picked;

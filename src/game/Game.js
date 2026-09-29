@@ -166,6 +166,8 @@ export class Game {
     this.feel?.reset();
 
     this.player.reset();
+    // runSeed задан (например ?seed=42 в адресе) — трасса каждый раз одинаковая.
+    this.track.setSeed?.(this.runSeed ?? null);
     this.track.reset();
     this.camera?.reset?.();
     this.keyboardInput?.reset?.();
