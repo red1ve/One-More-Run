@@ -153,25 +153,63 @@ export const CONFIG = {
     OUTLINE_WIDTH: 4,
     SHADOW_OFFSET: 5,
     HEDGE_BAND: 28,
+    // Песок дорожки (SandArt.js): мягкие пятна и камешки.
+    SAND: {
+      SPOT_PERIOD: 46,
+      SPOT_CHANCE: 0.55,
+      PEBBLE_CHANCE: 0.35
+    },
+    // Тень кота на песке: размеры овала и плотность теней.
+    CAT_SHADOW: { RX: 26, RY: 9 },
+    SHADOW_ALPHA: 0.62,
     // Высота (px) ровного песка у горизонта, прячет полоски сжатой текстуры.
     FAR_SAND_VEIL: 70,
+    // Препятствия-кашпо и ворота (ObstacleArt.js). Высота — в долях роста кота у кота.
+    GARDEN_OBSTACLES: {
+      ENABLED: true,
+      PLANTER_NEAR_CAT: 0.46,
+      GATE_NEAR_CAT: 0.72,
+      // Участок ворот уже этой доли высоты ворот рисуется как кашпо.
+      GATE_MIN_WIDTH: 0.9,
+      FLOWER_CHANCE: 0.3
+    },
+    // Боковой декор за изгородью (SideDecorArt.js): шаг слотов по миру и доля занятых.
+    SIDE_DECOR: {
+      PERIOD: 70,
+      CHANCE: 0.8
+    },
+    // Голубое небо, облака и дальний ряд деревьев (SkyArt.js), рисуются один раз в кэш.
+    SKY: {
+      ENABLED: true,
+      COLOR: '#9CDCEC',
+      // [x, высота 0..1 от верха до горизонта, размер]
+      CLOUDS: [[150, 0.3, 0.75], [60, 0.66, 0.85], [420, 0.62, 1]]
+    },
+    // Газон за изгородью (LawnArt.js): пятна и пучки травы.
+    LAWN: {
+      PATCH_PERIOD: 34,
+      PATCH_CHANCE: 0.26,
+      TUFT_CHANCE: 0.8
+    },
     // Арка в розах на горизонте (assets/environment/garden/landmarks/rose-arch.svg).
     ROSE_ARCH: {
       RASTER_WIDTH: 240,
       WIDTH_OF_FAR_ROAD: 0.72,
       TOP_MARGIN: 10,
-      ALPHA: 0.88
+      ALPHA: 1
     },
     // Живая изгородь с бордюром (HedgeArt.js). Размеры — у кота, дальше по перспективе.
     HEDGE_WALL: {
       ENABLED: true,
       SHOULDER_NEAR: 8,
       CURB_NEAR: 12,
-      WIDTH_NEAR: 74,
+      WIDTH_NEAR: 92,
       CLUMP_PERIOD: 22,
-      CLUMP_RADIUS_NEAR: 17,
+      CLUMP_RADIUS_NEAR: 20,
       POST_PERIOD: 130,
-      FLOWER_CHANCE: 0.12
+      FLOWER_CHANCE: 0.14,
+      // Сколько px от горизонта изгородь сужается до нуля.
+      HORIZON_TAPER: 80
     },
     HEDGE_BORDER_NEAR: 48,
     HEDGE_BORDER_FAR: 26,
@@ -252,10 +290,10 @@ export const CONFIG = {
 
 function bibleColors() {
   const SkyPaper = '#F3E4C7';
-  const GardenSky = '#D5E5EA';
-  const FloorSand = '#E2C992';
-  const HedgeSage = '#6F9A5E';
-  const PlanterWood = '#C4A06A';
+  const GardenSky = '#9CDCEC';
+  const FloorSand = '#F7DCA0';
+  const HedgeSage = '#76A544';
+  const PlanterWood = '#BF7A45';
   const CatCream = '#F6E7C8';
   const CatGinger = '#E39A4F';
   const SafeLawn = '#A8C98B';

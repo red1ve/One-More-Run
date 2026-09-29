@@ -463,11 +463,29 @@ Since Phase 1 step 2 (2026-09) the edge is `src/rendering/HedgeArt.js` (`VISUAL.
 
 Bush and grass tufts sit on the hedge band itself so the border reads as a living garden edge, not a pipe of identical blobs. A road-edge layer (grass / flowers / small bushes, with hooks for future `road-edge-*.png`) sits between sand and hedge. Pack side-mass sprites sit in the outer lawn behind those borders, are not mirrored, and share depth projection with other MAIN_WORLD plants. Left and right masses use different world-Y periods so they do not alternate as a stripe. Near trees may overflow the viewport edge. The playable sand stays clear except for gates and coins. The cat cannot leave the sand: LEFT_BORDER / RIGHT_BORDER are the road boundaries, not extra obstacles.
 
+### Lawn
+
+Since 2026-09 the ground outside the hedges is `src/rendering/LawnArt.js` (`VISUAL.LAWN`): an opaque GardenLawn fill that fades to a light haze at the horizon, world-anchored soft LawnShade blobs (two overlapping ovals, never a flat pale ellipse that reads as water), rare LawnLight blobs and three-blade LawnTuft strokes, all shrinking with the road perspective.
+
+### Path sand
+
+Since Phase 1 step 7 (2026-09) the path is `src/rendering/SandArt.js` (`VISUAL.SAND`) instead of the streaky `path-sand-material.png`: a flat light FloorSand, world-anchored soft SandShade spots (two overlapping ovals), rare SandLight spots and small Pebble dots, all thinned with distance. No haze layers anywhere in the new look: the lawn is flat GardenLawn, the arch is opaque, only the far tree row keeps a slight sky tint for depth.
+
+### Sky and far tree line
+
+Since Phase 1 step 6 (2026-09) the baked warm `distant-garden-horizon.png` is off while `VISUAL.SKY.ENABLED`. `src/rendering/SkyArt.js` paints once into an offscreen canvas: a GardenSky sky that turns to SkyHaze near the horizon, three flat-bottomed CloudWhite clouds with a CloudShade underside (placed between the HUD pills), and a far tree line of two rows (FarTree haze row, NearTree row with HedgeSage highlights; round crowns and a few conifers) standing on the horizon. Each frame it is a single `drawImage`, shifted with the world camera so the tree line always meets the road horizon; the canvas is rebuilt only if the horizon changes. The hedge narrows to zero over the last `HEDGE_WALL.HORIZON_TAPER` px so it blends into the trees instead of ending in dark wedges, and side trees are not thinned with distance so they frame the horizon.
+
+### Side decor
+
+Since Phase 1 step 5 (2026-09) the lawn outside the hedges carries `src/rendering/SideDecorArt.js` (`VISUAL.SIDE_DECOR`): trees (WoodShade trunk with two branches, InkBrown outline, leaf canopy), plain and flowering bushes (BushLeaf, sparse flowers), StoneLight / StoneShade rocks, three-post wooden fences with pointed tops, and small flower stems. Every leaf mass uses the same recipe as the hedge: a HedgeShade scalloped outline, a HedgeShade crescent bottom-right, the body colour, a HedgeLeafLight highlight top-left. Items are world-anchored, painter-ordered far to near, thinned out with distance and drawn before the hedge so the hedge always sits in front. The hedge got the same dark scalloped outline in this step.
+
 ### Horizon landmark
 
 Since Phase 1 step 3 (2026-09) the far end of the path is a rose-covered pergola, `assets/environment/garden/landmarks/rose-arch.svg`: two square PlanterWood posts with WoodLight / WoodShade sides, knee braces, a top beam buried in HedgeShade / HedgeSage / HedgeLeafLight foliage (heavier on the left), BlossomPink and CloudWhite roses, vine stems on the posts. One InkBrown outline on the wood only. It is rasterized once and drawn at `ALPHA` 0.88 so the sky shows through as distance haze (`VISUAL.ROSE_ARCH`). The tiled sand fades into plain sand over the last `FAR_SAND_VEIL` px so the path runs smoothly into the arch.
 
 ### Obstacles / gates
+
+Since Phase 1 step 4 (2026-09) obstacle rows are drawn by `src/rendering/ObstacleArt.js` (`VISUAL.GARDEN_OBSTACLES`) over the unchanged collision spans. Segment family `FLOWER_GATE` becomes a terracotta garden gate (GatePaint panels with an arched top, vertical boards, GatePaintShade bottom rail, round-capped posts at each end, a leaf-and-bud sprig in the centre; `GATE_NEAR_CAT` 0.64 of the cat height). `STANDING_PLANTER` and `GARDEN_FENCE` become a wooden planter box (PlanterWood front, two plank seams, WoodLight rim, corner posts with WoodShade, a lush two-row leaf cap with sparse flowers; box `PLANTER_NEAR_CAT` 0.36). Any span width works: the box stretches and gates add panels. Choice openings no longer get gateway frames (the reference has none); gap width, sills and reward values carry SAFE / RISK. The older fence-kit paragraph below applies only when `GARDEN_OBSTACLES.ENABLED` is false.
 
 Obstacle rects use one visual family per segment as a shell over existing geometry. The family is stored on the segment (`FLOWER_GATE`, `STANDING_PLANTER`, or `GARDEN_FENCE`) when the segment is created and does not change while that segment is alive. Pack rendering uses one continuous `garden-fence` construction for every barrier row, with openings left as gaps. TWO_PATHS and DUAL_RISK add a separate open gateway (`single-choice-arch` posts + beam) on each opening. SAFE and RISK openings in the same row share one barrier height. Pack off falls back to procedural wood. SAFE / RISK readability lives on gap width, inner-face material, and sills — not a bright accent strip.
 
@@ -508,7 +526,7 @@ Named tokens. New colours are not allowed without updating this bible.
 | SkyPaper | `#F3E4C7` | Paper plates, overlays, cream UI |
 | GardenSky | `#9CDCEC` | Clear morning sky (flat fill behind clouds). Environment token, not a gameplay colour. Updated 2026-09 to match `docs/reference/reference.webp` (was `#D5E5EA`) |
 | FloorSand | `#F7DCA0` | Track bed. Updated 2026-09 to the lighter reference sand (was `#E2C992`) |
-| HedgeSage | `#7EA24E` | Hedges, planter greenery, garden. Updated 2026-09 to the reference hedge (was `#6F9A5E`) |
+| HedgeSage | `#76A544` | Hedges, planter greenery, garden. Updated 2026-09 to the reference hedge (was `#6F9A5E`, then `#7EA24E`; Phase 1 step 7 made it more saturated) |
 | PlanterWood | `#BF7A45` | Planter boxes, hedge curb, fences, arch. Warm wood of the Ginger family. Updated 2026-09 to the reference crates (was `#C4A06A`) |
 | CatCream | `#F6E7C8` | Default coat. Slightly lighter than SkyPaper so Loaf reads on the path |
 | CatGinger | `#E39A4F` | Patch, nose, tail tip, warm accent |
@@ -531,14 +549,29 @@ Named tokens. New colours are not allowed without updating this bible.
 | FlashRisk | RiskApricot at 16% | RISK feel flash |
 | FlashCoin | CoinAmber at 14% | Coin / NEW BEST flash |
 | FlashFail | HighRiskClay at 14% | Game Over flash — keep short and soft |
-| HedgeShade | HedgeSage darkened to `#4B6D36` | Shadow side and inner clumps of hedges and planter greenery |
+| HedgeShade | HedgeSage darkened to `#43682F` | Shadow side and inner clumps of hedges and planter greenery |
 | WoodLight | PlanterWood lightened to `#D39048` | Lit top edge of the hedge curb and planter rims |
 | GatePaint | PlanterWood toward HighRiskClay, `#D8724A` | Painted panels of decorative garden gates only (reference gates). Not a difficulty colour |
 | GardenLawn | HedgeSage lightened and warmed, `#B4C05A` | Open lawn outside the hedges |
 | CloudWhite | SkyPaper lightened, `#FBF8EA` | Clouds on GardenSky |
-| HedgeLeafLight | HedgeSage lightened, `#9DBB5C` | Lit top-left of hedge and planter leaf clumps |
+| HedgeLeafLight | HedgeSage lightened, `#9CC456` | Lit top-left of hedge and planter leaf clumps |
 | BlossomPink | CatGinger toward SkyPaper, `#F4B3A2` | Pink hedge and planter flowers (white flowers use CloudWhite, centres CoinAmber) |
 | WoodShade | PlanterWood toward InkBrown, `#9A5F36` | Shaded side of posts and planks |
+| LawnShade | GardenLawn toward HedgeSage, `#9EB455` | Soft shadow patches on the lawn |
+| LawnLight | GardenLawn lightened, `#BEC96A` | Rare light patches on the lawn |
+| LawnTuft | GardenLawn toward HedgeShade, `#94A74F` | Grass tuft strokes |
+| GatePaintLight | GatePaint toward SkyPaper, `#DF8E69` | Lit arched top of gate panels, post caps |
+| GatePaintShade | GatePaint toward InkBrown, `#C36845` | Gate bottom rail, shaded side of gate posts |
+| BushLeaf | HedgeSage toward GardenLawn, `#96B552` | Flowering side bushes, lighter than the hedge |
+| StoneLight | SkyPaper toward ShadowDust, `#D2C3A8` | Lit top of garden rocks |
+| StoneShade | ShadowDust lightened, `#B3A38A` | Garden rock body |
+| SkyHaze | GardenSky toward CloudWhite, `#B4E4EE` | Sky just above the horizon |
+| CloudShade | CloudWhite toward GardenSky, `#DCEEF0` | Flat underside of clouds |
+| FarTree | HedgeSage into GardenSky haze, `#7DB38A` | Back row of the far tree line |
+| NearTree | HedgeSage toward HedgeShade, `#6A8D44` | Front row of the far tree line |
+| SandShade | FloorSand toward ShadowDust, `#EDCC8E` | Soft spots on the path |
+| SandLight | FloorSand toward SkyPaper, `#F9E2AE` | Rare light spots on the path |
+| Pebble | FloorSand toward PlanterWood, `#D9B77E` | Small pebbles on the path |
 
 ### Why each core colour exists
 

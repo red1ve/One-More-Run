@@ -1,4 +1,9 @@
 import { HedgeArt } from './HedgeArt.js';
+import { LawnArt } from './LawnArt.js';
+import { SideDecorArt } from './SideDecorArt.js';
+import { SkyArt } from './SkyArt.js';
+import { SandArt } from './SandArt.js';
+import { ObstacleArt, obstacleLook } from './ObstacleArt.js';
 import { CONFIG } from '../config.js';
 import { getGardenSheets } from './gardenAssets.js';
 import {
@@ -152,6 +157,11 @@ export class GardenArt {
     const c = CONFIG.COLORS;
     this.c = c;
     this.hedges = new HedgeArt(this);
+    this.lawn = new LawnArt(this);
+    this.sideDecor = new SideDecorArt(this);
+    this.skyArt = new SkyArt(this.width, this.height);
+    this.sandArt = new SandArt(this);
+    this.obstacleArt = new ObstacleArt(ctx);
     this.roseArch = this.loadVectorArt(
       new URL('../../assets/environment/garden/landmarks/rose-arch.svg', import.meta.url).href,
       CONFIG.VISUAL.ROSE_ARCH?.RASTER_WIDTH ?? 240
@@ -971,7 +981,7 @@ export class GardenArt {
     this.animTime = Number(time) || 0;
     if (this.usePack()) {
       const ctx = this.ctx;
-      ctx.fillStyle = this.sky;
+      ctx.fillStyle = this.useSkyArt() ? (CONFIG.VISUAL.SKY?.COLOR || this.sky) : this.sky;
       ctx.fillRect(0, 0, this.width, this.height);
       return;
     }
@@ -979,7 +989,21 @@ export class GardenArt {
     this.drawClouds(this.animTime);
   }
 
+  // Cached blue sky + far tree line (SkyArt.js) replaces the baked warm PNG.
+  useSkyArt() {
+    return !!CONFIG.VISUAL.SKY?.ENABLED && this.usePack();
+  }
+
   drawFarWorld(camera) {
+    if (this.useSkyArt()) {
+      const shift = typeof camera?.gameplayShift === 'function' ? camera.gameplayShift() : 0;
+      this.skyArt.draw(this.ctx, this.horizonY(), shift);
+      this.ctx.save();
+      this.ctx.translate(0, shift);
+      this.drawHorizonLandmark();
+      this.ctx.restore();
+      return;
+    }
     this.drawHorizonGarden(camera);
     this.drawDistantMeadow();
     this.drawHorizonLandmark();
@@ -1051,7 +1075,12 @@ export class GardenArt {
     this.lastCamera = cam;
     this.lastShift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     this.lastProgress = cam.progress || 0;
-    this.drawLawn(camera);
+    if (this.useHedgeWall()) {
+      this.lawn.draw(cam);
+      this.sideDecor.draw(cam);
+    } else {
+      this.drawLawn(camera);
+    }
     this.drawPath(camera);
     if (this.useHedgeWall()) {
       this.hedges.draw(cam);
@@ -1942,6 +1971,15 @@ export class GardenArt {
 
     const farSample = samples[0];
     const nearSample = samples[samples.length - 1];
+    // New look: light sand with soft spots (SandArt.js) instead of the streaky texture.
+    if (this.useHedgeWall()) {
+      ctx.save();
+      traceRibbon(0);
+      ctx.clip();
+      this.sandArt.draw(progress);
+      ctx.restore();
+      return;
+    }
     if (typeof ctx.createLinearGradient === 'function') {
       ctx.save();
       traceRibbon(0);
@@ -2428,6 +2466,8 @@ export class GardenArt {
         ? segment.visualObstacleScale
         : 1;
       const choice = this.isChoiceVisual(segment);
+      const look = obstacleLook(this.obstacleFamilyFor(segment));
+      const lookSeed = Number(segment.visualObstacleSeed) || 1;
 
       rows.forEach((row) => {
         const spans = this.mergeFenceSpans(row.obstacles);
@@ -2435,8 +2475,10 @@ export class GardenArt {
         const sample = spans[0];
         const vis = this.projectTrackRect(sample.x, sample.y, sample.width, sample.height);
         if (!vis) return;
-        const h = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * vis.uniformScale;
-        const gateH = choice
+        const h = this.useGardenObstacles()
+          ? this.obstacleArt.height(look, this.catH(), vis.uniformScale)
+          : this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * vis.uniformScale;
+        const gateH = choice && !this.useGardenObstacles()
           ? this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * vis.uniformScale
           : 0;
         // Keep rows alive behind the reveal crest (HIDDEN) so they can emerge
@@ -2454,6 +2496,8 @@ export class GardenArt {
         prop.spans = spans;
         prop.openings = (row.paths || []).slice();
         prop.choice = choice;
+        prop.look = look;
+        prop.lookSeed = lookSeed;
         prop.classScale = classScale;
         prop.screenY = vis.screenY;
         prop.groundY = vis.groundY;
@@ -2574,17 +2618,25 @@ export class GardenArt {
     return this.catH() * nearCat * scale;
   }
 
+  // Planters and flower gates drawn by ObstacleArt.js instead of the fence kit.
+  useGardenObstacles() {
+    return !!CONFIG.VISUAL.GARDEN_OBSTACLES?.ENABLED;
+  }
+
   drawFenceRow(prop) {
     if (!prop || !prop.spans || !prop.spans.length) return;
     const kit = this.ensureFenceKit();
     if (!kit) return;
     const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
-    const h = this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * scale;
+    const garden = this.useGardenObstacles();
+    const h = garden
+      ? this.obstacleArt.height(prop.look, this.catH(), scale)
+      : this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * scale;
     const groundY = prop.groundY;
     const worldY = Number.isFinite(prop.worldY) ? prop.worldY : groundY;
     const road = this.roadAt(worldY);
     const choice = !!(prop.choice && prop.openings && prop.openings.length >= 2);
-    const gateH = choice
+    const gateH = choice && !garden
       ? this.catH() * (CONFIG.VISUAL.CHOICE_GATEWAY_NEAR_CAT ?? 1.08) * scale
       : 0;
     const occH = Math.max(h, gateH);
@@ -2598,10 +2650,16 @@ export class GardenArt {
       if (occ.state === 'VISIBLE') {
         this.contactShadow((x0 + x1) / 2, groundY + 1, Math.max(16, x1 - x0), prop.screenY);
       }
-      this.drawFenceSpan(kit, x0, x1, groundY, h, 1, span, worldY);
+      if (garden) {
+        this.obstacleArt.drawSpan(prop.look, x0, x1, groundY, this.catH(), scale, prop.lookSeed + span.x * 0.37);
+      } else {
+        this.drawFenceSpan(kit, x0, x1, groundY, h, 1, span, worldY);
+      }
     });
 
-    if (choice) {
+    // The reference has no frames over choice openings: gap width, sills and
+    // reward values carry SAFE / RISK, so frames are off with garden obstacles.
+    if (choice && !garden) {
       const gateKit = this.ensureGatewayKit();
       if (gateKit) {
         prop.openings.forEach((path) => {
@@ -2956,7 +3014,7 @@ export class GardenArt {
   groundShadow(x, y, rx, ry) {
     const ctx = this.ctx;
     ctx.fillStyle = this.c.ShadowDust;
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = CONFIG.VISUAL.SHADOW_ALPHA ?? 0.5;
     ctx.beginPath();
     if (typeof ctx.ellipse === 'function') {
       ctx.ellipse(x + 3, y, rx, ry, 0, 0, Math.PI * 2);

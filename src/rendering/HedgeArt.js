@@ -6,15 +6,15 @@ import { CONFIG } from '../config.js';
 // что и дорога: ширина и размер клочков = масштаб дороги на этой глубине.
 
 // Палитра из docs/visual-bible.md §6 (2026-09). В шаге 7 Фазы 1 переедет в CONFIG.COLORS.
-const LEAF = '#7EA24E'; // HedgeSage
-const LEAF_SHADE = '#4B6D36'; // HedgeShade
-const LEAF_LIGHT = '#9DBB5C'; // HedgeLeafLight
-const LEAF_DEEP = '#658845'; // HedgeSage + HedgeShade пополам: просветы между клочками
+const LEAF = '#76A544'; // HedgeSage
+const LEAF_SHADE = '#43682F'; // HedgeShade
+const LEAF_LIGHT = '#9CC456'; // HedgeLeafLight
+const LEAF_DEEP = '#577F38'; // HedgeSage + HedgeShade пополам: просветы между клочками
 const WOOD = '#BF7A45'; // PlanterWood
 const WOOD_LIGHT = '#D39048'; // WoodLight
 const INK = '#4A3428'; // InkBrown
 const SHADOW = '#C4A97A'; // ShadowDust
-const SAND = '#E2C992'; // FloorSand (как в config.js до шага 7)
+const SAND = '#F7DCA0'; // FloorSand
 const PETAL = '#FBF8EA'; // CloudWhite
 const PETAL_PINK = '#F4B3A2'; // BlossomPink
 const POLLEN = '#E8B84A'; // CoinAmber
@@ -33,7 +33,8 @@ function settings() {
     period: h.CLUMP_PERIOD ?? 26,
     radius: h.CLUMP_RADIUS_NEAR ?? 15,
     postPeriod: h.POST_PERIOD ?? 130,
-    flowerChance: h.FLOWER_CHANCE ?? 0.22
+    flowerChance: h.FLOWER_CHANCE ?? 0.22,
+    horizonTaper: h.HORIZON_TAPER ?? 80
   };
 }
 
@@ -57,7 +58,10 @@ export class HedgeArt {
     for (let base = top; base <= bottom; base += base < top + 120 ? 3 : 6) {
       const worldY = art.screenToWorldY(base + shift);
       const p = art.roadAt(worldY);
-      const s = p.scale;
+      // У горизонта изгородь плавно сужается до нуля и сливается с деревьями,
+      // а не заканчивается тёмным клином.
+      const t = Math.max(0, Math.min(1, (p.drawY - art.horizonY()) / cfg.horizonTaper));
+      const s = p.scale * t * t * (3 - 2 * t);
       rows.push(p.drawY, p.roadLeft, p.roadRight, s);
     }
     return cfg;
@@ -136,7 +140,7 @@ export class HedgeArt {
           // Вдали цветов меньше, иначе они сливаются в белую «сыпь».
           const flowerChance = cfg.flowerChance * Math.max(0, Math.min(1, (s - 0.62) / 0.3));
           if (lane > 0 && hash(seed + 3) < flowerChance) {
-            flowers.push(x - r * 0.1, y - r * 0.35, r * 0.42, hash(seed + 4) < 0.35 ? 1 : 0);
+            flowers.push(x - r * 0.1, y - r * 0.35, r * 0.62, hash(seed + 4) < 0.35 ? 1 : 0);
           }
         }
       }
@@ -156,6 +160,8 @@ export class HedgeArt {
       }
       ctx.fill();
     };
+    // Тёмный зубчатый контур по краю изгороди, как на референсе.
+    pass(LEAF_SHADE, 0, 0, 1.12);
     pass(LEAF_SHADE, 0.1, 0.12, 1);
     pass(LEAF, -0.04, -0.06, 0.96);
     pass(LEAF_LIGHT, -0.32, -0.4, 0.34);

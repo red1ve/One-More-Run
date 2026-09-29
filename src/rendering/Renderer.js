@@ -269,7 +269,8 @@ export class Renderer {
     const dir = player.moveDirection || 0;
     const lean = dir * 0.08;
 
-    this.garden.groundShadow(player.x, player.y + 16, 20, 8);
+    const shadow = CONFIG.VISUAL.CAT_SHADOW || {};
+    this.garden.groundShadow(player.x, player.y + 16, shadow.RX ?? 20, shadow.RY ?? 8);
 
     const cycle = this.runFrameIndex(time);
     const bob = CONFIG.FEEL.PLAYER_BOB || 1.6;
