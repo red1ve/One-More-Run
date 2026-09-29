@@ -77,7 +77,18 @@ The game never shows an ad during an active run or immediately over Game Over re
 
 Ad close, no-fill, unavailable SDK, and errors all continue to the requested run. Repeated input cannot create duplicate ad calls or duplicate runs. If the page becomes hidden while the ad request is resolving, the game remains on GAMEOVER and waits for a new user gesture.
 
-Rewarded video is intentionally not connected: there is no suitable reward loop, revive, shop, or rewarded Coin mechanic.
+### Rewarded video (Phase 5)
+
+`YandexService.showRewarded()` calls `ysdk.adv.showRewardedVideo({ callbacks: { onOpen, onRewarded, onClose, onError } })`. The reward is granted **only** if `onRewarded` fired before `onClose`; `onClose` without it, `onError`, and a thrown call all give no reward and release the ad lock. Only one ad (fullscreen or rewarded) can be open at a time. After a rewarded ad the interstitial cooldown restarts, so a fullscreen ad never follows right after it.
+
+Offers appear only on the Game Over card, only as explicit opt-in buttons with a video icon and the words "за рекламу" / "AD":
+
+- **ПРОДОЛЖИТЬ ЗА РЕКЛАМУ / CONTINUE • AD** — once per run (`Game.revive()`): rows ahead are cleared and the cat is invulnerable for 2 s.
+- **×2 МОНЕТЫ ЗА РЕКЛАМУ / x2 COINS • AD** — once per run, only if the run collected coins; adds this run's coins again.
+
+While the ad is open the game is paused (`adPaused`: movement, timers and audio stop; GameplayAPI is stopped) and restart input is ignored. Input is also ignored for `GAME_OVER_INPUT_LOCK` (0.6 s) after a crash, so a steering tap cannot restart or open an ad by accident. Without the SDK the buttons are hidden; in `npm run dev` a stub (`DEV_REWARDED_STUB`) simulates a watched ad so the flow can be tested locally.
+
+**To verify against the current official docs** (yandex.ru/dev/games was not reachable from the cloud session): exact `showRewardedVideo` callback names and order, and any moderation wording rules for rewarded buttons.
 
 ## Local fallback
 
@@ -103,7 +114,8 @@ Verify:
 - `game_api_pause` freezes movement, score, runTime, Coins, and audio;
 - leaderboard submission works for an authorized player;
 - an unauthorized player remains fully playable;
-- fullscreen ad close and no-fill both lead to exactly one requested restart.
+- fullscreen ad close and no-fill both lead to exactly one requested restart;
+- rewarded: watching to the end revives / doubles coins; closing early or no-fill gives nothing and keeps Game Over; sound is muted while the ad is open.
 
 ## Yandex Games Console
 

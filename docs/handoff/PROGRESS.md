@@ -4,11 +4,11 @@
 
 ## Текущее состояние
 
-- Фазы 0, 1, 1б, 3: сделаны и слиты (PR #1–#5).
-- Фаза 4 (русский язык): **сделана**, формулировки утверждены пользователем (правки: №3 «КАСАЙСЯ СЛЕВА ИЛИ СПРАВА», №15 «ЕЩЁ РАЗ • R»). PR ждёт слияния.
-- Ветка `claude/zen-einstein-7wj26b` (от main после PR #5). Git-имя в репозитории (локально): Maxim <klopotovmax@gmail.com>.
-- `npm run check`: drift-probe + phase4/7/8/9 + phase1b + l10n, все зелёные.
-- Для разработки: `?lang=ru`, `?seed=42`, `?reveal=A..E`, `window.__omrGame` — только в `npm run dev`.
+- Фазы 0, 1, 1б, 3, 4: сделаны и слиты (PR #1–#6).
+- Фаза 5 (Яндекс): реклама за награду (возрождение, ×2 монеты) сделана и проверена в браузере с имитацией; **ждём доступа к yandex.ru/yandex.com** (сетевые настройки облачной среды), чтобы сверить вызовы SDK с актуальной документацией, до PR. Открытый вопрос к пользователю: делать ли экран таблицы рекордов сейчас.
+- Ветка `claude/zen-einstein-7wj26b` (от main после PR #6). Git-имя в репозитории (локально): Maxim <klopotovmax@gmail.com>.
+- `npm run check`: drift-probe + phase4/7/8/9 + phase1b + l10n + phase5, все зелёные.
+- Для разработки: `?lang=ru`, `?seed=42`, `?reveal=A..E`, `window.__omrGame`, имитация рекламы за награду — только в `npm run dev`.
 
 ## План Фазы 1б (согласован 2026-09-29)
 
@@ -23,6 +23,14 @@
 Каждое изменение — с обновлением GAME_SPEC.md и тестов scripts/phase*-check.mjs.
 
 ## Сделано
+
+- Фаза 5 (в работе):
+  - `YandexService.canShowRewarded/showRewarded` (`showRewardedVideo`, награда только после `onRewarded`; ошибка/закрытие — без награды; одна реклама за раз; сброс кулдауна межстраничной). Имитация `DEV_REWARDED_STUB` только в dev.
+  - Game: `runCoins`, `coinsDoubled`, `rewardPending`, `handleTap(x, y)`, `requestRevive`, `requestDoubleCoins`, `showRewardedAd` (пауза игры и звука на время рекламы), `GAME_OVER_INPUT_LOCK` 0.6 с. main.js передаёт координаты нажатия.
+  - Renderer: кнопки «ПРОДОЛЖИТЬ ЗА РЕКЛАМУ» (SafeLawn) и «×2 МОНЕТЫ ЗА РЕКЛАМУ» со значком видео, `hitGameOverButton`. Строки `over.revive`, `over.double` в en/ru.
+  - Проверки: phase7 (+4 про рекламу за награду), новый `scripts/phase5-check.mjs` (6). Браузер: возрождение и ×2 работают, ошибок нет.
+  - Документы: `docs/yandex-integration.md` (раздел Rewarded video, пункт «сверить с документацией»), GAME_SPEC §17.
+  - Кадры: `docs/reference/progress/phase5/`.
 
 - Фаза 4 (русский язык):
   - Все надписи в `src/localization/en.json` / `ru.json`; `src/localization/i18n.js` (`t`, `setLanguage`, `getLanguage`); Renderer и подсказки в Game.js через `t()`. Английские строки дословно прежние.
