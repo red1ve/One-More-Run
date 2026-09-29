@@ -152,6 +152,10 @@ export class GardenArt {
     const c = CONFIG.COLORS;
     this.c = c;
     this.hedges = new HedgeArt(this);
+    this.roseArch = this.loadVectorArt(
+      new URL('../../assets/environment/garden/landmarks/rose-arch.svg', import.meta.url).href,
+      CONFIG.VISUAL.ROSE_ARCH?.RASTER_WIDTH ?? 240
+    );
     this.sky = c.GardenSky;
     this.lawnFar = mixHex(c.HedgeSage, c.GardenSky, 0.58);
     this.lawnMid = mixHex(c.HedgeSage, c.SafeLawn, 0.28);
@@ -986,8 +990,32 @@ export class GardenArt {
    * spawned Choice gate) — gives the road a clear end/orientation point
    * instead of just fading into the background image.
    */
+  // SVG is rasterized once into its own canvas: drawing a canvas every frame
+  // is cheap, while drawing an SVG image every frame can be slow on phones.
+  loadVectorArt(url, rasterWidth) {
+    const art = { canvas: null, aspect: 1 };
+    if (typeof Image === 'undefined' || typeof document === 'undefined') return art;
+    const img = new Image();
+    img.onload = () => {
+      const aspect = (img.naturalHeight || 1) / Math.max(1, img.naturalWidth || 1);
+      const canvas = document.createElement('canvas');
+      canvas.width = rasterWidth;
+      canvas.height = Math.round(rasterWidth * aspect);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      art.canvas = canvas;
+      art.aspect = aspect;
+      if (this.onReady) this.onReady();
+    };
+    img.src = url;
+    return art;
+  }
+
   drawHorizonLandmark() {
     if (!this.usePack()) return;
+    if (this.roseArch.canvas) {
+      this.drawRoseArch();
+      return;
+    }
     const item = this.choiceGatewayItem();
     if (!item) return;
     const src = this.sourceRect(item);
@@ -1000,6 +1028,22 @@ export class GardenArt {
     const x = this.width * 0.5;
     const y = this.horizonY() + 2;
     this.drawSprite(item, x, y, w, h, { grounded: true, alpha: 0.92 });
+  }
+
+  // Rose-covered pergola at the far end of the path (reference landmark).
+  // Slightly transparent so the sky shows through: reads as distant haze.
+  drawRoseArch() {
+    const cfg = CONFIG.VISUAL.ROSE_ARCH || {};
+    const art = this.roseArch;
+    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH ?? 200;
+    const maxH = Math.max(24, this.horizonY() - (cfg.TOP_MARGIN ?? 10));
+    const w = Math.min(farW * (cfg.WIDTH_OF_FAR_ROAD ?? 0.62), maxH / art.aspect);
+    const h = w * art.aspect;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = cfg.ALPHA ?? 0.88;
+    ctx.drawImage(art.canvas, this.width * 0.5 - w / 2, this.horizonY() + 3 - h, w, h);
+    ctx.restore();
   }
 
   drawMainWorld(camera, segments = [], playerY = CONFIG.PLAYER_START_Y) {
@@ -1928,10 +1972,25 @@ export class GardenArt {
       ctx.clip();
       this.drawPathSandRibbon(sand, samples, progress);
       this.drawRibbonEdgeTone(samples);
+      this.drawFarSandVeil(farSample.drawY);
       ctx.restore();
     } else {
       this.drawSandGrain(cam);
     }
+  }
+
+  // Far away the tiled sand texture squeezes into stripes that read as planks.
+  // Plain sand fades in toward the horizon so the path runs smoothly into the arch.
+  drawFarSandVeil(farY) {
+    const ctx = this.ctx;
+    const depth = CONFIG.VISUAL.FAR_SAND_VEIL ?? 70;
+    const c = parseHex(this.pathSandFar);
+    const fill = ctx.createLinearGradient(0, farY, 0, farY + depth);
+    fill.addColorStop(0, `rgba(${c.r}, ${c.g}, ${c.b}, 1)`);
+    fill.addColorStop(0.45, `rgba(${c.r}, ${c.g}, ${c.b}, 0.7)`);
+    fill.addColorStop(1, `rgba(${c.r}, ${c.g}, ${c.b}, 0)`);
+    ctx.fillStyle = fill;
+    ctx.fillRect(0, farY - 4, this.width, depth + 4);
   }
 
   drawPathSandRibbon(item, samples, progress) {

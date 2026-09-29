@@ -153,6 +153,15 @@ export const CONFIG = {
     OUTLINE_WIDTH: 4,
     SHADOW_OFFSET: 5,
     HEDGE_BAND: 28,
+    // Высота (px) ровного песка у горизонта, прячет полоски сжатой текстуры.
+    FAR_SAND_VEIL: 70,
+    // Арка в розах на горизонте (assets/environment/garden/landmarks/rose-arch.svg).
+    ROSE_ARCH: {
+      RASTER_WIDTH: 240,
+      WIDTH_OF_FAR_ROAD: 0.72,
+      TOP_MARGIN: 10,
+      ALPHA: 0.88
+    },
     // Живая изгородь с бордюром (HedgeArt.js). Размеры — у кота, дальше по перспективе.
     HEDGE_WALL: {
       ENABLED: true,
