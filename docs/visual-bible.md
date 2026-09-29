@@ -473,6 +473,8 @@ Since Phase 1 step 3 (2026-09) the far end of the path is a rose-covered pergola
 
 ### Obstacles / gates
 
+Since Phase 1 step 4 (2026-09) obstacle rows are drawn by `src/rendering/ObstacleArt.js` (`VISUAL.GARDEN_OBSTACLES`) over the unchanged collision spans. Segment family `FLOWER_GATE` becomes a terracotta garden gate (GatePaint panels with an arched top, vertical boards, GatePaintShade bottom rail, round-capped posts at each end, a leaf-and-bud sprig in the centre; `GATE_NEAR_CAT` 0.64 of the cat height). `STANDING_PLANTER` and `GARDEN_FENCE` become a wooden planter box (PlanterWood front, two plank seams, WoodLight rim, corner posts with WoodShade, a lush two-row leaf cap with sparse flowers; box `PLANTER_NEAR_CAT` 0.36). Any span width works: the box stretches and gates add panels. Choice openings no longer get gateway frames (the reference has none); gap width, sills and reward values carry SAFE / RISK. The older fence-kit paragraph below applies only when `GARDEN_OBSTACLES.ENABLED` is false.
+
 Obstacle rects use one visual family per segment as a shell over existing geometry. The family is stored on the segment (`FLOWER_GATE`, `STANDING_PLANTER`, or `GARDEN_FENCE`) when the segment is created and does not change while that segment is alive. Pack rendering uses one continuous `garden-fence` construction for every barrier row, with openings left as gaps. TWO_PATHS and DUAL_RISK add a separate open gateway (`single-choice-arch` posts + beam) on each opening. SAFE and RISK openings in the same row share one barrier height. Pack off falls back to procedural wood. SAFE / RISK readability lives on gap width, inner-face material, and sills — not a bright accent strip.
 
 Never paint obstacles red. Red was debug danger. In this world, danger is **narrowness**, not colour-of-death.
@@ -546,6 +548,8 @@ Named tokens. New colours are not allowed without updating this bible.
 | LawnShade | GardenLawn toward HedgeSage, `#9EB455` | Soft shadow patches on the lawn |
 | LawnLight | GardenLawn lightened, `#BEC96A` | Rare light patches on the lawn |
 | LawnTuft | GardenLawn toward HedgeShade, `#94A74F` | Grass tuft strokes |
+| GatePaintLight | GatePaint toward SkyPaper, `#DF8E69` | Lit arched top of gate panels, post caps |
+| GatePaintShade | GatePaint toward InkBrown, `#C36845` | Gate bottom rail, shaded side of gate posts |
 
 ### Why each core colour exists
 
