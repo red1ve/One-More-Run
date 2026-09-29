@@ -37,7 +37,7 @@ Priorities:
 
 Current implementation notes:
 
-- Horizontal player speed is ~420 px/s. Phase 1b: the cat is drawn at 150 px with a 36×36 hitbox, the road at the cat is ~364 px wide, and narrow gaps are 6 px wider so side clearance is unchanged.
+- Horizontal player speed grows with the track speed: 420 px/s at the start, 500 px/s at the track maximum (Phase 1b; the generator still plans with 420). Phase 1b: the cat is drawn at 150 px with a 36×36 hitbox, the road at the cat is ~364 px wide, and narrow gaps are 6 px wider so side clearance is unchanged.
 - Player X is clamped to the visual garden-path inner edges (hedge borders), not to empty grass outside the sand.
 - Track speed follows `v(t) = max - (max - start) * e^(-t / tau)` (300 → 720, tau 70).
 - Choices are SAFE/RISK (`TWO_PATHS`) and RISK/RISK (`DUAL_RISK` after 30s). No other Choice types.

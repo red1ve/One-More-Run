@@ -1,4 +1,4 @@
-import { CONFIG, getTrackSpeed } from '../config.js';
+import { CONFIG, getTrackSpeed, getPlayerSpeed } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WorldCamera } from '../rendering/WorldCamera.js';
 import { Player } from './Player.js';
@@ -245,6 +245,7 @@ export class Game {
 
   // Один шаг физики: движение, трасса, награды, монеты. true = столкновение.
   simulateStep(deltaTime) {
+    this.player.speed = getPlayerSpeed(getTrackSpeed(this.runTime));
     const screenY = this.player.y + (this.camera?.gameplayShift?.() || 0);
     this.player.update(deltaTime, playableXBounds(screenY, this.player.width));
 

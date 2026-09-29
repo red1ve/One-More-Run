@@ -16,6 +16,9 @@ export const CONFIG = {
   PLAYER_WIDTH: 36,
   PLAYER_HEIGHT: 36,
   PLAYER_SPEED: 420,
+  // Фаза 1б: стрейф растёт вместе со скоростью трассы, до этого значения на максимуме.
+  // Генератор трассы считает достижимость по PLAYER_SPEED (с запасом).
+  PLAYER_SPEED_MAX: 500,
   PLAYER_START_Y: 840,
   // Защита от «проскоков» (Game.simulateStep): макс. сдвиг за шаг физики и макс. число шагов за кадр.
   SUBSTEP_MAX_PX: 12,
@@ -396,4 +399,12 @@ export function getTrackSpeed(runTimeSeconds) {
   const max = CONFIG.TRACK_SPEED_MAX;
   const tau = CONFIG.TRACK_SPEED_TAU;
   return max - (max - start) * Math.exp(-t / tau);
+}
+
+// Скорость стрейфа кота для текущей скорости трассы: 420 на старте, 500 на максимуме.
+export function getPlayerSpeed(trackSpeed) {
+  const start = CONFIG.TRACK_SPEED_START;
+  const max = CONFIG.TRACK_SPEED_MAX;
+  const t = Math.max(0, Math.min(1, (trackSpeed - start) / Math.max(1, max - start)));
+  return CONFIG.PLAYER_SPEED + (CONFIG.PLAYER_SPEED_MAX - CONFIG.PLAYER_SPEED) * t;
 }

@@ -1,6 +1,6 @@
 // Фаза 1б: проверки геймплея.
 // Запуск: node scripts/phase1b-check.mjs (входит в npm run check).
-import { CONFIG } from '../src/config.js';
+import { CONFIG, getPlayerSpeed, getTrackSpeed } from '../src/config.js';
 import { Game } from '../src/game/Game.js';
 import { Player } from '../src/game/Player.js';
 import { Track } from '../src/game/Track.js';
@@ -68,8 +68,9 @@ function makeScenario(seed, runTime) {
     feel: { update() {} },
     floatingRewards: [],
     keyboardInput: {
-      isLeftPressed: () => !holdRight && clock < releaseAt,
-      isRightPressed: () => holdRight && clock < releaseAt
+      // 1e-6: время копится из мелких шагов, 0.3 может стать 0.29999.
+      isLeftPressed: () => !holdRight && clock < releaseAt - 1e-6,
+      isRightPressed: () => holdRight && clock < releaseAt - 1e-6
     },
     mouseInput: null,
     touchInput: { getTouchX: () => null },
@@ -100,8 +101,8 @@ check('low FPS (10) gives the same crash outcome as 120 FPS', () => {
     const coarse = makeScenario(seed, runTime).run(0.1);
     if (fine !== coarse) mismatches += 1;
   }
-  // Допуск 1%: касания «впритирку» на самом углу ящика.
-  assert(mismatches / total <= 0.01, `mismatches ${mismatches}/${total}`);
+  // С делением кадра исход совпадает полностью (без него — 2 из 400 расходятся).
+  assert(mismatches === 0, `mismatches ${mismatches}/${total}`);
 });
 
 check('an obstacle row never passes through the cat without a hit, even at 10 FPS', () => {
@@ -134,10 +135,22 @@ check('an obstacle row never passes through the cat without a hit, even at 10 FP
 });
 
 check('physics substeps are small enough at max speed and the 0.1 s frame cap', () => {
-  const worst = Math.max(CONFIG.TRACK_SPEED_MAX, CONFIG.PLAYER_SPEED) * 0.1;
+  const worst = Math.max(CONFIG.TRACK_SPEED_MAX, CONFIG.PLAYER_SPEED_MAX) * 0.1;
   const steps = Math.min(CONFIG.SUBSTEP_MAX_COUNT, Math.ceil(worst / CONFIG.SUBSTEP_MAX_PX));
   assert(worst / steps <= CONFIG.SUBSTEP_MAX_PX + 0.01, `step ${worst / steps}px`);
   assert(CONFIG.SUBSTEP_MAX_PX < CONFIG.PLAYER_WIDTH, 'substep must be smaller than the cat');
+});
+
+check('cat strafe speed grows with the track, never below the generator assumption', () => {
+  assert(getPlayerSpeed(getTrackSpeed(0)) === CONFIG.PLAYER_SPEED, 'start speed');
+  assert(Math.abs(getPlayerSpeed(CONFIG.TRACK_SPEED_MAX) - CONFIG.PLAYER_SPEED_MAX) < 1e-9, 'max speed');
+  let prev = 0;
+  for (let t = 0; t <= 300; t += 10) {
+    const v = getPlayerSpeed(getTrackSpeed(t));
+    assert(v >= prev - 1e-9, 'monotonic');
+    assert(v >= CONFIG.PLAYER_SPEED, 'never slower than the reachability assumption');
+    prev = v;
+  }
 });
 
 console.log(results.join('\n'));
