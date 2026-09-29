@@ -976,6 +976,26 @@ export class GardenArt {
   drawFarWorld(camera) {
     this.drawHorizonGarden(camera);
     this.drawDistantMeadow();
+    this.drawHorizonLandmark();
+  }
+
+  /**
+   * Permanent arch sitting at the vanishing point, always visible (not a
+   * spawned Choice gate) — gives the road a clear end/orientation point
+   * instead of just fading into the background image.
+   */
+  drawHorizonLandmark() {
+    if (!this.usePack()) return;
+    const item = this.choiceGatewayItem();
+    if (!item) return;
+    const src = this.sourceRect(item);
+    const aspect = src.sh / Math.max(1, src.sw);
+    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH ?? 200;
+    const w = farW * 0.82;
+    const h = w * aspect;
+    const x = this.width * 0.5;
+    const y = this.horizonY() + 2;
+    this.drawSprite(item, x, y, w, h, { grounded: true, alpha: 0.92 });
   }
 
   drawMainWorld(camera, segments = [], playerY = CONFIG.PLAYER_START_Y) {
@@ -1835,31 +1855,8 @@ export class GardenArt {
     const cam = camera || dummyCamera();
     const progress = cam.progress || 0;
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
-    let samples = sampleRoadRibbon(shift, { height: this.height, pad: 56 });
+    const samples = sampleRoadRibbon(shift, { height: this.height, pad: 56 });
     if (samples.length < 2) return;
-
-    // Extend MAIN road tip a short way into FAR as a NARROW continuation
-    // (visual tip only — projector FAR width at horizon stays 120).
-    const horizon = this.horizonY();
-    const tipScreens = [horizon - 18, horizon - 8];
-    const tips = [];
-    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH || 120;
-    for (let i = 0; i < tipScreens.length; i += 1) {
-      const screen = tipScreens[i];
-      if (samples[0] && screen + 0.5 >= samples[0].screenY) continue;
-      const p = this.projectWorld(this.width * 0.5, this.screenToWorldY(screen, shift));
-      const u = Math.max(0, Math.min(1, (horizon - screen) / 22));
-      // Pull tip inward so FAR continuation reads as a short V, not a wide board.
-      const tipW = farW * (0.72 - u * 0.28);
-      const cx = p.roadCenter;
-      tips.push({
-        ...p,
-        roadLeft: cx - tipW * 0.5,
-        roadRight: cx + tipW * 0.5,
-        roadWidth: tipW
-      });
-    }
-    if (tips.length) samples = tips.concat(samples);
 
     const traceRibbon = (outset = 0) => {
       ctx.beginPath();
