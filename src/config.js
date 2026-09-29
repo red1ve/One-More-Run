@@ -162,6 +162,11 @@ export const CONFIG = {
       GATE_NEAR_CAT: 0.64,
       FLOWER_CHANCE: 0.3
     },
+    // Боковой декор за изгородью (SideDecorArt.js): шаг слотов по миру и доля занятых.
+    SIDE_DECOR: {
+      PERIOD: 70,
+      CHANCE: 0.8
+    },
     // Газон за изгородью (LawnArt.js): пятна и пучки травы.
     LAWN: {
       PATCH_PERIOD: 34,

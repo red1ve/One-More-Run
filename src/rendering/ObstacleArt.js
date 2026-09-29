@@ -108,7 +108,8 @@ export class ObstacleArt {
   drawGreenery(x0, x1, baseY, H, seed) {
     const ctx = this.ctx;
     const w = x1 - x0;
-    const r = H * 0.44;
+    // У узкого ящика и шапка узкая, иначе он похож на деревце.
+    const r = Math.min(H * 0.44, Math.max(2, w * 0.45));
     const count = Math.max(1, Math.ceil(w / (r * 1.05)));
     const step = w / count;
     const clumps = [];

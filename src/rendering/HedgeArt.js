@@ -156,6 +156,8 @@ export class HedgeArt {
       }
       ctx.fill();
     };
+    // Тёмный зубчатый контур по краю изгороди, как на референсе.
+    pass(LEAF_SHADE, 0, 0, 1.12);
     pass(LEAF_SHADE, 0.1, 0.12, 1);
     pass(LEAF, -0.04, -0.06, 0.96);
     pass(LEAF_LIGHT, -0.32, -0.4, 0.34);
