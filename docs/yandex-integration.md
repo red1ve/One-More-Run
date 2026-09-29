@@ -88,7 +88,13 @@ Offers appear only on the Game Over card, only as explicit opt-in buttons with a
 
 While the ad is open the game is paused (`adPaused`: movement, timers and audio stop; GameplayAPI is stopped) and restart input is ignored. Input is also ignored for `GAME_OVER_INPUT_LOCK` (0.6 s) after a crash, so a steering tap cannot restart or open an ad by accident. Without the SDK the buttons are hidden; in `npm run dev` a stub (`DEV_REWARDED_STUB`) simulates a watched ad so the flow can be tested locally.
 
-**To verify against the current official docs** (yandex.ru/dev/games was not reachable from the cloud session): exact `showRewardedVideo` callback names and order, and any moderation wording rules for rewarded buttons.
+Checked against the official docs by the owner (2026-09-29: `yandex.com/dev/games/doc/en/sdk/sdk-adv`, `.../concepts/requirements`): `showRewardedVideo` with `onOpen` / `onRewarded` / `onClose` / `onError`; the reward is given only on `onRewarded`; buttons must say it is an ad and what the reward is. The docs do not fix the order of `onRewarded` and `onClose`, so after `onClose` without a reward the service waits `REWARDED_CLOSE_GRACE_MS` (250 ms) for a late `onRewarded` before deciding there was no reward (`scripts/phase7-check.mjs` covers late, missing and too-late rewards).
+
+Fullscreen (interstitial) facts from the same check: never during gameplay, only after a player action; Yandex decides the actual frequency. Our own 3-run cooldown only limits how often we ask.
+
+### Sticky banner
+
+Yandex shows the sticky banner by default from launch for the whole session. It is configured in the Developer Console, not in code. **Check its effect on the layout in the console draft** (the canvas is letterboxed to 9:16; the banner must not cover the HUD, the Game Over buttons or the bottom sound pill on 360×640), or switch it off in the console.
 
 ## Local fallback
 
@@ -117,6 +123,21 @@ Verify:
 - fullscreen ad close and no-fill both lead to exactly one requested restart;
 - rewarded: watching to the end revives / doubles coins; closing early or no-fill gives nothing and keeps Game Over; sound is muted while the ad is open.
 
+## Moderation checklist (for Phase 6 QA)
+
+From the official requirements (owner's check, 2026-09-29). Status as of Phase 5:
+
+- [x] No long-press menu, text selection or context menu on phones (`user-select`, `-webkit-touch-callout`, `contextmenu` blocked on the game area).
+- [x] No pull-to-refresh / page scroll on phones (`overscroll-behavior: none`, `touch-action: none` on the canvas).
+- [ ] File names in the archive have no spaces and no Cyrillic (check the built `dist/` in Phase 6; current sources are clean).
+- [ ] `index.html` is at the root of the zip archive, archive ≤ 100 MB (`dist/` is ~7 MB now).
+- [ ] Desktop: the game field stretches to the window (9:16 canvas scales up; check the empty side areas look intentional).
+- [x] Sign-in only by an explicit button; a guest plays fully without signing in (the game has no sign-in yet; leaderboard submit is skipped for guests).
+- [ ] Game name matches the console per language: RU «Ещё забег», EN «One More Run» (START title and browser tab title come from `src/localization/*.json` → `start.title`, `meta.title`).
+- [x] Rewarded buttons say it is an ad and name the reward; reward only on `onRewarded`.
+- [x] No ads during gameplay; interstitial only after a player action (restart).
+- [x] Sound and gameplay pause during ads and on `game_api_pause`; GameplayAPI start/stop follows PLAYING.
+
 ## Yandex Games Console
 
 - [ ] Create the game.
@@ -124,7 +145,10 @@ Verify:
 - [ ] Open the draft with the official debug panel.
 - [ ] Confirm SDK initialization and `LoadingAPI.ready()`.
 - [ ] Confirm automatic language detection in the debug panel.
-- [ ] Declare Russian and English (both fully localized since Phase 4); fill the catalogue name and description in both languages.
+- [ ] Declare Russian and English (both fully localized since Phase 4); fill the catalogue name and description in both languages. Names must match the game: RU «Ещё забег», EN «One More Run».
+- [ ] Enable rewarded video and fullscreen ads for the game (monetization settings).
+- [ ] Check or switch off the sticky banner (see «Sticky banner»).
+- [ ] In the draft with the debug panel: watch a rewarded ad to the end (revive / ×2 coins happen), close one early (nothing happens), check sound is muted during ads.
 - [ ] Create a numeric descending leaderboard.
 - [ ] Set its Technical leaderboard name to `one_more_run_score`.
 - [ ] Test leaderboard submission as an authorized player.
