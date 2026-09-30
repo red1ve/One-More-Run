@@ -123,20 +123,38 @@ Verify:
 - fullscreen ad close and no-fill both lead to exactly one requested restart;
 - rewarded: watching to the end revives / doubles coins; closing early or no-fill gives nothing and keeps Game Over; sound is muted while the ad is open.
 
-## Moderation checklist (for Phase 6 QA)
+## Moderation checklist
 
-From the official requirements (owner's check, 2026-09-29). Status as of Phase 5:
+From the official requirements (owner's check, 2026-09-29). Status after Phase 6 QA (2026-09-30):
 
 - [x] No long-press menu, text selection or context menu on phones (`user-select`, `-webkit-touch-callout`, `contextmenu` blocked on the game area).
-- [x] No pull-to-refresh / page scroll on phones (`overscroll-behavior: none`, `touch-action: none` on the canvas).
-- [ ] File names in the archive have no spaces and no Cyrillic (check the built `dist/` in Phase 6; current sources are clean).
-- [ ] `index.html` is at the root of the zip archive, archive ≤ 100 MB (`dist/` is ~7 MB now).
-- [ ] Desktop: the game field stretches to the window (9:16 canvas scales up; check the empty side areas look intentional).
+- [x] No pull-to-refresh, page scroll or pinch/double-tap zoom on phones (`overscroll-behavior: none`, `touch-action: none` on the page and canvas, `user-scalable=no`, iOS `gesture*` and `dblclick` blocked).
+- [x] File names in the archive have no spaces and no Cyrillic (`npm run verify:dist`).
+- [x] `index.html` is at the root of `dist/`, relative asset paths (`base: './'`), build ≈ 1 MB (limit 100 MB).
+- [x] The game field stretches to the screen: the 9:16 canvas fills the full height on desktop/landscape and the full width on tall phones (long side / short side = 1.78 ≤ 2). The page around it is the garden green, no shadow. Checked 1920×1080, 1366×768, 768×1024, 360×640, 390×844, 844×390, 640×360.
 - [x] Sign-in only by an explicit button; a guest plays fully without signing in (the game has no sign-in yet; leaderboard submit is skipped for guests).
-- [ ] Game name matches the console per language: RU «Ещё забег», EN «One More Run» (START title and browser tab title come from `src/localization/*.json` → `start.title`, `meta.title`).
+- [ ] Game name matches the console per language: RU «Ещё забег», EN «One More Run» (START title and browser tab title come from `src/localization/*.json` → `start.title`, `meta.title`). **Owner: type exactly these names in the console.**
 - [x] Rewarded buttons say it is an ad and name the reward; reward only on `onRewarded`.
 - [x] No ads during gameplay; interstitial only after a player action (restart).
 - [x] Sound and gameplay pause during ads and on `game_api_pause`; GameplayAPI start/stop follows PLAYING.
+- [ ] Sticky banner does not cover the HUD or Game Over buttons (check in the console draft, or switch the banner off).
+
+## Build and zip for the console
+
+The console accepts a zip archive whose root contains `index.html` (not a folder with `index.html` inside).
+
+1. Get the latest `main` and install: `git checkout main`, `git pull`, `npm install`.
+2. Run the checks: `npm run check` (everything must say "passed").
+3. Build: `npm run build`. This creates the `dist` folder.
+4. Verify the build: `npm run verify:dist`. It must print «Сборка готова к упаковке в zip для Яндекса.»
+5. Make the zip **from the contents of `dist`**, not from the folder itself:
+   - **Windows (Explorer):** open the `dist` folder, press Ctrl+A to select `index.html` and `assets`, right-click → «Отправить» → «Сжатая ZIP-папка». Rename it, e.g. `one-more-run.zip`.
+   - **Windows (PowerShell, in the project folder):** `Compress-Archive -Path dist\* -DestinationPath one-more-run.zip -Force`
+   - **macOS / Linux (terminal, in the project folder):** `cd dist && zip -r ../one-more-run.zip . && cd ..`
+6. Check the zip: open it — you must see `index.html` and the `assets` folder right away, without an extra `dist` folder.
+7. Upload the zip in the Developer Console (draft → «Загрузить архив»), then open the draft with the debug panel (`&debug-mode=16`) and go through «Debug testing» above.
+
+`/sdk.js` gives a 404 locally — that is expected; on Yandex hosting it is served by the platform.
 
 ## Yandex Games Console
 

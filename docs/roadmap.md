@@ -61,6 +61,8 @@ Make the game look and feel finished.
 
 ## Version 1.0 — Release
 
+Status (2026-09-30): production build, final QA and the moderation checklist are done (Phases 0–6 of `docs/handoff/REWORK_PLAN.md`). Left: console setup, upload, moderation (Phase 7, owner). Postponed to after release: leaderboard screen, skin shop (Phase 5b), performance pass (Phase 2).
+
 Goal:
 
 Publish the game.

@@ -79,11 +79,13 @@ Current implementation notes:
 | Gameplay API                    | P0       | DONE    |
 | Platform pause/resume events    | P0       | DONE    |
 | Automatic SDK language detection| P0       | DONE    |
+| Russian + English UI            | P0       | DONE    |
+| Build ≈ 1 MB, `npm run verify:dist` | P0   | DONE    |
 | Fullscreen advertising wrapper  | P0       | DONE    |
 | Authorized leaderboard submit   | P1       | DONE    |
 | Explicit authorization UI       | P1       | PLANNED |
-| Leaderboard display UI          | P2       | PLANNED |
-| Rewarded advertising            | P3       | PLANNED |
+| Leaderboard display UI          | P2       | POSTPONED (after release) |
+| Rewarded advertising (continue, x2 coins) | P1 | DONE |
 
 
 ---
