@@ -526,7 +526,6 @@ export class Game {
     this.renderer.drawWorld(camera, this.track.segments, this.player.y);
     this.renderer.drawSegments(this.track.segments);
     this.renderer.drawPlayer(this.player, this.feel);
-    this.renderer.drawDeferredWorld();
     this.renderer.drawParticles(this.feel?.particles.particles);
     this.renderer.drawFloatingRewards(this.floatingRewards);
     this.renderer.endWorld();

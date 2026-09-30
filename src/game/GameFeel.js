@@ -187,6 +187,3 @@ export class GameFeel {
   }
 }
 
-export function isRiskFeedbackType(type) {
-  return isIntentionalRiskType(type);
-}

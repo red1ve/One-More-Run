@@ -32,7 +32,7 @@ Russian and English can both be declared in the Developer Console. Adding a lang
 
 ## Loading and gameplay markup
 
-After input listeners are installed and the visible START screen has rendered, `main.js` requests `LoadingAPI.ready()`. The service sends it when SDK initialization completes. The request is event-driven, has no arbitrary Game Ready delay, and can only be sent once.
+After input listeners are installed, the START screen has rendered and the art-pack pictures have loaded (`ArtPack.whenLoaded`, which also settles on a load error), `main.js` requests `LoadingAPI.ready()`. A 6-second limit guarantees the request even on a very slow network. The service sends it when SDK initialization completes, and only once. Checked in the browser with a mock SDK: normal network — one call at ≈1 s with all 32 pictures loaded; slow 3G in dev mode — one call from the 6-second limit.
 
 `GameplayAPI.start()` is sent only while PLAYING and not paused. `GameplayAPI.stop()` is sent on Game Over, tab hide, a platform pause event, and before an interstitial.
 
@@ -130,8 +130,8 @@ From the official requirements (owner's check, 2026-09-29). Status after Phase 6
 - [x] No long-press menu, text selection or context menu on phones (`user-select`, `-webkit-touch-callout`, `contextmenu` blocked on the game area).
 - [x] No pull-to-refresh, page scroll or pinch/double-tap zoom on phones (`overscroll-behavior: none`, `touch-action: none` on the page and canvas, `user-scalable=no`, iOS `gesture*` and `dblclick` blocked).
 - [x] File names in the archive have no spaces and no Cyrillic (`npm run verify:dist`).
-- [x] `index.html` is at the root of `dist/`, relative asset paths (`base: './'`), build ≈ 1 MB (limit 100 MB).
-- [x] The game field stretches to the screen: the 9:16 canvas fills the full height on desktop/landscape and the full width on tall phones (long side / short side = 1.78 ≤ 2). The page around it is the garden green, no shadow. Checked 1920×1080, 1366×768, 768×1024, 360×640, 390×844, 844×390, 640×360.
+- [x] `index.html` is at the root of `dist/`, relative asset paths (`base: './'`), build 3.7 MB (limit 100 MB): 0.65 MB is downloaded at start on modern browsers (WebP), the PNG fallback only on browsers without WebP.
+- [x] The game field stretches to the screen: the 9:16 canvas fills the full height on desktop/landscape and the full width on tall phones (long side / short side = 1.78 ≤ 2). The page around it is the garden green, no shadow. Checked again in Phase 6 (2026-10) on 360×640, 390×844, 768×1024, 1366×768, 1920×1080 and landscape 844×390, Russian and English: no console errors, start, play, restart, tab hide/show, platform pause, sound, localStorage, rewarded ad (stub), touch hold left/right. In landscape on a phone the portrait field is narrow (219×390 on 844×390) — **declare portrait orientation in the console**.
 - [x] Sign-in only by an explicit button; a guest plays fully without signing in (the game has no sign-in yet; leaderboard submit is skipped for guests).
 - [ ] Game name matches the console per language: RU «Ещё забег», EN «One More Run» (START title and browser tab title come from `src/localization/*.json` → `start.title`, `meta.title`). **Owner: type exactly these names in the console.**
 - [x] Rewarded buttons say it is an ad and name the reward; reward only on `onRewarded`.
@@ -144,6 +144,7 @@ From the official requirements (owner's check, 2026-09-29). Status after Phase 6
 The console accepts a zip archive whose root contains `index.html` (not a folder with `index.html` inside).
 
 1. Get the latest `main` and install: `git checkout main`, `git pull`, `npm install`.
+   - Only if you replaced or added pictures in `assets/art-pack/`: run `node scripts/art-pack-game.mjs` (needs Playwright, see the script header) and commit `assets/art-pack/game/`. Otherwise skip this — the game copies are already in the repository.
 2. Run the checks: `npm run check` (everything must say "passed").
 3. Build: `npm run build`. This creates the `dist` folder.
 4. Verify the build: `npm run verify:dist`. It must print «Сборка готова к упаковке в zip для Яндекса.»
@@ -174,6 +175,8 @@ The console accepts a zip archive whose root contains `index.html` (not a folder
 - [ ] Enable monetization if required.
 - [ ] Verify fullscreen advertising and frequency behavior.
 - [ ] Verify gameplay/audio pause during ads and focus loss.
+- [ ] Declare **portrait** orientation (the field is 9:16; in landscape on a phone it is narrow).
+- [ ] Upload the icon 512×512 and the cover (owner prepares them) and the screenshots from `docs/store/screenshots/` (phone 1080×1920 and desktop 1920×1080, honest gameplay frames).
 - [ ] Check portrait mobile scaling, touch, mouse, and keyboard.
 - [ ] Submit the tested build for moderation.
 

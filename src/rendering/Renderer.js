@@ -128,10 +128,6 @@ export class Renderer {
     this.garden.drawMainWorld(camera, segments, playerY);
   }
 
-  drawDeferredWorld() {
-    this.garden.drawDeferredWorld();
-  }
-
   drawSegments(segments) {
     segments.forEach((segment) => {
       this.drawGateSills(segment);
@@ -145,13 +141,6 @@ export class Renderer {
 
   isChoiceSegment(segment) {
     return segment.type === 'TWO_PATHS' || segment.type === 'DUAL_RISK' || !!segment.isChoiceSegment;
-  }
-
-  gateFill(type) {
-    if (type === 'RISKY_HARD') return CONFIG.COLORS.HighRiskClay;
-    if (this.isRiskyPath(type)) return CONFIG.COLORS.RiskApricot;
-    if (type === 'SAFE') return CONFIG.COLORS.PlanterWood;
-    return CONFIG.COLORS.PlanterWood;
   }
 
   gateAccent(type) {
@@ -174,19 +163,6 @@ export class Renderer {
     return Math.min(path.height, CONFIG.CHOICE_GATE_HEIGHT);
   }
 
-  pathsOnRow(segment, obs) {
-    return (segment.paths || []).filter((path) => Math.abs(path.y - obs.y) < 12);
-  }
-
-  abuttingPaths(segment, obs) {
-    const epsilon = 2;
-    const row = this.pathsOnRow(segment, obs);
-    return row.filter((path) => (
-      Math.abs(obs.x + obs.width - path.x) < epsilon
-      || Math.abs(obs.x - (path.x + path.width)) < epsilon
-    ));
-  }
-
   drawGateSills(segment) {
     if (!this.isChoiceSegment(segment)) return;
 
@@ -194,26 +170,6 @@ export class Renderer {
       const gateH = this.gateHeightForPath(segment, path);
       this.garden.drawSill(path, gateH, this.gateAccent(path.type));
     });
-  }
-
-  drawObstacles(segment) {
-    const choice = this.isChoiceSegment(segment);
-    const family = segment.visualObstacleType || this.garden.obstacleFamilyFor(segment);
-    const familySeed = segment.visualObstacleSeed
-      || Math.abs(Math.round((segment.id || 1) * 13 + String(segment.type || '').length * 7));
-    const classScale = Number.isFinite(segment.visualObstacleScale)
-      ? segment.visualObstacleScale
-      : 1;
-    const sprite = this.garden.obstacleSpriteFor(segment);
-    (segment.obstacles || []).forEach((obs) => {
-      const neighbors = choice ? this.abuttingPaths(segment, obs) : [];
-      this.garden.drawPlanter(obs, neighbors, family, familySeed, classScale, sprite);
-    });
-  }
-
-  drawCoins(segment) {
-    if (!segment.coins) return;
-    segment.coins.forEach((coin) => this.garden.drawCoin(coin));
   }
 
   drawPathLabels(segment) {

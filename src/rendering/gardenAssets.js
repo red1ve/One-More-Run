@@ -1,37 +1,12 @@
-// Картинки мира. Сад (изгородь, газон, декор, препятствия, небо, песок) с Фазы 1
-// рисуется кодом, поэтому из картинок остались только монеты. Группы оставлены
-// пустыми, чтобы старый код отрисовки (флаги HEDGE_WALL / GARDEN_OBSTACLES / SKY)
-// работал без ошибок; старые PNG удалены в Фазе 6 (есть в истории git).
-
-function full(id, url) {
-  return { id, url, sx: 0, sy: 0, sw: 0, sh: 0 };
-}
-
-function coin(id) {
-  return full(id, new URL(`../../assets/environment/collectibles/${id}.png`, import.meta.url).href);
-}
-
+// Картинки монет (всё остальное в саду — картинки art-pack, см. ArtPack.js).
+// Каждый путь написан целиком: так Vite кладёт в сборку только эти файлы.
 export const PACK_GARDEN_SHEETS = {
-  clouds: [],
-  trees: [],
-  bushes: [],
-  flowers: [],
-  grass: [],
-  planters: [],
   coins: [
-    coin('coin-01'),
-    coin('coin-02'),
-    coin('coin-03'),
-    coin('coin-04')
-  ],
-  distantHorizon: [],
-  distantGarden: [],
-  sideMasses: [],
-  pathSand: [],
-  roadCrest: [],
-  roadEdges: [],
-  landmarks: [],
-  obstacles: []
+    { id: 'coin-01', url: new URL('../../assets/environment/collectibles/coin-01.png', import.meta.url).href },
+    { id: 'coin-02', url: new URL('../../assets/environment/collectibles/coin-02.png', import.meta.url).href },
+    { id: 'coin-03', url: new URL('../../assets/environment/collectibles/coin-03.png', import.meta.url).href },
+    { id: 'coin-04', url: new URL('../../assets/environment/collectibles/coin-04.png', import.meta.url).href }
+  ].map((item) => ({ ...item, sx: 0, sy: 0, sw: 0, sh: 0 }))
 };
 
 export function getGardenSheets() {
