@@ -1,0 +1,22 @@
+{
+  "tree-01.png": {
+    "width": 351,
+    "height": 384,
+    "baseX": 0.526
+  },
+  "tree-02.png": {
+    "width": 222,
+    "height": 384,
+    "baseX": 0.513
+  },
+  "tree-03.png": {
+    "width": 384,
+    "height": 323,
+    "baseX": 0.508
+  },
+  "tree-04.png": {
+    "width": 350,
+    "height": 384,
+    "baseX": 0.514
+  }
+}
