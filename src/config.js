@@ -244,6 +244,8 @@ export const CONFIG = {
       HEDGE: true,
       TREES: true,
       // Изгородь из картинок: рядов поперёк, ширина клочка (доля ширины изгороди).
+      // Набор клочков изгороди: 'new' (hedge-08..16) или 'old' (hedge-01..07).
+      HEDGE_SET: 'new',
       HEDGE_LANES: [0.24, 0.74],
       HEDGE_CLUMP_WIDTH: 0.72,
       HEDGE_PERIOD: 30,

@@ -20,14 +20,22 @@ const PETAL = '#FBF8EA'; // CloudWhite
 const PETAL_PINK = '#F4B3A2'; // BlossomPink
 const POLLEN = '#E8B84A'; // CoinAmber
 
-const HEDGE_SPRITES = ['hedge-01', 'hedge-02', 'hedge-03', 'hedge-04', 'hedge-05', 'hedge-06', 'hedge-07'];
-// Цветущие (01, 03, 06, 07) — в полтора раза чаще гладких (02, 05) и листового (04):
-// 2 из 3 клочков с цветами. Больше — изгородь рябит белыми точками.
-const HEDGE_PICK = [
-  'hedge-01', 'hedge-01', 'hedge-01', 'hedge-03', 'hedge-03', 'hedge-03',
-  'hedge-06', 'hedge-06', 'hedge-06', 'hedge-07', 'hedge-07', 'hedge-07',
-  'hedge-02', 'hedge-02', 'hedge-05', 'hedge-05', 'hedge-04', 'hedge-04'
-];
+// Два набора клочков: первый лист (01–07) и второй, темнее и спокойнее (08–16).
+// Сравнение — временно: после выбора лишний набор уйдёт из кода.
+const HEDGE_SETS = {
+  // Цветущие (01, 03, 06, 07) в полтора раза чаще гладких (02, 05) и листового (04).
+  old: [
+    'hedge-01', 'hedge-01', 'hedge-01', 'hedge-03', 'hedge-03', 'hedge-03',
+    'hedge-06', 'hedge-06', 'hedge-06', 'hedge-07', 'hedge-07', 'hedge-07',
+    'hedge-02', 'hedge-02', 'hedge-05', 'hedge-05', 'hedge-04', 'hedge-04'
+  ],
+  // Во втором листе цветов уже мало (4 из 9), все клочки поровну.
+  new: ['hedge-08', 'hedge-09', 'hedge-10', 'hedge-11', 'hedge-12', 'hedge-13', 'hedge-14', 'hedge-15', 'hedge-16']
+};
+
+function hedgePick() {
+  return HEDGE_SETS[CONFIG.VISUAL.ART_PACK?.HEDGE_SET] || HEDGE_SETS.new;
+}
 
 function hash(n) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -104,7 +112,7 @@ export class HedgeArt {
   // Нарисованные клочки (assets/art-pack/hedge), если включены и все загрузились.
   packReady() {
     const pack = this.art.artPack;
-    if (!CONFIG.VISUAL.ART_PACK?.HEDGE || !pack?.hasAll(HEDGE_SPRITES)) return null;
+    if (!CONFIG.VISUAL.ART_PACK?.HEDGE || !pack?.hasAll(hedgePick())) return null;
     return pack;
   }
 
@@ -116,6 +124,7 @@ export class HedgeArt {
     const lanes = packCfg.HEDGE_LANES;
     const clumps = this.clumps;
     const ids = this.clumpIds;
+    const pick = hedgePick();
     clumps.length = 0;
     ids.length = 0;
     const period = packCfg.HEDGE_PERIOD ?? cfg.period;
@@ -137,7 +146,7 @@ export class HedgeArt {
           const y = p.drawY + (hash(seed + 2) - 0.5) * period * 0.4 * s;
           clumps.push(x, y, w / 2);
           // Номер картинки и отражение — от места в мире, поэтому не мигают.
-          ids.push(Math.floor(hash(seed + 5) * HEDGE_PICK.length) * 2 + (hash(seed + 6) < 0.5 ? 1 : 0));
+          ids.push(Math.floor(hash(seed + 5) * pick.length) * 2 + (hash(seed + 6) < 0.5 ? 1 : 0));
         }
       }
     }
@@ -147,9 +156,10 @@ export class HedgeArt {
   drawPackClumps(ctx, pack) {
     const c = this.clumps;
     const ids = this.clumpIds;
+    const pick = hedgePick();
     for (let i = c.length - 3; i >= 0; i -= 3) {
       const id = ids[i / 3];
-      const name = HEDGE_PICK[id >> 1];
+      const name = pick[id >> 1];
       const w = c[i + 2] * 2;
       const h = w * pack.aspect(name);
       pack.draw(ctx, name, c[i] - w / 2, c[i + 1] - h * 0.6, w, (id & 1) === 1);
