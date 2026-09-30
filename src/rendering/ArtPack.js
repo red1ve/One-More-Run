@@ -4,42 +4,90 @@
 // поэтому мелкие дальние клочки не «сыпятся» и не тормозят.
 // Пока картинка не загрузилась (или её нет), вызывающий код рисует кодовый вариант.
 
-// Каждый путь написан целиком: так Vite кладёт в сборку только эти файлы.
-// (Путь из шаблона `${...}` затянул бы в сборку всю папку, включая _raw/.)
-const FILES = {
-  'hedge-08': new URL('../../assets/art-pack/hedge/hedge-08.png', import.meta.url).href,
-  'hedge-09': new URL('../../assets/art-pack/hedge/hedge-09.png', import.meta.url).href,
-  'hedge-10': new URL('../../assets/art-pack/hedge/hedge-10.png', import.meta.url).href,
-  'hedge-11': new URL('../../assets/art-pack/hedge/hedge-11.png', import.meta.url).href,
-  'hedge-12': new URL('../../assets/art-pack/hedge/hedge-12.png', import.meta.url).href,
-  'hedge-13': new URL('../../assets/art-pack/hedge/hedge-13.png', import.meta.url).href,
-  'hedge-14': new URL('../../assets/art-pack/hedge/hedge-14.png', import.meta.url).href,
-  'hedge-15': new URL('../../assets/art-pack/hedge/hedge-15.png', import.meta.url).href,
-  'hedge-16': new URL('../../assets/art-pack/hedge/hedge-16.png', import.meta.url).href,
-  'planter-01': new URL('../../assets/art-pack/planters/planter-01.png', import.meta.url).href,
-  'planter-02': new URL('../../assets/art-pack/planters/planter-02.png', import.meta.url).href,
-  'planter-03': new URL('../../assets/art-pack/planters/planter-03.png', import.meta.url).href,
-  'planter-04': new URL('../../assets/art-pack/planters/planter-04.png', import.meta.url).href,
-  'gate-01': new URL('../../assets/art-pack/gates/gate-01.png', import.meta.url).href,
-  'gate-02': new URL('../../assets/art-pack/gates/gate-02.png', import.meta.url).href,
-  'gate-03': new URL('../../assets/art-pack/gates/gate-03.png', import.meta.url).href,
-  'bush-01': new URL('../../assets/art-pack/props/bush-01.png', import.meta.url).href,
-  'bush-02': new URL('../../assets/art-pack/props/bush-02.png', import.meta.url).href,
-  'bush-03': new URL('../../assets/art-pack/props/bush-03.png', import.meta.url).href,
-  'bush-04': new URL('../../assets/art-pack/props/bush-04.png', import.meta.url).href,
-  'arch-wide-01': new URL('../../assets/art-pack/arch/arch-wide-01.png', import.meta.url).href,
-  'sky-strip': new URL('../../assets/art-pack/sky/sky-strip.jpg', import.meta.url).href,
-  'rock-01': new URL('../../assets/art-pack/props/rock-01.png', import.meta.url).href,
-  'rock-02': new URL('../../assets/art-pack/props/rock-02.png', import.meta.url).href,
-  'rock-03': new URL('../../assets/art-pack/props/rock-03.png', import.meta.url).href,
-  'fence-01': new URL('../../assets/art-pack/props/fence-01.png', import.meta.url).href,
-  'fence-02': new URL('../../assets/art-pack/props/fence-02.png', import.meta.url).href,
-  'grass-01': new URL('../../assets/art-pack/props/grass-01.png', import.meta.url).href,
-  'tree-01': new URL('../../assets/art-pack/trees/tree-01.png', import.meta.url).href,
-  'tree-02': new URL('../../assets/art-pack/trees/tree-02.png', import.meta.url).href,
-  'tree-03': new URL('../../assets/art-pack/trees/tree-03.png', import.meta.url).href,
-  'tree-04': new URL('../../assets/art-pack/trees/tree-04.png', import.meta.url).href
+// Картинки для игры — уменьшенные копии из assets/art-pack/game/ (их делает
+// scripts/art-pack-game.mjs; оригиналы не трогаем). Основной вариант — WebP,
+// запасной (браузер без WebP, например старые iPhone до iOS 14) — PNG, небо — JPG.
+// Каждый путь написан целиком: так Vite кладёт в сборку только эти файлы
+// (путь из шаблона `${...}` затянул бы в сборку всю папку, включая _raw/).
+const WEBP = {
+  'hedge-08': new URL('../../assets/art-pack/game/hedge-08.webp', import.meta.url).href,
+  'hedge-09': new URL('../../assets/art-pack/game/hedge-09.webp', import.meta.url).href,
+  'hedge-10': new URL('../../assets/art-pack/game/hedge-10.webp', import.meta.url).href,
+  'hedge-11': new URL('../../assets/art-pack/game/hedge-11.webp', import.meta.url).href,
+  'hedge-12': new URL('../../assets/art-pack/game/hedge-12.webp', import.meta.url).href,
+  'hedge-13': new URL('../../assets/art-pack/game/hedge-13.webp', import.meta.url).href,
+  'hedge-14': new URL('../../assets/art-pack/game/hedge-14.webp', import.meta.url).href,
+  'hedge-15': new URL('../../assets/art-pack/game/hedge-15.webp', import.meta.url).href,
+  'hedge-16': new URL('../../assets/art-pack/game/hedge-16.webp', import.meta.url).href,
+  'planter-01': new URL('../../assets/art-pack/game/planter-01.webp', import.meta.url).href,
+  'planter-02': new URL('../../assets/art-pack/game/planter-02.webp', import.meta.url).href,
+  'planter-03': new URL('../../assets/art-pack/game/planter-03.webp', import.meta.url).href,
+  'planter-04': new URL('../../assets/art-pack/game/planter-04.webp', import.meta.url).href,
+  'gate-01': new URL('../../assets/art-pack/game/gate-01.webp', import.meta.url).href,
+  'gate-02': new URL('../../assets/art-pack/game/gate-02.webp', import.meta.url).href,
+  'gate-03': new URL('../../assets/art-pack/game/gate-03.webp', import.meta.url).href,
+  'bush-01': new URL('../../assets/art-pack/game/bush-01.webp', import.meta.url).href,
+  'bush-02': new URL('../../assets/art-pack/game/bush-02.webp', import.meta.url).href,
+  'bush-03': new URL('../../assets/art-pack/game/bush-03.webp', import.meta.url).href,
+  'bush-04': new URL('../../assets/art-pack/game/bush-04.webp', import.meta.url).href,
+  'rock-01': new URL('../../assets/art-pack/game/rock-01.webp', import.meta.url).href,
+  'rock-02': new URL('../../assets/art-pack/game/rock-02.webp', import.meta.url).href,
+  'rock-03': new URL('../../assets/art-pack/game/rock-03.webp', import.meta.url).href,
+  'fence-01': new URL('../../assets/art-pack/game/fence-01.webp', import.meta.url).href,
+  'fence-02': new URL('../../assets/art-pack/game/fence-02.webp', import.meta.url).href,
+  'grass-01': new URL('../../assets/art-pack/game/grass-01.webp', import.meta.url).href,
+  'arch-wide-01': new URL('../../assets/art-pack/game/arch-wide-01.webp', import.meta.url).href,
+  'sky-strip': new URL('../../assets/art-pack/game/sky-strip.webp', import.meta.url).href,
+  'tree-01': new URL('../../assets/art-pack/game/tree-01.webp', import.meta.url).href,
+  'tree-02': new URL('../../assets/art-pack/game/tree-02.webp', import.meta.url).href,
+  'tree-03': new URL('../../assets/art-pack/game/tree-03.webp', import.meta.url).href,
+  'tree-04': new URL('../../assets/art-pack/game/tree-04.webp', import.meta.url).href
 };
+
+const FALLBACK = {
+  'hedge-08': new URL('../../assets/art-pack/game/hedge-08.png', import.meta.url).href,
+  'hedge-09': new URL('../../assets/art-pack/game/hedge-09.png', import.meta.url).href,
+  'hedge-10': new URL('../../assets/art-pack/game/hedge-10.png', import.meta.url).href,
+  'hedge-11': new URL('../../assets/art-pack/game/hedge-11.png', import.meta.url).href,
+  'hedge-12': new URL('../../assets/art-pack/game/hedge-12.png', import.meta.url).href,
+  'hedge-13': new URL('../../assets/art-pack/game/hedge-13.png', import.meta.url).href,
+  'hedge-14': new URL('../../assets/art-pack/game/hedge-14.png', import.meta.url).href,
+  'hedge-15': new URL('../../assets/art-pack/game/hedge-15.png', import.meta.url).href,
+  'hedge-16': new URL('../../assets/art-pack/game/hedge-16.png', import.meta.url).href,
+  'planter-01': new URL('../../assets/art-pack/game/planter-01.png', import.meta.url).href,
+  'planter-02': new URL('../../assets/art-pack/game/planter-02.png', import.meta.url).href,
+  'planter-03': new URL('../../assets/art-pack/game/planter-03.png', import.meta.url).href,
+  'planter-04': new URL('../../assets/art-pack/game/planter-04.png', import.meta.url).href,
+  'gate-01': new URL('../../assets/art-pack/game/gate-01.png', import.meta.url).href,
+  'gate-02': new URL('../../assets/art-pack/game/gate-02.png', import.meta.url).href,
+  'gate-03': new URL('../../assets/art-pack/game/gate-03.png', import.meta.url).href,
+  'bush-01': new URL('../../assets/art-pack/game/bush-01.png', import.meta.url).href,
+  'bush-02': new URL('../../assets/art-pack/game/bush-02.png', import.meta.url).href,
+  'bush-03': new URL('../../assets/art-pack/game/bush-03.png', import.meta.url).href,
+  'bush-04': new URL('../../assets/art-pack/game/bush-04.png', import.meta.url).href,
+  'rock-01': new URL('../../assets/art-pack/game/rock-01.png', import.meta.url).href,
+  'rock-02': new URL('../../assets/art-pack/game/rock-02.png', import.meta.url).href,
+  'rock-03': new URL('../../assets/art-pack/game/rock-03.png', import.meta.url).href,
+  'fence-01': new URL('../../assets/art-pack/game/fence-01.png', import.meta.url).href,
+  'fence-02': new URL('../../assets/art-pack/game/fence-02.png', import.meta.url).href,
+  'grass-01': new URL('../../assets/art-pack/game/grass-01.png', import.meta.url).href,
+  'arch-wide-01': new URL('../../assets/art-pack/game/arch-wide-01.png', import.meta.url).href,
+  'sky-strip': new URL('../../assets/art-pack/game/sky-strip.jpg', import.meta.url).href,
+  'tree-01': new URL('../../assets/art-pack/game/tree-01.png', import.meta.url).href,
+  'tree-02': new URL('../../assets/art-pack/game/tree-02.png', import.meta.url).href,
+  'tree-03': new URL('../../assets/art-pack/game/tree-03.png', import.meta.url).href,
+  'tree-04': new URL('../../assets/art-pack/game/tree-04.png', import.meta.url).href
+};
+
+// Умеет ли браузер открывать WebP: пробуем декодировать картинку 1×1.
+function detectWebp() {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve(probe.width === 1);
+    probe.onerror = () => resolve(false);
+    probe.src = 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA';
+  });
+}
 
 // Где ствол касается земли (доля ширины), из assets/art-pack/trees/anchors.json.
 export const TREE_BASE_X = { 'tree-01': 0.526, 'tree-02': 0.513, 'tree-03': 0.508, 'tree-04': 0.514 };
@@ -93,7 +141,14 @@ export class ArtPack {
   constructor(onReady) {
     this.sprites = {};
     if (typeof Image !== 'function' || typeof document === 'undefined') return;
-    for (const [name, src] of Object.entries(FILES)) {
+    detectWebp().then((webp) => {
+      this.webp = webp;
+      this.load(webp ? WEBP : FALLBACK, onReady);
+    });
+  }
+
+  load(files, onReady) {
+    for (const [name, src] of Object.entries(files)) {
       const image = new Image();
       image.decoding = 'async';
       image.onload = () => {
