@@ -218,9 +218,17 @@ export class GardenArt {
     this.loadSprites();
   }
 
+  // New look (hedge, obstacles and sky drawn in code) only shows coin sprites.
+  // Skipping the other PNGs saves ~5.8 MB of downloads at startup.
+  spriteGroupsToLoad() {
+    const all = Object.keys(this.sheets);
+    const newLook = this.useHedgeWall() && this.useGardenObstacles() && this.useSkyArt();
+    return newLook ? all.filter((group) => group === 'coins') : all;
+  }
+
   loadSprites() {
     if (typeof Image !== 'function' || typeof document === 'undefined') return;
-    Object.keys(this.sheets).forEach((group) => {
+    this.spriteGroupsToLoad().forEach((group) => {
       this.sheets[group].forEach((item) => {
         const image = new Image();
         image.decoding = 'async';
@@ -2444,8 +2452,8 @@ export class GardenArt {
 
   collectFenceRows(segments) {
     if (!this.usePack()) return;
-    const kit = this.ensureFenceKit();
-    if (!kit) return;
+    // Garden obstacles are drawn in code and do not need the fence sprite kit.
+    if (!this.useGardenObstacles() && !this.ensureFenceKit()) return;
 
     (segments || []).forEach((segment) => {
       const rows = new Map();
@@ -2532,8 +2540,7 @@ export class GardenArt {
   collectRevealTestProps(camera) {
     const stage = this.revealTestStage();
     if (!stage || !this.usePack()) return;
-    const kit = this.ensureFenceKit();
-    if (!kit) return;
+    if (!this.useGardenObstacles() && !this.ensureFenceKit()) return;
     const cam = camera || dummyCamera();
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const cx = this.width * 0.5;
@@ -2626,10 +2633,10 @@ export class GardenArt {
 
   drawFenceRow(prop) {
     if (!prop || !prop.spans || !prop.spans.length) return;
-    const kit = this.ensureFenceKit();
-    if (!kit) return;
-    const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
     const garden = this.useGardenObstacles();
+    const kit = garden ? null : this.ensureFenceKit();
+    if (!garden && !kit) return;
+    const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
     const h = garden
       ? this.obstacleArt.height(prop.look, this.catH(), scale)
       : this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * scale;
