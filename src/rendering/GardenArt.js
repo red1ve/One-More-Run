@@ -163,7 +163,7 @@ export class GardenArt {
     this.sideDecor = new SideDecorArt(this);
     this.skyArt = new SkyArt(this.width, this.height);
     this.sandArt = new SandArt(this);
-    this.obstacleArt = new ObstacleArt(ctx);
+    this.obstacleArt = new ObstacleArt(ctx, this.artPack);
     this.roseArch = this.loadVectorArt(
       new URL('../../assets/environment/garden/landmarks/rose-arch.svg', import.meta.url).href,
       CONFIG.VISUAL.ROSE_ARCH?.RASTER_WIDTH ?? 240

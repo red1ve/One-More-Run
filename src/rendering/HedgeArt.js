@@ -25,6 +25,8 @@ const HEDGE_PICK = [
   'hedge-12', 'hedge-12', 'hedge-12', 'hedge-14', 'hedge-14', 'hedge-14',
   'hedge-16', 'hedge-16', 'hedge-16'
 ];
+const FLOWERING = 4; // первые 4 в списке — цветущие
+const FAR_PLAIN_WIDTH = 44; // px: клочки уже этой ширины — без цветов
 const HEDGE_SPRITES = [...new Set(HEDGE_PICK)];
 
 function hash(n) {
@@ -142,8 +144,9 @@ export class HedgeArt {
     const pick = HEDGE_PICK;
     for (let i = c.length - 3; i >= 0; i -= 3) {
       const id = ids[i / 3];
-      const name = pick[id >> 1];
       const w = c[i + 2] * 2;
+      // Вдали цветы превращаются в белую «сыпь»: там только клочки без цветов.
+      const name = w < FAR_PLAIN_WIDTH ? pick[FLOWERING + ((id >> 1) % (pick.length - FLOWERING))] : pick[id >> 1];
       const h = w * pack.aspect(name);
       pack.draw(ctx, name, c[i] - w / 2, c[i + 1] - h * 0.6, w, (id & 1) === 1);
     }

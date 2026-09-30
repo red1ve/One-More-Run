@@ -239,6 +239,7 @@ export const CONFIG = {
     // Нарисованные картинки из assets/art-pack/ (ArtPack.js). false — кодовый вариант.
     ART_PACK: {
       TREES: true,
+      OBSTACLES: true,
       // Изгородь из картинок: рядов поперёк, ширина клочка (доля ширины изгороди).
       HEDGE_LANES: [0.24, 0.74],
       HEDGE_CLUMP_WIDTH: 0.72,

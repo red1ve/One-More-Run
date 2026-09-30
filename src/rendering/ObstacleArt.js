@@ -29,9 +29,62 @@ export function obstacleLook(family) {
   return family === 'FLOWER_GATE' ? 'gate' : 'planter';
 }
 
+const PLANTERS = ['planter-01', 'planter-02', 'planter-03', 'planter-04'];
+const GATES = ['gate-01', 'gate-02', 'gate-03'];
+
 export class ObstacleArt {
-  constructor(ctx) {
+  constructor(ctx, pack = null) {
     this.ctx = ctx;
+    this.pack = pack; // нарисованные ящики и ворота (ArtPack), если загрузились
+  }
+
+  packFor(look) {
+    const pack = this.pack;
+    if (!CONFIG.VISUAL.ART_PACK?.OBSTACLES || !pack) return null;
+    return pack.hasAll(look === 'gate' ? GATES : PLANTERS) ? pack : null;
+  }
+
+  // Участок шириной w делим на n одинаковых мест (несколько ящиков/ворот рядом).
+  // В каждое место ставим картинку, чьи пропорции ближе всего к месту, и чуть
+  // подтягиваем по высоте (не больше чем на ±15%).
+  // Ширина картинки = ширина места: видимое препятствие = настоящее.
+  drawPackSpan(pack, names, x0, x1, groundY, targetH, maxH, seed) {
+    const w = x1 - x0;
+    const n = Math.max(1, Math.round(w / (targetH * 1.2)));
+    const tileW = w / n;
+    const want = tileW / targetH;
+    for (let i = 0; i < n; i += 1) {
+      const k = seed + i * 7.9;
+      // Лучшие по пропорциям картинки, среди близких — случайная (но постоянная).
+      let best = Infinity;
+      for (const name of names) best = Math.min(best, Math.abs(Math.log(pack.aspect(name) * want)));
+      let count = 0;
+      for (const name of names) if (Math.abs(Math.log(pack.aspect(name) * want)) <= best + 0.12) count += 1;
+      let pick = Math.floor(hash(k) * count) % count;
+      let name = names[0];
+      for (const candidate of names) {
+        if (Math.abs(Math.log(pack.aspect(candidate) * want)) > best + 0.12) continue;
+        if (pick === 0) { name = candidate; break; }
+        pick -= 1;
+      }
+      const natural = tileW * pack.aspect(name);
+      // Тянем к нужной высоте не больше чем на ±15% от родных пропорций картинки:
+      // узкий участок — небольшой ящик, а не вытянутый столбик.
+      const h = Math.min(maxH, natural * Math.max(0.87, Math.min(1.15, targetH / natural)));
+      const x = x0 + tileW * i;
+      const flip = hash(k + 1) < 0.5;
+      const ctx = this.ctx;
+      if (Math.abs(h - natural) < 0.5) {
+        pack.draw(ctx, name, x, groundY - h, tileW, flip);
+      } else {
+        // Лёгкое растяжение по высоте: рисуем в масштабе и сжимаем/тянем по Y.
+        ctx.save();
+        ctx.translate(x, groundY);
+        ctx.scale(1, h / natural);
+        pack.draw(ctx, name, 0, -natural, tileW, flip);
+        ctx.restore();
+      }
+    }
   }
 
   cfg() {
@@ -55,7 +108,14 @@ export class ObstacleArt {
     // такой участок рисуем узким кашпо.
     const gateH = catH * (this.cfg().GATE_NEAR_CAT ?? 0.64) * scale;
     if (look === 'gate' && x1 - x0 < gateH * (this.cfg().GATE_MIN_WIDTH ?? 0.9)) look = 'planter';
-    if (look === 'gate') this.drawGate(x0, x1, groundY, catH * (this.cfg().GATE_NEAR_CAT ?? 0.64) * scale, seed);
+    const pack = this.packFor(look);
+    if (pack && look === 'gate') {
+      this.drawPackSpan(pack, GATES, x0, x1, groundY, gateH, this.height('gate', catH, scale), seed);
+    } else if (pack) {
+      const H = catH * (this.cfg().PLANTER_NEAR_CAT ?? 0.36) * scale;
+      // Ящик на картинке — нижняя половина, над ним зелень: вся картинка ≈ 1.75 ящика.
+      this.drawPackSpan(pack, PLANTERS, x0, x1, groundY, H * 1.75, this.height('planter', catH, scale), seed);
+    } else if (look === 'gate') this.drawGate(x0, x1, groundY, catH * (this.cfg().GATE_NEAR_CAT ?? 0.64) * scale, seed);
     else this.drawPlanter(x0, x1, groundY, catH * (this.cfg().PLANTER_NEAR_CAT ?? 0.36) * scale, seed);
     this.ctx.restore();
   }
