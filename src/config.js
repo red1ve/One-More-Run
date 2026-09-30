@@ -239,6 +239,17 @@ export const CONFIG = {
       // Вид листвы: 'flat' — плоские круги; 'soft' и 'textured' — эксперимент Фазы 1в.
       STYLE: 'flat'
     },
+    // Нарисованные картинки из assets/art-pack/ (ArtPack.js). false — кодовый вариант.
+    ART_PACK: {
+      HEDGE: true,
+      TREES: true,
+      // Изгородь из картинок: рядов поперёк, ширина клочка (доля ширины изгороди).
+      HEDGE_LANES: [0.24, 0.74],
+      HEDGE_CLUMP_WIDTH: 0.72,
+      HEDGE_PERIOD: 30,
+      // Высота дерева в долях роста кота (как у кодового дерева).
+      TREE_HEIGHT: 1.75
+    },
     HEDGE_BORDER_NEAR: 48,
     HEDGE_BORDER_FAR: 26,
     HEDGE_HEIGHT_NEAR: 82,

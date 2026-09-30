@@ -20,6 +20,15 @@ const PETAL = '#FBF8EA'; // CloudWhite
 const PETAL_PINK = '#F4B3A2'; // BlossomPink
 const POLLEN = '#E8B84A'; // CoinAmber
 
+const HEDGE_SPRITES = ['hedge-01', 'hedge-02', 'hedge-03', 'hedge-04', 'hedge-05', 'hedge-06', 'hedge-07'];
+// Цветущие (01, 03, 06, 07) — в полтора раза чаще гладких (02, 05) и листового (04):
+// 2 из 3 клочков с цветами. Больше — изгородь рябит белыми точками.
+const HEDGE_PICK = [
+  'hedge-01', 'hedge-01', 'hedge-01', 'hedge-03', 'hedge-03', 'hedge-03',
+  'hedge-06', 'hedge-06', 'hedge-06', 'hedge-07', 'hedge-07', 'hedge-07',
+  'hedge-02', 'hedge-02', 'hedge-05', 'hedge-05', 'hedge-04', 'hedge-04'
+];
+
 function hash(n) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
@@ -75,14 +84,76 @@ export class HedgeArt {
     const shift = art.lastShift || 0;
     const progress = camera?.progress || 0;
     const cfg = this.sampleRows(shift);
+    const pack = this.packReady();
     ctx.save();
     this.drawBands(ctx, cfg);
-    this.collectClumps(cfg, progress);
-    this.drawFarFringe(ctx, cfg);
-    this.drawClumps(ctx);
-    this.drawFlowers(ctx);
+    if (pack) {
+      this.collectPackClumps(cfg, progress);
+      this.drawFarFringe(ctx, cfg);
+      this.drawPackClumps(ctx, pack);
+    } else {
+      this.collectClumps(cfg, progress);
+      this.drawFarFringe(ctx, cfg);
+      this.drawClumps(ctx);
+      this.drawFlowers(ctx);
+    }
     this.drawCurbs(ctx, cfg, progress);
     ctx.restore();
+  }
+
+  // Нарисованные клочки (assets/art-pack/hedge), если включены и все загрузились.
+  packReady() {
+    const pack = this.art.artPack;
+    if (!CONFIG.VISUAL.ART_PACK?.HEDGE || !pack?.hasAll(HEDGE_SPRITES)) return null;
+    return pack;
+  }
+
+  // Клочки-картинки привязаны к миру так же, как кодовые: слот по Y, ряды поперёк.
+  // В this.clumps кладём (x, y, половина ширины) — по ним дальний край знает, где кончились клочки.
+  collectPackClumps(cfg, progress) {
+    const art = this.art;
+    const packCfg = CONFIG.VISUAL.ART_PACK;
+    const lanes = packCfg.HEDGE_LANES;
+    const clumps = this.clumps;
+    const ids = this.clumpIds;
+    clumps.length = 0;
+    ids.length = 0;
+    const period = packCfg.HEDGE_PERIOD ?? cfg.period;
+    const nearWorld = art.screenToWorldY(art.height + 80 + (art.lastShift || 0));
+    let k = Math.floor((nearWorld - progress) / period);
+    for (let guard = 0; guard < 600; guard += 1, k -= 1) {
+      const p = art.roadAt(k * period + progress);
+      if (p.drawY < art.horizonY() + 2) break;
+      const s = p.scale;
+      // Совсем мелкие клочки вдали не рисуем картинками — там работает дальний край.
+      if (cfg.width * packCfg.HEDGE_CLUMP_WIDTH * s < 5) break;
+      for (let side = -1; side <= 1; side += 2) {
+        const edge = side < 0 ? p.roadLeft : p.roadRight;
+        for (let lane = 0; lane < lanes.length; lane += 1) {
+          const seed = k * 7.3 + side * 3.1 + lane * 11.7;
+          const w = cfg.width * packCfg.HEDGE_CLUMP_WIDTH * s * (0.88 + hash(seed) * 0.26);
+          const across = lanes[lane] + (hash(seed + 1) - 0.5) * 0.08;
+          const x = this.edgeX(side, edge, s, cfg.shoulder + cfg.curb + cfg.width * across);
+          const y = p.drawY + (hash(seed + 2) - 0.5) * period * 0.4 * s;
+          clumps.push(x, y, w / 2);
+          // Номер картинки и отражение — от места в мире, поэтому не мигают.
+          ids.push(Math.floor(hash(seed + 5) * HEDGE_PICK.length) * 2 + (hash(seed + 6) < 0.5 ? 1 : 0));
+        }
+      }
+    }
+  }
+
+  // От дальних к ближним: ближние клочки перекрывают дальние.
+  drawPackClumps(ctx, pack) {
+    const c = this.clumps;
+    const ids = this.clumpIds;
+    for (let i = c.length - 3; i >= 0; i -= 3) {
+      const id = ids[i / 3];
+      const name = HEDGE_PICK[id >> 1];
+      const w = c[i + 2] * 2;
+      const h = w * pack.aspect(name);
+      pack.draw(ctx, name, c[i] - w / 2, c[i + 1] - h * 0.6, w, (id & 1) === 1);
+    }
   }
 
   edgeX(side, roadEdge, s, offset) {

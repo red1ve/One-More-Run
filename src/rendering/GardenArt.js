@@ -1,3 +1,4 @@
+import { ArtPack } from './ArtPack.js';
 import { HedgeArt } from './HedgeArt.js';
 import { LawnArt } from './LawnArt.js';
 import { SideDecorArt } from './SideDecorArt.js';
@@ -156,6 +157,7 @@ export class GardenArt {
     this.onReady = options.onReady || null;
     const c = CONFIG.COLORS;
     this.c = c;
+    this.artPack = new ArtPack(() => this.onReady?.());
     this.hedges = new HedgeArt(this);
     this.lawn = new LawnArt(this);
     this.sideDecor = new SideDecorArt(this);

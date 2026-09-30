@@ -31,6 +31,12 @@ window.addEventListener('DOMContentLoaded', () => {
     // ?hedge=soft|textured — сравнить варианты листвы изгороди (Фаза 1в).
     const hedgeParam = new URLSearchParams(window.location.search).get('hedge');
     if (['flat', 'soft', 'textured'].includes(hedgeParam)) CONFIG.VISUAL.HEDGE_WALL.STYLE = hedgeParam;
+    // ?art=off — кодовые версии вместо картинок art-pack (кадры «до/после»).
+    if (new URLSearchParams(window.location.search).get('art') === 'off') {
+      for (const key of Object.keys(CONFIG.VISUAL.ART_PACK)) {
+        if (typeof CONFIG.VISUAL.ART_PACK[key] === 'boolean') CONFIG.VISUAL.ART_PACK[key] = false;
+      }
+    }
   }
   const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');

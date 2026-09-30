@@ -1,4 +1,5 @@
 import { CONFIG } from '../config.js';
+import { TREE_BASE_X } from './ArtPack.js';
 
 // Боковой декор на газоне за изгородью, как на референсе: деревья, цветущие
 // кусты, камни, деревянные заборчики и цветы на стебельках. Каждый предмет
@@ -21,6 +22,7 @@ const PETAL_PINK = '#F4B3A2'; // BlossomPink
 const POLLEN = '#E8B84A'; // CoinAmber
 const SHADOW = 'rgba(74, 52, 40, 0.16)'; // тень на траве: InkBrown 16%
 
+const TREE_SPRITES = ['tree-01', 'tree-02', 'tree-03', 'tree-04'];
 const KINDS = ['tree', 'tree', 'flowerBush', 'bush', 'bush', 'rock', 'fence', 'flowers'];
 
 function hash(n) {
@@ -51,6 +53,7 @@ export class SideDecorArt {
     this.collect(camera?.progress || 0);
     const items = this.items;
     const catH = art.catH();
+    const pack = CONFIG.VISUAL.ART_PACK?.TREES && art.artPack?.hasAll(TREE_SPRITES) ? art.artPack : null;
     ctx.save();
     // Собирали от кота к горизонту; рисуем наоборот, чтобы ближнее было поверх.
     for (let i = items.length - 5; i >= 0; i -= 5) {
@@ -59,7 +62,8 @@ export class SideDecorArt {
       const y = items[i + 2];
       const s = items[i + 3] * catH;
       const seed = items[i + 4];
-      if (kind === 'tree') this.drawTree(ctx, x, y, s, seed);
+      if (kind === 'tree' && pack) this.drawPackTree(ctx, pack, x, y, s, seed);
+      else if (kind === 'tree') this.drawTree(ctx, x, y, s, seed);
       else if (kind === 'flowerBush') this.drawBush(ctx, x, y, s, seed, true);
       else if (kind === 'bush') this.drawBush(ctx, x, y, s, seed, false);
       else if (kind === 'rock') this.drawRock(ctx, x, y, s, seed);
@@ -146,6 +150,17 @@ export class SideDecorArt {
     ctx.beginPath();
     ctx.arc(x, y, size * 0.26, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  // Дерево-картинка: ствол (baseX из anchors.json) стоит ровно в точке (x, y).
+  drawPackTree(ctx, pack, x, y, s, seed) {
+    const name = TREE_SPRITES[Math.floor(hash(seed + 7) * TREE_SPRITES.length)];
+    const flip = hash(seed + 8) < 0.5;
+    const h = s * (CONFIG.VISUAL.ART_PACK.TREE_HEIGHT ?? 1.75) * (0.88 + hash(seed + 9) * 0.24);
+    const w = h / pack.aspect(name);
+    const baseX = flip ? 1 - TREE_BASE_X[name] : TREE_BASE_X[name];
+    this.groundShadow(ctx, x, y, w * 0.3);
+    pack.draw(ctx, name, x - w * baseX, y - h, w, flip);
   }
 
   drawTree(ctx, x, y, s, seed) {
