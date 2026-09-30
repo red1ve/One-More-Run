@@ -233,19 +233,13 @@ export const CONFIG = {
       CLUMP_PERIOD: 22,
       CLUMP_RADIUS_NEAR: 20,
       POST_PERIOD: 130,
-      FLOWER_CHANCE: 0.14,
       // Сколько px от горизонта изгородь сужается до нуля.
-      HORIZON_TAPER: 12,
-      // Вид листвы: 'flat' — плоские круги; 'soft' и 'textured' — эксперимент Фазы 1в.
-      STYLE: 'flat'
+      HORIZON_TAPER: 12
     },
     // Нарисованные картинки из assets/art-pack/ (ArtPack.js). false — кодовый вариант.
     ART_PACK: {
-      HEDGE: true,
       TREES: true,
       // Изгородь из картинок: рядов поперёк, ширина клочка (доля ширины изгороди).
-      // Набор клочков изгороди: 'new' (hedge-08..16) или 'old' (hedge-01..07).
-      HEDGE_SET: 'new',
       HEDGE_LANES: [0.24, 0.74],
       HEDGE_CLUMP_WIDTH: 0.72,
       HEDGE_PERIOD: 30,

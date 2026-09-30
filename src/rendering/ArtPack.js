@@ -7,13 +7,6 @@
 // Каждый путь написан целиком: так Vite кладёт в сборку только эти файлы.
 // (Путь из шаблона `${...}` затянул бы в сборку всю папку, включая _raw/.)
 const FILES = {
-  'hedge-01': new URL('../../assets/art-pack/hedge/hedge-01.png', import.meta.url).href,
-  'hedge-02': new URL('../../assets/art-pack/hedge/hedge-02.png', import.meta.url).href,
-  'hedge-03': new URL('../../assets/art-pack/hedge/hedge-03.png', import.meta.url).href,
-  'hedge-04': new URL('../../assets/art-pack/hedge/hedge-04.png', import.meta.url).href,
-  'hedge-05': new URL('../../assets/art-pack/hedge/hedge-05.png', import.meta.url).href,
-  'hedge-06': new URL('../../assets/art-pack/hedge/hedge-06.png', import.meta.url).href,
-  'hedge-07': new URL('../../assets/art-pack/hedge/hedge-07.png', import.meta.url).href,
   'hedge-08': new URL('../../assets/art-pack/hedge/hedge-08.png', import.meta.url).href,
   'hedge-09': new URL('../../assets/art-pack/hedge/hedge-09.png', import.meta.url).href,
   'hedge-10': new URL('../../assets/art-pack/hedge/hedge-10.png', import.meta.url).href,

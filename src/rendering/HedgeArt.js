@@ -1,10 +1,9 @@
 import { CONFIG } from '../config.js';
-import { LeafClumpSprites } from './LeafClumpSprites.js';
 
 // Живая изгородь вдоль дорожки, как на референсе: деревянный бордюр у песка,
-// за ним стриженая изгородь из «клочков» листвы с белыми и розовыми цветами.
-// Всё рисуется кодом в плоском cel-shaded стиле и следует той же перспективе,
-// что и дорога: ширина и размер клочков = масштаб дороги на этой глубине.
+// за ним изгородь из нарисованных клочков листвы (assets/art-pack/hedge/hedge-08..16).
+// Бордюр, тёмная подложка и дальний край рисуются кодом. Всё следует перспективе
+// дороги: ширина и размер клочков = масштаб дороги на этой глубине.
 
 // Палитра из docs/visual-bible.md §6 (2026-09). В шаге 7 Фазы 1 переедет в CONFIG.COLORS.
 const LEAF = '#76A544'; // HedgeSage
@@ -16,26 +15,17 @@ const WOOD_LIGHT = '#D39048'; // WoodLight
 const INK = '#4A3428'; // InkBrown
 const SHADOW = '#C4A97A'; // ShadowDust
 const SAND = '#F7DCA0'; // FloorSand
-const PETAL = '#FBF8EA'; // CloudWhite
-const PETAL_PINK = '#F4B3A2'; // BlossomPink
-const POLLEN = '#E8B84A'; // CoinAmber
 
-// Два набора клочков: первый лист (01–07) и второй, темнее и спокойнее (08–16).
-// Сравнение — временно: после выбора лишний набор уйдёт из кода.
-const HEDGE_SETS = {
-  // Цветущие (01, 03, 06, 07) в полтора раза чаще гладких (02, 05) и листового (04).
-  old: [
-    'hedge-01', 'hedge-01', 'hedge-01', 'hedge-03', 'hedge-03', 'hedge-03',
-    'hedge-06', 'hedge-06', 'hedge-06', 'hedge-07', 'hedge-07', 'hedge-07',
-    'hedge-02', 'hedge-02', 'hedge-05', 'hedge-05', 'hedge-04', 'hedge-04'
-  ],
-  // Во втором листе цветов уже мало (4 из 9), все клочки поровну.
-  new: ['hedge-08', 'hedge-09', 'hedge-10', 'hedge-11', 'hedge-12', 'hedge-13', 'hedge-14', 'hedge-15', 'hedge-16']
-};
-
-function hedgePick() {
-  return HEDGE_SETS[CONFIG.VISUAL.ART_PACK?.HEDGE_SET] || HEDGE_SETS.new;
-}
+// Клочки изгороди (второй лист). Цветущие 10, 11, 13, 15 — вес 1, остальные — вес 3:
+// цветёт примерно каждый пятый клочок (4 из 19), как на референсе.
+// Первый лист (hedge-01..07) лежит в папке как запас и в игру не грузится.
+const HEDGE_PICK = [
+  'hedge-10', 'hedge-11', 'hedge-13', 'hedge-15',
+  'hedge-08', 'hedge-08', 'hedge-08', 'hedge-09', 'hedge-09', 'hedge-09',
+  'hedge-12', 'hedge-12', 'hedge-12', 'hedge-14', 'hedge-14', 'hedge-14',
+  'hedge-16', 'hedge-16', 'hedge-16'
+];
+const HEDGE_SPRITES = [...new Set(HEDGE_PICK)];
 
 function hash(n) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -51,7 +41,6 @@ function settings() {
     period: h.CLUMP_PERIOD ?? 26,
     radius: h.CLUMP_RADIUS_NEAR ?? 15,
     postPeriod: h.POST_PERIOD ?? 130,
-    flowerChance: h.FLOWER_CHANCE ?? 0.22,
     horizonTaper: h.HORIZON_TAPER ?? 80
   };
 }
@@ -63,7 +52,6 @@ export class HedgeArt {
     this.rows = [];
     this.clumps = [];
     this.clumpIds = []; // номер спрайта для клочка, привязан к миру (не мигает)
-    this.flowers = [];
   }
 
   // Края бордюра и изгороди для одной строки экрана.
@@ -95,28 +83,23 @@ export class HedgeArt {
     const pack = this.packReady();
     ctx.save();
     this.drawBands(ctx, cfg);
+    // Пока картинки грузятся (доли секунды на старте) — только подложка и бордюр.
     if (pack) {
       this.collectPackClumps(cfg, progress);
       this.drawFarFringe(ctx, cfg);
       this.drawPackClumps(ctx, pack);
-    } else {
-      this.collectClumps(cfg, progress);
-      this.drawFarFringe(ctx, cfg);
-      this.drawClumps(ctx);
-      this.drawFlowers(ctx);
     }
     this.drawCurbs(ctx, cfg, progress);
     ctx.restore();
   }
 
-  // Нарисованные клочки (assets/art-pack/hedge), если включены и все загрузились.
+  // Картинки клочков, когда все загрузились.
   packReady() {
     const pack = this.art.artPack;
-    if (!CONFIG.VISUAL.ART_PACK?.HEDGE || !pack?.hasAll(hedgePick())) return null;
-    return pack;
+    return pack?.hasAll(HEDGE_SPRITES) ? pack : null;
   }
 
-  // Клочки-картинки привязаны к миру так же, как кодовые: слот по Y, ряды поперёк.
+  // Клочки привязаны к миру (слот по Y, ряды поперёк), поэтому едут вместе с дорогой.
   // В this.clumps кладём (x, y, половина ширины) — по ним дальний край знает, где кончились клочки.
   collectPackClumps(cfg, progress) {
     const art = this.art;
@@ -124,7 +107,7 @@ export class HedgeArt {
     const lanes = packCfg.HEDGE_LANES;
     const clumps = this.clumps;
     const ids = this.clumpIds;
-    const pick = hedgePick();
+    const pick = HEDGE_PICK;
     clumps.length = 0;
     ids.length = 0;
     const period = packCfg.HEDGE_PERIOD ?? cfg.period;
@@ -156,7 +139,7 @@ export class HedgeArt {
   drawPackClumps(ctx, pack) {
     const c = this.clumps;
     const ids = this.clumpIds;
-    const pick = hedgePick();
+    const pick = HEDGE_PICK;
     for (let i = c.length - 3; i >= 0; i -= 3) {
       const id = ids[i / 3];
       const name = pick[id >> 1];
@@ -248,144 +231,6 @@ export class HedgeArt {
       ctx.closePath();
       ctx.fill();
     }
-  }
-
-  // Клочки листвы привязаны к миру (слоты по Y), поэтому едут вместе с дорогой.
-  collectClumps(cfg, progress) {
-    const art = this.art;
-    const clumps = this.clumps;
-    const flowers = this.flowers;
-    clumps.length = 0;
-    this.clumpIds.length = 0;
-    flowers.length = 0;
-    const period = cfg.period;
-    const nearWorld = art.screenToWorldY(art.height + 60 + (art.lastShift || 0));
-    let k = Math.floor((nearWorld - progress) / period);
-    let prevY = Infinity;
-    for (let guard = 0; guard < 600; guard += 1, k -= 1) {
-      const worldY = k * period + progress;
-      const p = art.roadAt(worldY);
-      if (p.drawY < art.horizonY() + 2) break;
-      // Когда клочки вдали сливаются меньше чем в 0.7 px, дальше рисует только полоса.
-      if (prevY - p.drawY < 0.7) break;
-      prevY = p.drawY;
-      const s = p.scale;
-      for (const side of [-1, 1]) {
-        const edge = side < 0 ? p.roadLeft : p.roadRight;
-        const inner = cfg.shoulder + cfg.curb;
-        for (let lane = 0; lane < 4; lane += 1) {
-          const seed = k * 7.3 + side * 3.1 + lane * 11.7;
-          const r = cfg.radius * s * (0.82 + hash(seed) * 0.36);
-          const across = [0.12, 0.38, 0.63, 0.86][lane] + (hash(seed + 1) - 0.5) * 0.1;
-          const x = this.edgeX(side, edge, s, inner + cfg.width * across);
-          const y = p.drawY + (hash(seed + 2) - 0.5) * period * 0.5 * s;
-          clumps.push(x, y, r);
-          this.clumpIds.push(Math.floor(hash(seed + 5) * 1000));
-          // Вдали цветов меньше, иначе они сливаются в белую «сыпь».
-          const flowerChance = cfg.flowerChance * Math.max(0, Math.min(1, (s - 0.62) / 0.3));
-          if (lane > 0 && hash(seed + 3) < flowerChance) {
-            flowers.push(x - r * 0.1, y - r * 0.35, r * 0.62, hash(seed + 4) < 0.35 ? 1 : 0);
-          }
-        }
-      }
-    }
-  }
-
-  // Спрайты крупнее плоских клочков: не даём им залезать на песок дорожки.
-  clipOutsidePath(ctx) {
-    const rows = this.rows;
-    const shoulder = settings().shoulder;
-    ctx.beginPath();
-    ctx.rect(-50, -50, this.art.width + 100, this.art.height + 200);
-    for (let i = 0; i < rows.length; i += 4) {
-      const x = rows[i + 1] - shoulder * rows[i + 3];
-      if (i === 0) ctx.moveTo(x, rows[i]);
-      else ctx.lineTo(x, rows[i]);
-    }
-    for (let i = rows.length - 4; i >= 0; i -= 4) {
-      ctx.lineTo(rows[i + 2] + shoulder * rows[i + 3], rows[i]);
-    }
-    ctx.closePath();
-    ctx.clip('evenodd');
-  }
-
-  // Готовые картинки клочков для стилей 'soft' / 'textured' (создаются один раз).
-  spritesFor(style) {
-    if (style === 'flat' || !style) return null;
-    if (this.clumpSprites?.style !== style) this.clumpSprites = new LeafClumpSprites(style);
-    return this.clumpSprites.ready() ? this.clumpSprites : null;
-  }
-
-  // Три заливки: тень снизу-справа, основной цвет, блик сверху-слева.
-  drawClumps(ctx) {
-    const c = this.clumps;
-    const sprites = this.spritesFor(CONFIG.VISUAL.HEDGE_WALL?.STYLE);
-    if (sprites) {
-      ctx.save();
-      this.clipOutsidePath(ctx);
-      // Тёмная зубчатая подложка под всеми клочками (контур и просветы, как на референсе),
-      // сверху — готовые спрайты примерно на 60% клочков, от дальних к ближним.
-      ctx.fillStyle = LEAF_SHADE;
-      ctx.beginPath();
-      for (let i = c.length - 3; i >= 0; i -= 3) {
-        const r = c[i + 2] * 1.18;
-        ctx.moveTo(c[i] + r, c[i + 1]);
-        ctx.arc(c[i], c[i + 1], r, 0, Math.PI * 2);
-      }
-      ctx.fill();
-      for (let i = c.length - 3; i >= 0; i -= 3) {
-        const id = this.clumpIds[i / 3];
-        if (c[i + 2] < 3 || id % 5 >= 3) continue;
-        sprites.draw(ctx, c[i], c[i + 1], c[i + 2] * 1.1, id);
-      }
-      ctx.restore();
-      return;
-    }
-    const pass = (color, dx, dy, k) => {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      for (let i = c.length - 3; i >= 0; i -= 3) {
-        const r = c[i + 2];
-        ctx.moveTo(c[i] + dx * r + r * k, c[i + 1] + dy * r);
-        ctx.arc(c[i] + dx * r, c[i + 1] + dy * r, r * k, 0, Math.PI * 2);
-      }
-      ctx.fill();
-    };
-    // Тёмный зубчатый контур по краю изгороди, как на референсе.
-    pass(LEAF_SHADE, 0, 0, 1.12);
-    pass(LEAF_SHADE, 0.1, 0.12, 1);
-    pass(LEAF, -0.04, -0.06, 0.96);
-    pass(LEAF_LIGHT, -0.32, -0.4, 0.34);
-  }
-
-  drawFlowers(ctx) {
-    const f = this.flowers;
-    const petals = (pink) => {
-      ctx.fillStyle = pink ? PETAL_PINK : PETAL;
-      ctx.beginPath();
-      for (let i = 0; i < f.length; i += 4) {
-        if (f[i + 3] !== pink) continue;
-        const size = f[i + 2];
-        for (let n = 0; n < 5; n += 1) {
-          const a = (n / 5) * Math.PI * 2 - Math.PI / 2;
-          const px = f[i] + Math.cos(a) * size * 0.55;
-          const py = f[i + 1] + Math.sin(a) * size * 0.55;
-          ctx.moveTo(px + size * 0.42, py);
-          ctx.arc(px, py, size * 0.42, 0, Math.PI * 2);
-        }
-      }
-      ctx.fill();
-    };
-    petals(0);
-    petals(1);
-    ctx.fillStyle = POLLEN;
-    ctx.beginPath();
-    for (let i = 0; i < f.length; i += 4) {
-      const size = f[i + 2] * 0.28;
-      ctx.moveTo(f[i] + size, f[i + 1]);
-      ctx.arc(f[i], f[i + 1], size, 0, Math.PI * 2);
-    }
-    ctx.fill();
   }
 
   // Деревянный бордюр: лицевая доска к дорожке, светлая верхняя кромка,
