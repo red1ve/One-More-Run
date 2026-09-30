@@ -23,6 +23,12 @@ const FILES = {
   'gate-01': new URL('../../assets/art-pack/gates/gate-01.png', import.meta.url).href,
   'gate-02': new URL('../../assets/art-pack/gates/gate-02.png', import.meta.url).href,
   'gate-03': new URL('../../assets/art-pack/gates/gate-03.png', import.meta.url).href,
+  'bush-01': new URL('../../assets/art-pack/props/bush-01.png', import.meta.url).href,
+  'bush-02': new URL('../../assets/art-pack/props/bush-02.png', import.meta.url).href,
+  'bush-03': new URL('../../assets/art-pack/props/bush-03.png', import.meta.url).href,
+  'bush-04': new URL('../../assets/art-pack/props/bush-04.png', import.meta.url).href,
+  'arch-01': new URL('../../assets/art-pack/arch/arch-01.png', import.meta.url).href,
+  'sky-strip': new URL('../../assets/art-pack/sky/sky-strip.jpg', import.meta.url).href,
   'tree-01': new URL('../../assets/art-pack/trees/tree-01.png', import.meta.url).href,
   'tree-02': new URL('../../assets/art-pack/trees/tree-02.png', import.meta.url).href,
   'tree-03': new URL('../../assets/art-pack/trees/tree-03.png', import.meta.url).href,
@@ -32,6 +38,21 @@ const FILES = {
 // Где ствол касается земли (доля ширины), из assets/art-pack/trees/anchors.json.
 export const TREE_BASE_X = { 'tree-01': 0.526, 'tree-02': 0.513, 'tree-03': 0.508, 'tree-04': 0.514 };
 
+// Подсветка при подготовке копий (один раз): ворота на картинках темнее референса.
+const BRIGHTEN = { 'gate-01': 1.12, 'gate-02': 1.12, 'gate-03': 1.12 };
+
+function brighten(canvas, k) {
+  const ctx = canvas.getContext('2d');
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = Math.min(255, d[i] * k);
+    d[i + 1] = Math.min(255, d[i + 1] * k);
+    d[i + 2] = Math.min(255, d[i + 2] * k);
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 function makeCanvas(w, h) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(w));
@@ -40,7 +61,7 @@ function makeCanvas(w, h) {
 }
 
 // Уменьшаем по шагам в 2 раза — так картинка остаётся чёткой, без «лесенки».
-function buildLevels(source, mirror) {
+function buildLevels(source, mirror, gain) {
   const levels = [];
   let prev = makeCanvas(source.naturalWidth, source.naturalHeight);
   const ctx = prev.getContext('2d');
@@ -49,6 +70,7 @@ function buildLevels(source, mirror) {
     ctx.scale(-1, 1);
   }
   ctx.drawImage(source, 0, 0);
+  if (gain) brighten(prev, gain);
   levels.push(prev);
   while (levels.length < 4 && prev.width > 24) {
     const next = makeCanvas(prev.width / 2, prev.height / 2);
@@ -70,7 +92,7 @@ export class ArtPack {
       image.decoding = 'async';
       image.onload = () => {
         const aspect = image.naturalHeight / Math.max(1, image.naturalWidth);
-        this.sprites[name] = { aspect, levels: [buildLevels(image, false), buildLevels(image, true)] };
+        this.sprites[name] = { aspect, levels: [buildLevels(image, false, BRIGHTEN[name]), buildLevels(image, true, BRIGHTEN[name])] };
         if (onReady) onReady();
       };
       image.src = src;
@@ -85,6 +107,11 @@ export class ArtPack {
   hasAll(names) {
     for (const name of names) if (!this.sprites[name]) return false;
     return true;
+  }
+
+  // Картинка в полном размере (для неба, которое рисуется один раз в свой кэш).
+  full(name, flip = false) {
+    return this.sprites[name]?.levels[flip ? 1 : 0][0] || null;
   }
 
   aspect(name) {
