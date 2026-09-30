@@ -8,12 +8,16 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
-  background-color: #D5E5EA;
+  /* Фон страницы вокруг игры — зелень сада (NearTree), чтобы поля по бокам не выглядели пустыми. */
+  background-color: #6A8D44;
   color: #4A3428;
   font-family: 'Fredoka', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow: hidden;
   /* Телефон: без «потянуть вниз, чтобы обновить» и прокрутки страницы (требование Яндекса). */
   overscroll-behavior: none;
+  /* Без масштабирования и прокрутки жестами на телефоне. */
+  touch-action: none;
+  -webkit-text-size-adjust: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -33,16 +37,19 @@ html, body {
 }
 
 /* Адаптивный Canvas с фиксированным соотношением сторон 9:16 */
+/* Холст 9:16 растягивается под экран: максимум по высоте или ширине
+   (требование Яндекса — активная область занимает экран). dvh учитывает
+   панели мобильного браузера. */
 canvas {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  width: min(100vw, calc(100vh * 9 / 16));
+  height: min(100vh, calc(100vw * 16 / 9));
+  width: min(100vw, calc(100dvh * 9 / 16));
+  height: min(100dvh, calc(100vw * 16 / 9));
   aspect-ratio: 9 / 16;
-  object-fit: contain;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-  background-color: #D5E5EA;
-  box-shadow: 5px 5px 0 #C4A97A;
+  background-color: #9CDCEC;
 }
