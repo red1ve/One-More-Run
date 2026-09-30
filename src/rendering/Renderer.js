@@ -555,16 +555,54 @@ export class Renderer {
     this.fitText(t(muted ? 'sound.off' : 'sound.on'), cx, soundY + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
   }
 
+  // Значок «видео» на кнопках рекламы: игрок заранее видит, что это реклама.
+  drawAdIcon(cx, cy, size) {
+    const ctx = this.ctx;
+    ctx.fillStyle = CONFIG.COLORS.SkyPaper;
+    this.garden.roundedRectPath(cx - size / 2, cy - size * 0.38, size, size * 0.76, size * 0.2);
+    ctx.fill();
+    ctx.strokeStyle = CONFIG.COLORS.InkBrown;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.fillStyle = CONFIG.COLORS.InkBrown;
+    ctx.beginPath();
+    ctx.moveTo(cx - size * 0.14, cy - size * 0.2);
+    ctx.lineTo(cx + size * 0.22, cy);
+    ctx.lineTo(cx - size * 0.14, cy + size * 0.2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Кнопка «за рекламу»: капсула, значок видео слева, текст.
+  drawAdButton(cx, cy, w, h, fill, label) {
+    this.screenPill(cx, cy, w, h, fill);
+    this.drawAdIcon(cx - w / 2 + 34, cy, 30);
+    this.fitText(label, cx + 18, cy + 8, 700, 22, w - 92, CONFIG.COLORS.UI_TEXT);
+  }
+
+  // Какая кнопка экрана проигрыша под точкой (логические координаты), или null.
+  hitGameOverButton(x, y) {
+    for (const [name, r] of Object.entries(this.gameOverButtons || {})) {
+      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return name;
+    }
+    return null;
+  }
+
   drawGameOver(score, bestScore, coins = 0, age = 1, extras = {}) {
     const cfg = this.screenCfg();
     const fade = Math.min(1, age / 0.25);
     const isNewBest = !!extras.isNewBest;
+    const offerRevive = !!extras.offerRevive;
+    const offerDouble = !!extras.offerDouble;
+    const offers = (offerRevive ? 1 : 0) + (offerDouble ? 1 : 0);
     const cx = this.width / 2;
     const cardX = cfg.CARD_X ?? 36;
     const cardW = cfg.CARD_W ?? this.width - cardX * 2;
     const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
-    const cardY = 320;
-    const cardH = 466;
+    const offerStep = 66;
+    const cardH = 466 + offers * offerStep;
+    const cardY = 320 - offers * 30;
+    this.gameOverButtons = {};
 
     this.dimScreen((cfg.DIM_GAME_OVER ?? 0.28) * fade);
     this.ctx.globalAlpha = fade;
@@ -606,8 +644,20 @@ export class Renderer {
       this.fitText(label, cx + 14, pillY + 7, 700, 21, pillW - 84, CONFIG.COLORS.UI_TEXT);
     }
 
-    this.screenPill(cx, cardY + 412, 340, 62, CONFIG.COLORS.CoinAmber);
-    this.fitText(t('over.restart'), cx, cardY + 421, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
+    // Кнопки «за рекламу» — только если реклама доступна (добровольно, по нажатию).
+    let rowY = cardY + 404;
+    const addButton = (name, fill, label) => {
+      const w = 380;
+      const h = 56;
+      this.drawAdButton(cx, rowY, w, h, fill, label);
+      this.gameOverButtons[name] = { x: cx - w / 2, y: rowY - h / 2, w, h };
+      rowY += offerStep;
+    };
+    if (offerRevive) addButton('revive', CONFIG.COLORS.SafeLawn, t('over.revive'));
+    if (offerDouble) addButton('double', CONFIG.COLORS.SkyPaper, t('over.double'));
+
+    this.screenPill(cx, rowY + 8, 340, 62, CONFIG.COLORS.CoinAmber);
+    this.fitText(t('over.restart'), cx, rowY + 17, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
 
     const soundY = cardY + cardH + 44;
     this.screenPill(cx, soundY, 210, 44, CONFIG.COLORS.SkyPaper);

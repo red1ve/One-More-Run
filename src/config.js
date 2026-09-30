@@ -23,7 +23,9 @@ export const CONFIG = {
   // Защита от «проскоков» (Game.simulateStep): макс. сдвиг за шаг физики и макс. число шагов за кадр.
   SUBSTEP_MAX_PX: 12,
   SUBSTEP_MAX_COUNT: 10,
-  // Возрождение (Game.revive): один раз за забег. Кнопка и реклама — Фаза 5.
+  // Сколько секунд после проигрыша нажатия не перезапускают игру (видны кнопки «за рекламу»).
+  GAME_OVER_INPUT_LOCK: 0.6,
+  // Возрождение (Game.revive): один раз за забег, за рекламу (Фаза 5).
   REVIVE_INVULNERABLE_SECONDS: 2,
   // Ряды ближе этого расстояния впереди кота убираются при возрождении.
   REVIVE_CLEAR_AHEAD: 700,
@@ -117,6 +119,11 @@ export const CONFIG = {
     RUSSIAN_UI_LANGUAGES: ['ru', 'be', 'kk', 'uk', 'uz'],
     LEADERBOARD_NAME: 'one_more_run_score',
     ADS_ENABLED: true,
+    // Имитация рекламы за награду без SDK. Включается только в npm run dev (main.js).
+    DEV_REWARDED_STUB: false,
+    // Сколько ждать onRewarded после onClose, прежде чем решить, что награды нет
+    // (порядок колбэков в документации Яндекса не указан).
+    REWARDED_CLOSE_GRACE_MS: 250,
     INTERSTITIAL_COOLDOWN_RUNS: 3
   },
 

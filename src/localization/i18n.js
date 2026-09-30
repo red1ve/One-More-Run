@@ -14,7 +14,11 @@ function lookup(dict, key) {
 
 export function setLanguage(lang) {
   current = DICTIONARIES[lang] ? lang : FALLBACK;
-  if (typeof document !== 'undefined') document.documentElement.lang = current;
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = current;
+    // Название во вкладке совпадает с названием игры в консоли Яндекса на этом языке.
+    document.title = t('meta.title');
+  }
   return current;
 }
 

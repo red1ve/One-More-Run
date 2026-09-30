@@ -1,4 +1,7 @@
 {
+  "meta": {
+    "title": "One More Run"
+  },
   "start": {
     "title": "ONE MORE RUN",
     "play": "TAP TO START",
@@ -18,7 +21,9 @@
     "score": "SCORE",
     "best": "BEST {n}",
     "coins": "COINS {n}  •  SAVED",
-    "restart": "TAP / R TO RESTART"
+    "restart": "TAP / R TO RESTART",
+    "revive": "CONTINUE • AD",
+    "double": "x2 COINS • AD"
   },
   "hud": {
     "best": "BEST {n}",

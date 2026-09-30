@@ -3,6 +3,7 @@ import '@fontsource/fredoka/500.css';
 import '@fontsource/fredoka/600.css';
 import '@fontsource/fredoka/700.css';
 import { Game } from './game/Game.js';
+import { CONFIG } from './config.js';
 import { YandexService } from './services/YandexService.js';
 import { setLanguage } from './localization/i18n.js';
 import { loadCyrillicFont } from './localization/fonts.js';
@@ -14,7 +15,10 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  const yandex = new YandexService();
+  const yandex = new YandexService(
+    // В npm run dev без SDK реклама за награду имитируется, чтобы проверить кнопки.
+    import.meta.env?.DEV ? { config: { ...CONFIG.YANDEX, DEV_REWARDED_STUB: true } } : {}
+  );
   const game = new Game(canvas, yandex);
   // Только для разработки (npm run dev), в сборку не попадает:
   // ?seed=42 — одна и та же трасса при каждом старте; window.__omrGame — доступ из консоли.
@@ -31,9 +35,22 @@ window.addEventListener('DOMContentLoaded', () => {
     game.unlockAudio();
     game.tryLaunch();
   };
+  // Нажатие по холсту: на экране проигрыша могут быть кнопки «за рекламу».
+  const tapFromEvent = (clientX, clientY) => {
+    game.unlockAudio();
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return game.tryLaunch();
+    const x = ((clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((clientY - rect.top) / rect.height) * canvas.height;
+    return game.handleTap(x, y);
+  };
 
-  canvas.addEventListener('mousedown', launchFromGesture);
-  canvas.addEventListener('touchstart', launchFromGesture, { passive: true });
+  canvas.addEventListener('mousedown', (event) => tapFromEvent(event.clientX, event.clientY));
+  canvas.addEventListener('touchstart', (event) => {
+    const touch = event.changedTouches?.[0];
+    if (touch) tapFromEvent(touch.clientX, touch.clientY);
+    else launchFromGesture();
+  }, { passive: true });
   gameArea.addEventListener('contextmenu', (event) => event.preventDefault());
 
   window.addEventListener('keydown', (e) => {
