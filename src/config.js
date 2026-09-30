@@ -235,7 +235,9 @@ export const CONFIG = {
       POST_PERIOD: 130,
       FLOWER_CHANCE: 0.14,
       // Сколько px от горизонта изгородь сужается до нуля.
-      HORIZON_TAPER: 12
+      HORIZON_TAPER: 12,
+      // Вид листвы: 'flat' — плоские круги; 'soft' и 'textured' — эксперимент Фазы 1в.
+      STYLE: 'flat'
     },
     HEDGE_BORDER_NEAR: 48,
     HEDGE_BORDER_FAR: 26,

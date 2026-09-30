@@ -28,6 +28,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const seedParam = new URLSearchParams(window.location.search).get('seed');
     if (seedParam !== null && Number.isFinite(Number(seedParam))) game.runSeed = Number(seedParam);
     window.__omrGame = game;
+    // ?hedge=soft|textured — сравнить варианты листвы изгороди (Фаза 1в).
+    const hedgeParam = new URLSearchParams(window.location.search).get('hedge');
+    if (['flat', 'soft', 'textured'].includes(hedgeParam)) CONFIG.VISUAL.HEDGE_WALL.STYLE = hedgeParam;
   }
   const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');

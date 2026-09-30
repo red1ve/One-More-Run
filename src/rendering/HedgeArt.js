@@ -1,4 +1,5 @@
 import { CONFIG } from '../config.js';
+import { LeafClumpSprites } from './LeafClumpSprites.js';
 
 // Живая изгородь вдоль дорожки, как на референсе: деревянный бордюр у песка,
 // за ним стриженая изгородь из «клочков» листвы с белыми и розовыми цветами.
@@ -44,6 +45,7 @@ export class HedgeArt {
     // Переиспользуемые массивы, чтобы не создавать объекты каждый кадр.
     this.rows = [];
     this.clumps = [];
+    this.clumpIds = []; // номер спрайта для клочка, привязан к миру (не мигает)
     this.flowers = [];
   }
 
@@ -173,6 +175,7 @@ export class HedgeArt {
     const clumps = this.clumps;
     const flowers = this.flowers;
     clumps.length = 0;
+    this.clumpIds.length = 0;
     flowers.length = 0;
     const period = cfg.period;
     const nearWorld = art.screenToWorldY(art.height + 60 + (art.lastShift || 0));
@@ -196,6 +199,7 @@ export class HedgeArt {
           const x = this.edgeX(side, edge, s, inner + cfg.width * across);
           const y = p.drawY + (hash(seed + 2) - 0.5) * period * 0.5 * s;
           clumps.push(x, y, r);
+          this.clumpIds.push(Math.floor(hash(seed + 5) * 1000));
           // Вдали цветов меньше, иначе они сливаются в белую «сыпь».
           const flowerChance = cfg.flowerChance * Math.max(0, Math.min(1, (s - 0.62) / 0.3));
           if (lane > 0 && hash(seed + 3) < flowerChance) {
@@ -206,9 +210,56 @@ export class HedgeArt {
     }
   }
 
+  // Спрайты крупнее плоских клочков: не даём им залезать на песок дорожки.
+  clipOutsidePath(ctx) {
+    const rows = this.rows;
+    const shoulder = settings().shoulder;
+    ctx.beginPath();
+    ctx.rect(-50, -50, this.art.width + 100, this.art.height + 200);
+    for (let i = 0; i < rows.length; i += 4) {
+      const x = rows[i + 1] - shoulder * rows[i + 3];
+      if (i === 0) ctx.moveTo(x, rows[i]);
+      else ctx.lineTo(x, rows[i]);
+    }
+    for (let i = rows.length - 4; i >= 0; i -= 4) {
+      ctx.lineTo(rows[i + 2] + shoulder * rows[i + 3], rows[i]);
+    }
+    ctx.closePath();
+    ctx.clip('evenodd');
+  }
+
+  // Готовые картинки клочков для стилей 'soft' / 'textured' (создаются один раз).
+  spritesFor(style) {
+    if (style === 'flat' || !style) return null;
+    if (this.clumpSprites?.style !== style) this.clumpSprites = new LeafClumpSprites(style);
+    return this.clumpSprites.ready() ? this.clumpSprites : null;
+  }
+
   // Три заливки: тень снизу-справа, основной цвет, блик сверху-слева.
   drawClumps(ctx) {
     const c = this.clumps;
+    const sprites = this.spritesFor(CONFIG.VISUAL.HEDGE_WALL?.STYLE);
+    if (sprites) {
+      ctx.save();
+      this.clipOutsidePath(ctx);
+      // Тёмная зубчатая подложка под всеми клочками (контур и просветы, как на референсе),
+      // сверху — готовые спрайты примерно на 60% клочков, от дальних к ближним.
+      ctx.fillStyle = LEAF_SHADE;
+      ctx.beginPath();
+      for (let i = c.length - 3; i >= 0; i -= 3) {
+        const r = c[i + 2] * 1.18;
+        ctx.moveTo(c[i] + r, c[i + 1]);
+        ctx.arc(c[i], c[i + 1], r, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      for (let i = c.length - 3; i >= 0; i -= 3) {
+        const id = this.clumpIds[i / 3];
+        if (c[i + 2] < 3 || id % 5 >= 3) continue;
+        sprites.draw(ctx, c[i], c[i + 1], c[i + 2] * 1.1, id);
+      }
+      ctx.restore();
+      return;
+    }
     const pass = (color, dx, dy, k) => {
       ctx.fillStyle = color;
       ctx.beginPath();
