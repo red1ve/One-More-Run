@@ -304,6 +304,9 @@ export const CONFIG = {
     PATH_INSET_FAR: 95,
     PROJECTOR: {
       FAR_ROAD_WIDTH: 170,
+      // Только для рисования: даль сжимается к горизонту (0 — без сжатия). Рядом
+      // с котом картинка та же; игра, хитбоксы и столкновения не меняются.
+      FAR_COMPRESS: 1.2,
       // Object scale = road width ratio (true perspective), capped here.
       SCALE_MAX: 1.3,
       READ_ZONE_ABOVE: 280,
@@ -311,7 +314,8 @@ export const CONFIG = {
       CREST_SIDE: 6,
       CREST_ASYM: 3.2,
       // Occlusion-only crest (road silhouette keeps CREST_PEAK).
-      REVEAL_CREST_PEAK: 48,
+      // Фаза 1д: 48 → 16, иначе сжатые к арке дальние ящики прятались бы за «холмом».
+      REVEAL_CREST_PEAK: 16,
       // Stretch HIDDEN→FULL past the geometric crest so tip/mid linger a bit.
       REVEAL_SPAN: 1.32
     },
