@@ -1008,7 +1008,7 @@ export class GardenArt {
       this.skyArt.draw(this.ctx, this.horizonY(), shift);
       this.ctx.save();
       this.ctx.translate(0, shift);
-      this.drawHorizonLandmark();
+      this.drawHorizonLandmark(shift);
       this.ctx.restore();
       return;
     }
@@ -1042,12 +1042,13 @@ export class GardenArt {
     return art;
   }
 
-  drawHorizonLandmark() {
+  drawHorizonLandmark(shift = 0) {
     if (!this.usePack()) return;
     if (this.roseArch.canvas) {
-      this.drawRoseArch();
+      this.drawRoseArch(shift);
       return;
     }
+    if (this.useSkyArt()) return;
     const item = this.choiceGatewayItem();
     if (!item) return;
     const src = this.sourceRect(item);
@@ -1064,17 +1065,20 @@ export class GardenArt {
 
   // Rose-covered pergola at the far end of the path (reference landmark).
   // Slightly transparent so the sky shows through: reads as distant haze.
-  drawRoseArch() {
+  // The pergola stands with its base on the far end of the path, about as wide
+  // as the path there; its height is limited by the sky above the horizon.
+  drawRoseArch(shift = 0) {
     const cfg = CONFIG.VISUAL.ROSE_ARCH || {};
     const art = this.roseArch;
-    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH ?? 200;
-    const maxH = Math.max(24, this.horizonY() - (cfg.TOP_MARGIN ?? 10));
-    const w = Math.min(farW * (cfg.WIDTH_OF_FAR_ROAD ?? 0.62), maxH / art.aspect);
+    const horizon = this.horizonY();
+    const farRoad = this.roadAt(worldYForScreen(horizon + shift + 1, shift, this.height));
+    const maxH = Math.max(24, horizon + shift - (cfg.TOP_MARGIN ?? 6));
+    const w = Math.min(farRoad.roadWidth * (cfg.WIDTH_OF_ROAD ?? 1.25), maxH / art.aspect);
     const h = w * art.aspect;
     const ctx = this.ctx;
     ctx.save();
-    ctx.globalAlpha = cfg.ALPHA ?? 0.88;
-    ctx.drawImage(art.canvas, this.width * 0.5 - w / 2, this.horizonY() + 3 - h, w, h);
+    ctx.globalAlpha = cfg.ALPHA ?? 1;
+    ctx.drawImage(art.canvas, this.width * 0.5 - w / 2, horizon + (cfg.BASE_SINK ?? 2) - h, w, h);
     ctx.restore();
   }
 

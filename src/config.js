@@ -177,7 +177,9 @@ export const CONFIG = {
     SAND: {
       SPOT_PERIOD: 46,
       SPOT_CHANCE: 0.55,
-      PEBBLE_CHANCE: 0.35
+      PEBBLE_CHANCE: 0.35,
+      // Сколько px песка у горизонта переходят в цвет далёкой земли.
+      FAR_FADE: 36
     },
     // Тень кота на песке: размеры овала и плотность теней.
     CAT_SHADOW: { RX: 26, RY: 9 },
@@ -213,9 +215,13 @@ export const CONFIG = {
     },
     // Арка в розах на горизонте (assets/environment/garden/landmarks/rose-arch.svg).
     ROSE_ARCH: {
-      RASTER_WIDTH: 240,
-      WIDTH_OF_FAR_ROAD: 0.72,
-      TOP_MARGIN: 10,
+      RASTER_WIDTH: 360,
+      // Ширина арки относительно дорожки на горизонте (столбы стоят у краёв дорожки).
+      WIDTH_OF_ROAD: 1.25,
+      // Не выше неба: верх арки не ближе этого к верхнему краю экрана.
+      TOP_MARGIN: 6,
+      // На сколько px основание столбов заходит на конец дорожки.
+      BASE_SINK: 2,
       ALPHA: 1
     },
     // Живая изгородь с бордюром (HedgeArt.js). Размеры — у кота, дальше по перспективе.
@@ -229,7 +235,7 @@ export const CONFIG = {
       POST_PERIOD: 130,
       FLOWER_CHANCE: 0.14,
       // Сколько px от горизонта изгородь сужается до нуля.
-      HORIZON_TAPER: 80
+      HORIZON_TAPER: 12
     },
     HEDGE_BORDER_NEAR: 48,
     HEDGE_BORDER_FAR: 26,

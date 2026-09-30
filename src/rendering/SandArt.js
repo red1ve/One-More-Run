@@ -10,6 +10,10 @@ const SAND = '#F7DCA0'; // FloorSand
 const SAND_SHADE = '#EDCC8E'; // SandShade: мягкие пятна
 const SAND_LIGHT = '#F9E2AE'; // SandLight
 const PEBBLE = '#D9B77E'; // Pebble
+// FarGround: FloorSand, смешанный с GardenLawn — далёкая земля у горизонта.
+const FAR_GROUND = 'rgba(214, 205, 134, 1)';
+const FAR_GROUND_MID = 'rgba(223, 210, 135, 0.55)';
+const FAR_GROUND_CLEAR = 'rgba(247, 220, 160, 0)';
 
 function hash(n) {
   const x = Math.sin(n * 63.1 + 29.9) * 43758.5453;
@@ -31,6 +35,21 @@ export class SandArt {
     this.collect(progress);
     this.drawSpots(ctx);
     this.drawPebbles(ctx);
+    this.drawFarFade(ctx);
+  }
+
+  // Последние px песка у горизонта плавно переходят в цвет далёкой земли —
+  // без резкого обреза «как край стола».
+  drawFarFade(ctx) {
+    const art = this.art;
+    const top = art.horizonY();
+    const depth = CONFIG.VISUAL.SAND?.FAR_FADE ?? 36;
+    const fade = ctx.createLinearGradient(0, top, 0, top + depth);
+    fade.addColorStop(0, FAR_GROUND);
+    fade.addColorStop(0.5, FAR_GROUND_MID);
+    fade.addColorStop(1, FAR_GROUND_CLEAR);
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, top - 2, art.width, depth + 2);
   }
 
   collect(progress) {

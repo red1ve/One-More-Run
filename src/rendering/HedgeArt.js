@@ -76,6 +76,7 @@ export class HedgeArt {
     ctx.save();
     this.drawBands(ctx, cfg);
     this.collectClumps(cfg, progress);
+    this.drawFarFringe(ctx, cfg);
     this.drawClumps(ctx);
     this.drawFlowers(ctx);
     this.drawCurbs(ctx, cfg, progress);
@@ -102,6 +103,64 @@ export class HedgeArt {
         const edge = side < 0 ? rows[i + 1] : rows[i + 2];
         const x = this.edgeX(side, edge, rows[i + 3], cfg.shoulder + cfg.curb + cfg.width * 0.92);
         ctx.lineTo(x, rows[i]);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // Дальний участок изгороди, где клочки уже мельче пикселя: мелкая зубчатая
+  // листва по рядам экрана и лёгкая дымка к горизонту (как у дальних деревьев),
+  // чтобы изгородь сужалась живой, а не тёмным гладким клином.
+  drawFarFringe(ctx, cfg) {
+    const rows = this.rows;
+    const clumps = this.clumps;
+    let clumpTop = this.art.height;
+    for (let i = 1; i < clumps.length; i += 3) clumpTop = Math.min(clumpTop, clumps[i]);
+    const top = this.art.horizonY();
+    if (clumpTop <= top + 4) return;
+    const pass = (color, dy, k) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (let i = 0; i < rows.length; i += 4) {
+        const y = rows[i];
+        if (y > clumpTop + 6) break;
+        const s = rows[i + 3];
+        const r = Math.max(0.8, cfg.radius * s * 0.42 * k);
+        for (const side of [-1, 1]) {
+          const edge = side < 0 ? rows[i + 1] : rows[i + 2];
+          for (let n = 0; n < 3; n += 1) {
+            // Случайная (но постоянная для ряда) позиция поперёк изгороди: листва, а не полосы.
+            const across = 0.06 + hash(Math.round(y) * 3.7 + n * 17.1 + side * 5.3) * 0.88;
+            const x = this.edgeX(side, edge, s, cfg.shoulder + cfg.curb + cfg.width * across);
+            ctx.moveTo(x + r, y + dy * r);
+            ctx.arc(x, y + dy * r, r, 0, Math.PI * 2);
+          }
+        }
+      }
+      ctx.fill();
+    };
+    pass(LEAF_SHADE, 0.15, 1.1);
+    pass(LEAF, -0.1, 0.95);
+    pass(LEAF_LIGHT, -0.5, 0.4);
+    // Дымка: к горизонту изгородь светлеет к цвету дальних деревьев.
+    const haze = ctx.createLinearGradient(0, top, 0, clumpTop + 6);
+    haze.addColorStop(0, 'rgba(125, 179, 138, 0.55)');
+    haze.addColorStop(1, 'rgba(125, 179, 138, 0)');
+    ctx.fillStyle = haze;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      let started = false;
+      for (let i = 0; i < rows.length; i += 4) {
+        if (rows[i] > clumpTop + 6) break;
+        const edge = side < 0 ? rows[i + 1] : rows[i + 2];
+        const x = this.edgeX(side, edge, rows[i + 3], cfg.shoulder + cfg.curb - 2);
+        if (!started) { ctx.moveTo(x, rows[i]); started = true; } else ctx.lineTo(x, rows[i]);
+      }
+      for (let i = rows.length - 4; i >= 0; i -= 4) {
+        if (rows[i] > clumpTop + 6) continue;
+        const edge = side < 0 ? rows[i + 1] : rows[i + 2];
+        ctx.lineTo(this.edgeX(side, edge, rows[i + 3], cfg.shoulder + cfg.curb + cfg.width + 4), rows[i]);
       }
       ctx.closePath();
       ctx.fill();
