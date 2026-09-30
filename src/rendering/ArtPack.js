@@ -27,7 +27,7 @@ const FILES = {
   'bush-02': new URL('../../assets/art-pack/props/bush-02.png', import.meta.url).href,
   'bush-03': new URL('../../assets/art-pack/props/bush-03.png', import.meta.url).href,
   'bush-04': new URL('../../assets/art-pack/props/bush-04.png', import.meta.url).href,
-  'arch-01': new URL('../../assets/art-pack/arch/arch-01.png', import.meta.url).href,
+  'arch-wide-01': new URL('../../assets/art-pack/arch/arch-wide-01.png', import.meta.url).href,
   'sky-strip': new URL('../../assets/art-pack/sky/sky-strip.jpg', import.meta.url).href,
   'rock-01': new URL('../../assets/art-pack/props/rock-01.png', import.meta.url).href,
   'rock-02': new URL('../../assets/art-pack/props/rock-02.png', import.meta.url).href,
@@ -45,7 +45,7 @@ const FILES = {
 export const TREE_BASE_X = { 'tree-01': 0.526, 'tree-02': 0.513, 'tree-03': 0.508, 'tree-04': 0.514 };
 
 // Подсветка при подготовке копий (один раз): ворота и арка на картинках темнее референса.
-const BRIGHTEN = { 'gate-01': 1.12, 'gate-02': 1.12, 'gate-03': 1.12, 'arch-01': 1.12 };
+const BRIGHTEN = { 'gate-01': 1.12, 'gate-02': 1.12, 'gate-03': 1.12, 'arch-wide-01': 1.12 };
 
 function brighten(canvas, k) {
   const ctx = canvas.getContext('2d');

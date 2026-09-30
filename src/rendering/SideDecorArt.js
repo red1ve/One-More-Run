@@ -33,7 +33,9 @@ const PROP_SPRITES = {
   flowers: { names: ['grass-01'], width: 0.3 }
 };
 const ALL_PROP_SPRITES = Object.values(PROP_SPRITES).flatMap((p) => p.names);
-const KINDS = ['tree', 'tree', 'flowerBush', 'bush', 'bush', 'rock', 'fence', 'flowers'];
+// Деревья — на каждом восьмом месте (раньше каждое четвёртое), чтобы на газоне
+// были видны камни, заборчики, кусты и трава, как на референсе.
+const KINDS = ['tree', 'flowerBush', 'bush', 'bush', 'rock', 'fence', 'flowers', 'flowerBush'];
 
 function hash(n) {
   const x = Math.sin(n * 73.9 + 12.7) * 43758.5453;
@@ -85,33 +87,44 @@ export class SideDecorArt {
     ctx.restore();
   }
 
+  // Размер предмета — по глубине (у горизонта ≈ DEPTH_FAR, у кота 1), а не по ширине
+  // дорожки: иначе у горизонта деревья сразу вдвое меньше ближних, а не крошечные,
+  // и «выпрыгивают» у линии горизонта. Так они вырастают из дальнего леса.
+  // Место (x) — по-прежнему от края изгороди, которая стоит по ширине дорожки.
+  // Вдали слоты берутся через один, через три… (всегда одни и те же — не мигают).
   collect(progress) {
     const art = this.art;
     const cfg = this.cfg();
     const period = cfg.PERIOD ?? 70;
+    const far = cfg.DEPTH_FAR ?? 0.15;
     const items = this.items;
     items.length = 0;
     const nearWorld = art.screenToWorldY(art.height + 120 + (art.lastShift || 0));
     let k = Math.floor((nearWorld - progress) / period);
+    let step = 1;
     let prevY = Infinity;
-    for (let guard = 0; guard < 200; guard += 1, k -= 1) {
+    for (let guard = 0; guard < 200; guard += 1) {
       const p = art.roadAt(k * period + progress);
-      if (p.drawY < art.horizonY() + 2 || prevY - p.drawY < 2.5) break;
+      if (p.drawY < art.horizonY() + 1) break;
+      if (prevY - p.drawY < 2.5 && step < 32) {
+        step *= 2;
+        k = Math.floor(k / step) * step;
+        continue;
+      }
       prevY = p.drawY;
-      for (const side of [-1, 1]) {
+      const depth = far + (1 - far) * p.t;
+      for (let side = -1; side <= 1; side += 2) {
         const seed = k * 13.1 + side * 5.7;
         const kind = Math.floor(hash(seed + 1) * KINDS.length) % KINDS.length;
-        // Вдали мелкие предметы стоят теснее на экране, поэтому их там реже.
-        // Деревья не прореживаем: они закрывают горизонт по бокам, как на референсе.
-        const thin = KINDS[kind] === 'tree' ? 1 : Math.max(0.35, Math.min(1, (p.scale - 0.45) / 0.4));
-        if (hash(seed) > (cfg.CHANCE ?? 0.8) * thin) continue;
+        if (hash(seed) > (cfg.CHANCE ?? 0.8)) continue;
         const outer = this.hedgeOuter(p, side);
         const room = Math.max(40, side < 0 ? outer : art.width - outer);
-        const pad = (KINDS[kind] === 'tree' ? 34 : 14) * p.scale;
+        const pad = (KINDS[kind] === 'tree' ? 34 : 14) * depth;
         const x = outer + side * (pad + hash(seed + 2) * room * 0.9);
-        if (x < -80 * p.scale || x > art.width + 80 * p.scale) continue;
-        items.push(kind, x, p.drawY + hash(seed + 3) * period * 0.4 * p.scale, p.scale, seed);
+        if (x < -80 * depth || x > art.width + 80 * depth) continue;
+        items.push(kind, x, p.drawY + hash(seed + 3) * period * 0.4 * depth, depth, seed);
       }
+      k -= step;
     }
   }
 

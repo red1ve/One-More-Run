@@ -52,6 +52,10 @@ export class SandArt {
     ctx.fillRect(0, top - 2, art.width, depth + 2);
   }
 
+  // Пятна и камешки привязаны к слотам мира (k). Вдали ряды на экране сливаются,
+  // поэтому там берём каждый 2-й, 4-й, 8-й… слот (всегда одни и те же — не мигают)
+  // и доходим до самого горизонта. Размер — по глубине (к горизонту почти ноль),
+  // яркость — слабее вдали (три ступени), без резкой границы.
   collect(progress) {
     const art = this.art;
     const cfg = CONFIG.VISUAL.SAND || {};
@@ -62,38 +66,48 @@ export class SandArt {
     pebbles.length = 0;
     const nearWorld = art.screenToWorldY(art.height + 80 + (art.lastShift || 0));
     let k = Math.floor((nearWorld - progress) / period);
+    let step = 1;
     let prevY = Infinity;
-    for (let guard = 0; guard < 300; guard += 1, k -= 1) {
+    for (let guard = 0; guard < 400; guard += 1) {
       const p = art.roadAt(k * period + progress);
-      if (p.drawY < art.horizonY() + 2 || prevY - p.drawY < 1.2) break;
+      if (p.drawY < art.horizonY() + 1) break;
+      if (prevY - p.drawY < 2 && step < 64) {
+        // Ряды слишком близко: дальше шагаем вдвое реже, по слотам, кратным шагу.
+        step *= 2;
+        k = Math.floor(k / step) * step;
+        continue;
+      }
       prevY = p.drawY;
       const s = p.scale;
+      const depth = 0.08 + 0.92 * p.t; // размер по глубине: у кота 1, у горизонта ≈0.1
+      const band = p.t > 0.45 ? 0 : p.t > 0.2 ? 1 : 2; // ступень яркости
       for (let n = 0; n < 2; n += 1) {
         const seed = k * 9.7 + n * 4.1;
         const u = (hash(seed) - 0.5) * 1.9;
         const x = p.roadCenter + u * p.roadWidth * 0.5;
-        // Вдали пятна теснее на экране, поэтому их там реже.
-        const thin = Math.max(0.3, Math.min(1, (s - 0.5) / 0.4));
-        if (hash(seed + 1) < (cfg.SPOT_CHANCE ?? 0.55) * thin) {
-          spots.push(x, p.drawY, (22 + hash(seed + 2) * 30) * s, (6 + hash(seed + 3) * 5) * s,
-            hash(seed + 4) < 0.85 ? 0 : 1);
+        if (hash(seed + 1) < (cfg.SPOT_CHANCE ?? 0.55)) {
+          spots.push(x, p.drawY, (22 + hash(seed + 2) * 30) * depth, (6 + hash(seed + 3) * 5) * depth,
+            (hash(seed + 4) < 0.85 ? 0 : 1) + band * 2);
         }
-        if (s > 0.6 && hash(seed + 5) < (cfg.PEBBLE_CHANCE ?? 0.35)) {
+        if (hash(seed + 5) < (cfg.PEBBLE_CHANCE ?? 0.35) * (s > 0.6 ? 1 : 0.5)) {
           const px = p.roadCenter + (hash(seed + 6) - 0.5) * 1.8 * p.roadWidth * 0.5;
-          pebbles.push(px, p.drawY + hash(seed + 7) * period * 0.5 * s, (1.6 + hash(seed + 8) * 1.8) * s);
+          pebbles.push(px, p.drawY + hash(seed + 7) * period * 0.5 * depth, Math.max(0.5, (1.6 + hash(seed + 8) * 1.8) * depth));
         }
       }
+      k -= step;
     }
   }
 
   // Пятно — два наложенных овала: мягкая неровная клякса, а не полоса.
+  // Код пятна: светлое/тёмное + 2 × ступень яркости (0 — рядом, 2 — у горизонта).
   drawSpots(ctx) {
     const p = this.spots;
-    for (const light of [0, 1]) {
-      ctx.fillStyle = light ? SAND_LIGHT : SAND_SHADE;
+    for (let code = 0; code < 6; code += 1) {
+      ctx.globalAlpha = [1, 0.7, 0.45][code >> 1];
+      ctx.fillStyle = code & 1 ? SAND_LIGHT : SAND_SHADE;
       ctx.beginPath();
       for (let i = 0; i < p.length; i += 5) {
-        if (p[i + 4] !== light) continue;
+        if (p[i + 4] !== code) continue;
         const rx = p[i + 2];
         const ry = p[i + 3];
         ctx.moveTo(p[i] + rx, p[i + 1]);
@@ -103,6 +117,7 @@ export class SandArt {
       }
       ctx.fill();
     }
+    ctx.globalAlpha = 1;
   }
 
   drawPebbles(ctx) {

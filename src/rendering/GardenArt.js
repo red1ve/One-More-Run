@@ -1055,7 +1055,7 @@ export class GardenArt {
 
   drawHorizonLandmark(shift = 0) {
     if (!this.usePack()) return;
-    if (CONFIG.VISUAL.ART_PACK?.ARCH && this.artPack.has('arch-01')) {
+    if (CONFIG.VISUAL.ART_PACK?.ARCH && this.artPack.has('arch-wide-01')) {
       this.drawPackArch(shift);
       return;
     }
@@ -1105,11 +1105,11 @@ export class GardenArt {
     const pack = this.artPack;
     const horizon = this.horizonY();
     const farRoad = this.roadAt(worldYForScreen(horizon + shift + 1, shift, this.height));
-    const aspect = pack.aspect('arch-01');
+    const aspect = pack.aspect('arch-wide-01');
     const maxH = Math.max(24, horizon + shift - (cfg.TOP_MARGIN ?? 6));
     const w = Math.min(farRoad.roadWidth / (cfg.PACK_POSTS_SPAN ?? 0.745), maxH / aspect);
     const h = w * aspect;
-    pack.draw(this.ctx, 'arch-01', this.width * 0.5 - w / 2, horizon + (cfg.BASE_SINK ?? 2) - h, w);
+    pack.draw(this.ctx, 'arch-wide-01', this.width * 0.5 - w / 2, horizon + (cfg.BASE_SINK ?? 2) - h, w);
   }
 
   drawMainWorld(camera, segments = [], playerY = CONFIG.PLAYER_START_Y) {
@@ -2535,6 +2535,7 @@ export class GardenArt {
 
         const prop = this.allocProp();
         prop.kind = 'fence-row';
+        prop.segmentY = segment.y;
         prop.role = 'planter';
         prop.spans = spans;
         prop.openings = (row.paths || []).slice();
@@ -2685,6 +2686,11 @@ export class GardenArt {
     const occH = Math.max(h, gateH);
     const occ = this.beginHorizonReveal(road.roadCenter, groundY, road.roadWidth, occH);
     if (!occ) return;
+    // Лёгкое проявление там, где трасса создаёт новые препятствия (на ~2 участка
+    // впереди): ящики и ворота не «выскакивают», а проступают. Только картинка.
+    const spawnFade = this.spawnFadeAlpha(Number.isFinite(prop.segmentY) ? prop.segmentY : worldY);
+    this.ctx.save();
+    this.ctx.globalAlpha *= spawnFade;
 
     prop.spans.forEach((span) => {
       const x0 = Math.max(road.roadLeft, this.projectGameplayX(span.x, worldY));
@@ -2713,7 +2719,17 @@ export class GardenArt {
         });
       }
     }
+    this.ctx.restore();
     this.endHorizonReveal(occ);
+  }
+
+  // 0 → 1, пока новый участок трассы проезжает первые SPAWN_FADE px после появления.
+  // Track добавляет участок, когда верх последнего опускается ниже −SEGMENT_HEIGHT,
+  // поэтому новый участок появляется с верхом около −2 × SEGMENT_HEIGHT.
+  spawnFadeAlpha(segmentY) {
+    const appearY = -2 * CONFIG.SEGMENT_HEIGHT;
+    const fade = CONFIG.VISUAL.GARDEN_OBSTACLES?.SPAWN_FADE ?? 420;
+    return Math.max(0, Math.min(1, (segmentY - appearY) / fade));
   }
 
   drawFenceSpan(kit, x0, x1, groundY, height, alpha, span, worldY) {
