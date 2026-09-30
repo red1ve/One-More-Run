@@ -441,63 +441,35 @@ A trail skin must not impersonate Coins. If it is round and amber, it has no out
 
 ## 5. World / track style
 
-Procedural geometry stays procedural. Renderer will later paint **materials** onto existing rects. Do not replace OFFSET/FUNNEL/etc. with handmade layouts.
+Procedural geometry stays procedural: the track (rows, openings, OFFSET/FUNNEL/…) comes from `Track.js`; the renderer only dresses it. Since Phase 1г–1д (2026-09/10) the garden is **painted pictures** from `assets/art-pack/` (made in the reference style, sources and prompts in `assets/art-pack/SOURCES.md`) placed by code; the road, lawn, sand, curb and HUD are drawn in code in the same flat cel-shaded style.
+
+### Art pack (pictures)
+
+- Originals live in `assets/art-pack/<group>/` and are never edited by the game. `node scripts/art-pack-game.mjs` writes game-sized copies to `assets/art-pack/game/`: WebP (quality 0.85) plus a PNG/JPG fallback for browsers without WebP (old iPhones, iOS < 14). Each copy is shrunk to its largest on-screen size with a margin (the canvas is 540 px wide).
+- `src/rendering/ArtPack.js` checks WebP support once (decodes a 1×1 image), loads one set, and prepares pre-scaled (1…1/8) and mirrored copies; a frame only copies the nearest ready size. Gates and the pergola are lightened 12% at that step. Paths are written in full so Vite bundles only these files (never `_raw/`).
+- Used sets: hedge clumps `hedge-08..16` (01–07 are a spare set, not loaded), trees `tree-01..04` (trunk on `baseX` from `anchors.json`), planters `planter-01..04`, gates `gate-01..03`, bushes/rocks/fences/grass `props/`, pergola `arch/arch-wide-01`, sky `sky/sky-strip.jpg`.
+- Every picture is chosen **once per world slot** (hash of the slot number) together with its horizontal mirroring, so nothing changes its look while it scrolls (`scripts/phase1f-check.mjs` guards this).
 
 ### Layers (back to front)
 
-1. With `USE_ENVIRONMENT_ASSET_PACK`, FAR is **one image**: `distant-garden-horizon.png` (sky + clouds + distant hills + garden skyline). It is drawn in screen space behind MAIN_WORLD, aspect-preserved, with the painted tree line meeting the horizon so the path can vanish inside the far garden. No procedural sky, no extra cloud sprites, and no FAR parallax. If that PNG is not ready, fall back to `distant-garden.png`. Pack off keeps procedural sky, cloud sprites, and foliage blobs.
-2. MAIN_WORLD via camera, layered as FAR landscape → MID garden → side garden frame → road → cat. Lawn, a garden-path corridor with LEFT/RIGHT hedge borders, a MID garden band of small trees/bushes/grass, roadside low plants, vegetation groups, a continuous garden fence with openings, coins, cat. Pack fills that visual road polygon with `path-sand-material.png` as a world-Y tiled sand material (not a full-screen sprite). If the PNG is not ready, the road falls back to procedural FloorSand. Continuous hedge borders share the road's vanishing projection and remain the physical edges of the playable sand. Visually the sequence is sand shoulder → low plants → hedge → bushes → trees. Pack also draws `left-garden-mass` / `right-garden-mass` as outer-lawn groups **behind** those borders on the same world/camera path as trees and bushes. They are presentation-only, never a continuous side wall, and never collide as obstacles. Player X is clamped to the sand inner faces at the cat's screen Y. Obstacle generation still uses `TRACK_LEFT` / `TRACK_RIGHT`.
-3. Gate sills (local SAFE / RISK / HIGH RISK material on the opening only — no bright UI strip)
-4. Obstacle rects as one continuous garden fence per row, with a separate open gateway on each TWO_PATHS / DUAL_RISK opening
-5. Coins
-6. Cat
-7. Particles / trails
-8. Reward markers (`+N`)
-9. HUD badges / overlays
-
-### Background
-
-Gameplay objects live in a world Y where planted position is `entity.y - progress`. A `WorldCamera` follows the cat with `screenY = worldY - cameraY`. With the environment pack, sky lives inside the FAR image; pack off keeps screen-space sky and clouds. The path, hedge borders, planters, coins, and roadside vegetation share one horizon-keyed visual projection (`projectTrackRect` / `pathInsetAt`): gameplay X is remapped onto the visual road at that depth. Path inset is moderate (`PATH_INSET_NEAR` 26px, `PATH_INSET_FAR` 108px) so the corridor narrows without a needle vanishing point. Visual and physical road edges stay in sync; there is no extra throat taper. The sand polygon fades into the FAR tree line instead of ending on a hard cap. Player X is clamped to the same inner road edges used to draw LEFT_BORDER / RIGHT_BORDER. Lawn is a continuous MAIN_WORLD surface that meets that join at the horizon. The FAR skyline stays in screen space and does not scroll with MAIN_WORLD. Side vegetation uses overlapping FAR / MID / NEAR compositional groups (tree + understory, not a tree wall) with small air between living clusters, not empty field. Environment props use one continuous `worldDepth` mapping from world position: camera transform → screenY → mild uniform scale, alpha, and contrast. Since 2026-09 (Phase 1) object scale is true perspective: scale = road width at that depth / road width at the cat (about `0.51` at the horizon, `1.0` at the cat, capped at `1.3` below it), and an object keeps a constant share of the road width, so it grows in place and never slides out from behind the hedges (`scripts/drift-probe.mjs` guards this in `npm run check`). Trees, bushes, side masses, and standing obstacles keep a world ground point and a **uniform** `depthScale` (scaleX === scaleY) with a bottom-center anchor. World objects are painter-sorted by ground `screenY`. Obstacle rows are one continuous fence construction with openings; TWO_PATHS / DUAL_RISK add a separate open gateway per opening, posts on the opening edges. Each track segment stores `visualObstacleType`, `visualObstacleSeed`, `visualObstacleScale`, and `visualObstacleId` at creation; the renderer never re-rolls family from `segment.y`, loading, or gap width. Coins keep gameplay size `COIN_SIZE`; presentation uses `VISUAL.COIN_DRAW_SIZE` and `coin.visualId` / `visualSeed` so a production sprite can drop in. A large distant garden arch is not spawned in runtime.
-
-### Track edges
-
-Since Phase 1 step 2 (2026-09) the edge is `src/rendering/HedgeArt.js` (`VISUAL.HEDGE_WALL`): a sand strip, a wooden curb (PlanterWood face, WoodLight top, one InkBrown line on the road side, ShadowDust shadow on the sand, post ticks), then a clipped hedge made of world-anchored leaf clumps (HedgeShade crescent bottom-right, HedgeSage body, HedgeLeafLight highlight top-left) over a deep base so the gaps read darker, with sparse CloudWhite / BlossomPink flowers that thin out with distance. Width and clump size follow the road perspective. The older band, hedge tufts, road-edge plants, side masses and side trees are off while `HEDGE_WALL.ENABLED`; the paragraph below describes that older layer.
-
-Bush and grass tufts sit on the hedge band itself so the border reads as a living garden edge, not a pipe of identical blobs. A road-edge layer (grass / flowers / small bushes, with hooks for future `road-edge-*.png`) sits between sand and hedge. Pack side-mass sprites sit in the outer lawn behind those borders, are not mirrored, and share depth projection with other MAIN_WORLD plants. Left and right masses use different world-Y periods so they do not alternate as a stripe. Near trees may overflow the viewport edge. The playable sand stays clear except for gates and coins. The cat cannot leave the sand: LEFT_BORDER / RIGHT_BORDER are the road boundaries, not extra obstacles.
-
-### Lawn
-
-Since 2026-09 the ground outside the hedges is `src/rendering/LawnArt.js` (`VISUAL.LAWN`): an opaque GardenLawn fill that fades to a light haze at the horizon, world-anchored soft LawnShade blobs (two overlapping ovals, never a flat pale ellipse that reads as water), rare LawnLight blobs and three-blade LawnTuft strokes, all shrinking with the road perspective.
-
-### Path sand
-
-Since Phase 1 step 7 (2026-09) the path is `src/rendering/SandArt.js` (`VISUAL.SAND`) instead of the streaky `path-sand-material.png`: a flat light FloorSand, world-anchored soft SandShade spots (two overlapping ovals), rare SandLight spots and small Pebble dots, all thinned with distance. No haze layers anywhere in the new look: the lawn is flat GardenLawn, the arch is opaque, only the far tree row keeps a slight sky tint for depth.
-
-### Sky and far tree line
-
-Since Phase 1 step 6 (2026-09) the baked warm `distant-garden-horizon.png` is off while `VISUAL.SKY.ENABLED`. `src/rendering/SkyArt.js` paints once into an offscreen canvas: a GardenSky sky that turns to SkyHaze near the horizon, three flat-bottomed CloudWhite clouds with a CloudShade underside (placed between the HUD pills), and a far tree line of two rows (FarTree haze row, NearTree row with HedgeSage highlights; round crowns and a few conifers) standing on the horizon. Each frame it is a single `drawImage`, shifted with the world camera so the tree line always meets the road horizon; the canvas is rebuilt only if the horizon changes. The hedge narrows to zero over the last `HEDGE_WALL.HORIZON_TAPER` px so it blends into the trees instead of ending in dark wedges, and side trees are not thinned with distance so they frame the horizon.
-
-### Side decor
-
-Since Phase 1 step 5 (2026-09) the lawn outside the hedges carries `src/rendering/SideDecorArt.js` (`VISUAL.SIDE_DECOR`): trees (WoodShade trunk with two branches, InkBrown outline, leaf canopy), plain and flowering bushes (BushLeaf, sparse flowers), StoneLight / StoneShade rocks, three-post wooden fences with pointed tops, and small flower stems. Every leaf mass uses the same recipe as the hedge: a HedgeShade scalloped outline, a HedgeShade crescent bottom-right, the body colour, a HedgeLeafLight highlight top-left. Items are world-anchored, painter-ordered far to near, thinned out with distance and drawn before the hedge so the hedge always sits in front. The hedge got the same dark scalloped outline in this step.
-
-### Horizon landmark
-
-Since Phase 1 step 3 (2026-09) the far end of the path is a rose-covered pergola, `assets/environment/garden/landmarks/rose-arch.svg`: two square PlanterWood posts with WoodLight / WoodShade sides, knee braces, a top beam buried in HedgeShade / HedgeSage / HedgeLeafLight foliage (heavier on the left), BlossomPink and CloudWhite roses, vine stems on the posts. One InkBrown outline on the wood only. It is rasterized once and drawn at `ALPHA` 0.88 so the sky shows through as distance haze (`VISUAL.ROSE_ARCH`). The tiled sand fades into plain sand over the last `FAR_SAND_VEIL` px so the path runs smoothly into the arch.
+1. Sky: `sky-strip.jpg` painted once into a cache (`SkyArt.js`): the lower part is visible, its bottom on the horizon, mirrored copies at the sides, clouds below the HUD pills; the sky above uses the colour of the picture's top edge. A soft haze of the picture's bottom colour lies on the lawn at the horizon.
+2. Pergola `arch-wide-01` standing on the road end, posts at the road edges (`VISUAL.ROSE_ARCH`).
+3. Lawn (`LawnArt.js`, code): GardenLawn with soft patches and tufts.
+4. Lawn decor (`SideDecorArt.js`): trees in groups of 1–2 every 10 slots, bushes/rocks/fences/grass in between (`VISUAL.SIDE_DECOR`). Drawn before the hedge.
+5. Road sand (`SandArt.js`, code): FloorSand with soft spots and pebbles.
+6. Curb and hedge (`HedgeArt.js`): sand strip, wooden curb with post ticks (code), dark base, painted clumps in two overlapping rows (≈ one in five flowering), a fine far fringe with haze near the horizon (code).
+7. Obstacles (`ObstacleArt.js`): planters and gates, coins.
+8. Cat, particles, reward markers, HUD.
 
 ### Obstacles / gates
 
-Since Phase 1 step 4 (2026-09) obstacle rows are drawn by `src/rendering/ObstacleArt.js` (`VISUAL.GARDEN_OBSTACLES`) over the unchanged collision spans. Segment family `FLOWER_GATE` becomes a terracotta garden gate (GatePaint panels with an arched top, vertical boards, GatePaintShade bottom rail, round-capped posts at each end, a leaf-and-bud sprig in the centre; `GATE_NEAR_CAT` 0.64 of the cat height). `STANDING_PLANTER` and `GARDEN_FENCE` become a wooden planter box (PlanterWood front, two plank seams, WoodLight rim, corner posts with WoodShade, a lush two-row leaf cap with sparse flowers; box `PLANTER_NEAR_CAT` 0.36). Any span width works: the box stretches and gates add panels. Choice openings no longer get gateway frames (the reference has none); gap width, sills and reward values carry SAFE / RISK. The older fence-kit paragraph below applies only when `GARDEN_OBSTACLES.ENABLED` is false.
+Obstacle rows keep the exact collision spans. A span is split into equal slots (≈ height × 1.2 each); each slot gets the planter or gate picture with the closest proportions, stretched by at most ±15%, so the drawing stands exactly on the collision width. Very narrow spans (an obstacle mostly under the hedge) become a bush growing out of the hedge that covers the whole visible part. Segment family `FLOWER_GATE` draws gates, the other families planters; the family is stored on the segment at creation and never re-rolled. New rows fade in where the track creates them (`GARDEN_OBSTACLES.SPAWN_FADE`). If a picture fails to load, planters and gates are drawn in code (flat boxes and panels) so an obstacle is never invisible.
 
-Obstacle rects use one visual family per segment as a shell over existing geometry. The family is stored on the segment (`FLOWER_GATE`, `STANDING_PLANTER`, or `GARDEN_FENCE`) when the segment is created and does not change while that segment is alive. Pack rendering uses one continuous `garden-fence` construction for every barrier row, with openings left as gaps. TWO_PATHS and DUAL_RISK add a separate open gateway (`single-choice-arch` posts + beam) on each opening. SAFE and RISK openings in the same row share one barrier height. Pack off falls back to procedural wood. SAFE / RISK readability lives on gap width, inner-face material, and sills — not a bright accent strip.
-
-Never paint obstacles red. Red was debug danger. In this world, danger is **narrowness**, not colour-of-death.
-
-Exception (2026-09, reference match): garden gates may use **GatePaint** `#D8724A` (a painted terracotta wood) on their panels, with a small flower motif, as on the reference. GatePaint is decoration, not a danger signal: it must not change with SAFE / RISK / HIGH RISK, and it is never used on the path, sills or HUD.
+Never paint obstacles red. Danger is **narrowness**, not colour-of-death. GatePaint `#D8724A` on garden gates is decoration and never changes with SAFE / RISK / HIGH RISK.
 
 ### Depth
 
-Visual vanishing is presentation-only. One depth ratio `u = D/(D+d)` (`src/rendering/VisualProjector.js`) drives screen Y, road width and object scale together. Object scale equals the road-width ratio (true perspective), so objects shrink exactly as much as the road. The painted horizon is `VISUAL.SKY_BAND` (130 since Phase 1, a narrow sky strip as on the reference); gameplay road inset is measured from the separate fixed `CORRIDOR_ORIGIN_Y`, so moving the horizon never changes play. Player draw origin, hitboxes, and gate geometry stay unprojected; at the cat's row the projection is identity, so what touches the cat on screen is what collides. Objects still use a single contact-shadow blob. No AO. Reward plates sit in front of gates and behind HUD.
+Visual vanishing is presentation-only (`src/rendering/VisualProjector.js`). One depth ratio `u = D/(D+d)` drives road width and object scale; the screen height uses a drawing curve `v = u^(1 + a·(1−u)²)` (`PROJECTOR.FAR_COMPRESS` a = 1.2): identical to `u` at the cat and behind it, compressed towards the horizon in the distance so new obstacles appear small at the pergola. Road edges stay straight on screen. Hedge, planters and gates scale with the road width (they must stand on its edges); lawn decor, sand spots and pebbles scale by depth (≈ 0 at the horizon) and are cut off by on-screen size with a fade, so they grow out of the far forest and never pop. Gameplay (world positions, hitboxes, speed, collisions) does not use the projection: `scripts/phase1e-check.mjs` replays a seed-42 run at 60/10/120 FPS against a baseline recorded before the curve existed.
 
 ### Pattern presentation (semantics unchanged)
 
@@ -511,7 +483,7 @@ Visual vanishing is presentation-only. One depth ratio `u = D/(D+d)` (`src/rende
 | TWO_PATHS SAFE/RISK | Two openings in the same hedge wall. SAFE is the wider lawn cut with calm wood. RISK is the tighter, warmer planter. The sand between gates stays FloorSand. |
 | DUAL_RISK | Two tight cuts, same family as RISK. The harder one is narrower and uses HighRiskClay on the gate, not a full-path fill. |
 
-The corridor floor stays FloorSand. Pack paints `path-sand-material.png` inside the existing projected road polygon so the sand reads as a hand-painted garden path; road edges still come from path geometry against the lawn, not from that texture. Difficulty colour lives on the **gate** (planter fill, inner face, 8 px sill), never as a rectangle filling the whole route.
+The corridor floor stays FloorSand (code-drawn sand with soft spots). Difficulty colour lives on the **gate** (planter fill, inner face, 8 px sill), never as a rectangle filling the whole route.
 
 **Reward values are the primary textual indicator at Choice. SAFE/RISK labels are not permanently displayed during normal gameplay. Difficulty is communicated primarily through geometry, material, and restrained color accents.**
 
@@ -574,6 +546,12 @@ Named tokens. New colours are not allowed without updating this bible.
 | SandShade | FloorSand toward ShadowDust, `#EDCC8E` | Soft spots on the path |
 | SandLight | FloorSand toward SkyPaper, `#F9E2AE` | Rare light spots on the path |
 | Pebble | FloorSand toward PlanterWood, `#D9B77E` | Small pebbles on the path |
+
+### Art-pack palette (pictures)
+
+The painted pictures follow the same tokens; their generator prompts fixed these values (see `assets/art-pack/SOURCES.md`): foliage `#7EA24E` (HedgeSage family), highlights `#A8CC5C` (HedgeLeafLight family), shade `#3F6B3A` (HedgeShade family), outline InkBrown `#4A3428`, wood PlanterWood `#BF7A45` / WoodLight `#D39048`, gates GatePaint `#D8724A`, sky GardenSky `#9CDCEC`, white and pink flowers CloudWhite / BlossomPink with CoinAmber centres. Pictures have soft painted shading and light paper grain; code-drawn parts (sand, lawn, curb, HUD) stay flat. A replacement picture must keep these colours and the thin uneven InkBrown outline.
+
+Tokens used only by the removed code-drawn garden (StoneLight, StoneShade, BushLeaf, SkyHaze, CloudShade, FarTree) are retired. NearTree `#6A8D44` stays as the page background around the canvas.
 
 ### Why each core colour exists
 

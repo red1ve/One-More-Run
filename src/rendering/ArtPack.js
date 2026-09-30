@@ -140,24 +140,31 @@ function buildLevels(source, mirror, gain) {
 export class ArtPack {
   constructor(onReady) {
     this.sprites = {};
+    // whenLoaded — все картинки обработаны (загрузились или не смогли): по нему
+    // main.js сообщает Яндексу, что игра готова (LoadingAPI.ready).
+    this.whenLoaded = Promise.resolve();
     if (typeof Image !== 'function' || typeof document === 'undefined') return;
-    detectWebp().then((webp) => {
+    this.whenLoaded = detectWebp().then((webp) => {
       this.webp = webp;
-      this.load(webp ? WEBP : FALLBACK, onReady);
+      return this.load(webp ? WEBP : FALLBACK, onReady);
     });
   }
 
   load(files, onReady) {
-    for (const [name, src] of Object.entries(files)) {
+    const all = Object.entries(files).map(([name, src]) => new Promise((resolve) => {
       const image = new Image();
       image.decoding = 'async';
       image.onload = () => {
         const aspect = image.naturalHeight / Math.max(1, image.naturalWidth);
         this.sprites[name] = { aspect, levels: [buildLevels(image, false, BRIGHTEN[name]), buildLevels(image, true, BRIGHTEN[name])] };
         if (onReady) onReady();
+        resolve();
       };
+      // Не загрузилась — игра не ждёт её вечно (ящики и ворота тогда рисуются кодом).
+      image.onerror = () => resolve();
       image.src = src;
-    }
+    }));
+    return Promise.all(all);
   }
 
   has(name) {

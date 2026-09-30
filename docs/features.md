@@ -80,7 +80,7 @@ Current implementation notes:
 | Platform pause/resume events    | P0       | DONE    |
 | Automatic SDK language detection| P0       | DONE    |
 | Russian + English UI            | P0       | DONE    |
-| Build ≈ 1 MB, `npm run verify:dist` | P0   | DONE    |
+| Build 3.7 MB (0.65 MB downloaded at start, WebP), `npm run verify:dist` | P0 | DONE |
 | Fullscreen advertising wrapper  | P0       | DONE    |
 | Authorized leaderboard submit   | P1       | DONE    |
 | Explicit authorization UI       | P1       | PLANNED |
@@ -107,15 +107,30 @@ Current implementation notes:
 | Game Over replay motivation | P1 | DONE   |
 | Mute toggle          | P1       | DONE    |
 | Full settings menu   | P1       | PLANNED |
-| Russian localization | P0       | PLANNED |
+| Russian localization | P0       | DONE    |
 | English UI           | P0       | DONE    |
 
 
-Start / Game Over are canvas overlays, not a separate menu system. Localization files exist but are not wired yet.
+Start / Game Over are canvas overlays, not a separate menu system. UI text comes from `src/localization/en.json` / `ru.json`; the language follows the Yandex SDK (ru/be/kk/uk/uz → Russian, otherwise English).
 
 Phase 8 adds presentation-only clarity: first-run hints disappear after the first launch, the first RISK explains streak, multiplier steps identify the new score multiplier, and Game Over shows either honest NEW BEST feedback or the points still needed. Coins are described as saved between runs. During play, Choices show reward values rather than repeating the words SAFE and RISK.
 
 Phase 8 deliberately does not change speed, physics, hitboxes, Choice timing/geometry, rewards, score mathematics, streak/multiplier rules, Coin behavior, reachability, or Yandex lifecycle.
+
+---
+
+## Visual
+
+| Feature | Priority | Status |
+| ------- | -------- | ------ |
+| Garden look matching `docs/reference/reference.webp` | P0 | DONE |
+| Painted art pack (hedge, trees, planters, gates, bushes, props, pergola, sky) | P1 | DONE |
+| Game-sized WebP copies + PNG fallback (`scripts/art-pack-game.mjs`) | P1 | DONE |
+| Objects appear small at the pergola and grow (draw-only projection) | P1 | DONE |
+| No flicker: every picture fixed per world slot (`scripts/phase1f-check.mjs`) | P1 | DONE |
+| Portrait-only field; landscape phone shows a narrow field with green bars | P2 | Declare portrait in the console |
+
+Details: `docs/visual-bible.md` §5–6.
 
 ---
 
@@ -134,4 +149,4 @@ Phase 8 deliberately does not change speed, physics, hitboxes, Choice timing/geo
 
 Web Audio is created once, unlocked by a user gesture, muted via storage key `audioMuted`, and suspended while the tab is hidden.
 
-Yandex integration uses `YandexService` as an optional platform layer. The game remains fully playable when `/sdk.js`, authorization, leaderboards, or ads are unavailable. Rewarded ads have no current gameplay use and are intentionally not connected.
+Yandex integration uses `YandexService` as an optional platform layer. The game remains fully playable when `/sdk.js`, authorization, leaderboards, or ads are unavailable. Rewarded ads (Phase 5): one revive per run and ×2 coins of the run on the Game Over screen, reward only after `onRewarded`.

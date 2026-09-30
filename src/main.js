@@ -88,7 +88,13 @@ window.addEventListener('DOMContentLoaded', () => {
       if (game.state === 'START') game.render();
     });
   }
-  yandex.notifyGameReady();
+  // Яндексу сообщаем «игра готова», когда загрузились картинки сада (или прошло
+  // 6 с — чтобы медленная сеть не держала игру на экране загрузки платформы).
+  const artLoaded = game.renderer?.garden?.artPack?.whenLoaded || Promise.resolve();
+  Promise.race([artLoaded, new Promise((resolve) => setTimeout(resolve, 6000))]).then(() => {
+    if (game.state === 'START') game.render();
+    yandex.notifyGameReady();
+  });
   // Язык из Яндекса; без SDK — английский. В npm run dev можно проверить: ?lang=ru.
   const devLang = import.meta.env?.DEV
     ? new URLSearchParams(window.location.search).get('lang')
