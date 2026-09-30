@@ -1,0 +1,20 @@
+{
+  "gate-01.png": {
+    "width": 320,
+    "height": 248,
+    "baseX": 0.5,
+    "aspect": 1.29
+  },
+  "gate-02.png": {
+    "width": 320,
+    "height": 248,
+    "baseX": 0.5,
+    "aspect": 1.29
+  },
+  "gate-03.png": {
+    "width": 320,
+    "height": 256,
+    "baseX": 0.5,
+    "aspect": 1.25
+  }
+}

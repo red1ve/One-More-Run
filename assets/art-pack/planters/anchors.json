@@ -1,0 +1,26 @@
+{
+  "planter-01.png": {
+    "width": 320,
+    "height": 239,
+    "baseX": 0.499,
+    "aspect": 1.34
+  },
+  "planter-02.png": {
+    "width": 320,
+    "height": 315,
+    "baseX": 0.504,
+    "aspect": 1.02
+  },
+  "planter-03.png": {
+    "width": 274,
+    "height": 320,
+    "baseX": 0.5,
+    "aspect": 0.86
+  },
+  "planter-04.png": {
+    "width": 320,
+    "height": 290,
+    "baseX": 0.501,
+    "aspect": 1.1
+  }
+}
