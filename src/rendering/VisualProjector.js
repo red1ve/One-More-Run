@@ -95,7 +95,8 @@ export function worldYForScreen(screenY, shift = 0, height = CONFIG.CANVAS_HEIGH
   const horizon = corridorHorizonY();
   const base = screenY - shift;
   const u = (base - horizon) / Math.max(1, CONFIG.PLAYER_START_Y - horizon);
-  const d = depthRatioToWorldOffset(clamp(u, 0.02, 4), cfg);
+  // 0.002: дорожка доходит до самого горизонта (раньше 0.02 оставлял щель ~14 px).
+  const d = depthRatioToWorldOffset(clamp(u, 0.002, 4), cfg);
   return CONFIG.PLAYER_START_Y - d;
 }
 
@@ -188,7 +189,9 @@ export function sampleRoadRibbon(shift = 0, options = {}) {
   const height = options.height || CONFIG.CANVAS_HEIGHT;
   const sections = Math.max(24, Math.min(90, options.sections || 60));
   const pad = options.pad == null ? 56 : options.pad;
-  const top = corridorHorizonY();
+  // Верх дорожки — на той же линии горизонта, что небо, арка, газон и изгородь
+  // (с учётом сдвига камеры), иначе между ними видна полоса.
+  const top = corridorHorizonY() + shift;
   const bottom = height + pad;
   const playerScreen = CONFIG.PLAYER_START_Y + shift;
   const screens = [];

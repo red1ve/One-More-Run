@@ -1,7 +1,8 @@
 import './style.css';
-import '@fontsource/fredoka/500.css';
-import '@fontsource/fredoka/600.css';
-import '@fontsource/fredoka/700.css';
+// Только латиница Fredoka (иврит и расширенная латиница игре не нужны).
+import '@fontsource/fredoka/latin-500.css';
+import '@fontsource/fredoka/latin-600.css';
+import '@fontsource/fredoka/latin-700.css';
 import { Game } from './game/Game.js';
 import { CONFIG } from './config.js';
 import { YandexService } from './services/YandexService.js';
@@ -27,6 +28,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const seedParam = new URLSearchParams(window.location.search).get('seed');
     if (seedParam !== null && Number.isFinite(Number(seedParam))) game.runSeed = Number(seedParam);
     window.__omrGame = game;
+    // ?art=off — кодовые версии вместо картинок art-pack (кадры «до/после»).
+    if (new URLSearchParams(window.location.search).get('art') === 'off') {
+      for (const key of Object.keys(CONFIG.VISUAL.ART_PACK)) {
+        if (typeof CONFIG.VISUAL.ART_PACK[key] === 'boolean') CONFIG.VISUAL.ART_PACK[key] = false;
+      }
+    }
   }
   const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');
@@ -52,6 +59,11 @@ window.addEventListener('DOMContentLoaded', () => {
     else launchFromGesture();
   }, { passive: true });
   gameArea.addEventListener('contextmenu', (event) => event.preventDefault());
+  // iOS Safari игнорирует user-scalable=no: запрещаем масштабирование жестами явно.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((type) => {
+    document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+  });
+  document.addEventListener('dblclick', (event) => event.preventDefault(), { passive: false });
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyM') {

@@ -1,3 +1,4 @@
+import { ArtPack } from './ArtPack.js';
 import { HedgeArt } from './HedgeArt.js';
 import { LawnArt } from './LawnArt.js';
 import { SideDecorArt } from './SideDecorArt.js';
@@ -156,12 +157,13 @@ export class GardenArt {
     this.onReady = options.onReady || null;
     const c = CONFIG.COLORS;
     this.c = c;
+    this.artPack = new ArtPack(() => this.onReady?.());
     this.hedges = new HedgeArt(this);
     this.lawn = new LawnArt(this);
     this.sideDecor = new SideDecorArt(this);
     this.skyArt = new SkyArt(this.width, this.height);
     this.sandArt = new SandArt(this);
-    this.obstacleArt = new ObstacleArt(ctx);
+    this.obstacleArt = new ObstacleArt(ctx, this.artPack);
     this.roseArch = this.loadVectorArt(
       new URL('../../assets/environment/garden/landmarks/rose-arch.svg', import.meta.url).href,
       CONFIG.VISUAL.ROSE_ARCH?.RASTER_WIDTH ?? 240
@@ -218,9 +220,17 @@ export class GardenArt {
     this.loadSprites();
   }
 
+  // New look (hedge, obstacles and sky drawn in code) only shows coin sprites.
+  // Skipping the other PNGs saves ~5.8 MB of downloads at startup.
+  spriteGroupsToLoad() {
+    const all = Object.keys(this.sheets);
+    const newLook = this.useHedgeWall() && this.useGardenObstacles() && this.useSkyArt();
+    return newLook ? all.filter((group) => group === 'coins') : all;
+  }
+
   loadSprites() {
     if (typeof Image !== 'function' || typeof document === 'undefined') return;
-    Object.keys(this.sheets).forEach((group) => {
+    this.spriteGroupsToLoad().forEach((group) => {
       this.sheets[group].forEach((item) => {
         const image = new Image();
         image.decoding = 'async';
@@ -1000,7 +1010,7 @@ export class GardenArt {
       this.skyArt.draw(this.ctx, this.horizonY(), shift);
       this.ctx.save();
       this.ctx.translate(0, shift);
-      this.drawHorizonLandmark();
+      this.drawHorizonLandmark(shift);
       this.ctx.restore();
       return;
     }
@@ -1034,12 +1044,13 @@ export class GardenArt {
     return art;
   }
 
-  drawHorizonLandmark() {
+  drawHorizonLandmark(shift = 0) {
     if (!this.usePack()) return;
     if (this.roseArch.canvas) {
-      this.drawRoseArch();
+      this.drawRoseArch(shift);
       return;
     }
+    if (this.useSkyArt()) return;
     const item = this.choiceGatewayItem();
     if (!item) return;
     const src = this.sourceRect(item);
@@ -1056,17 +1067,20 @@ export class GardenArt {
 
   // Rose-covered pergola at the far end of the path (reference landmark).
   // Slightly transparent so the sky shows through: reads as distant haze.
-  drawRoseArch() {
+  // The pergola stands with its base on the far end of the path, about as wide
+  // as the path there; its height is limited by the sky above the horizon.
+  drawRoseArch(shift = 0) {
     const cfg = CONFIG.VISUAL.ROSE_ARCH || {};
     const art = this.roseArch;
-    const farW = CONFIG.VISUAL.PROJECTOR?.FAR_ROAD_WIDTH ?? 200;
-    const maxH = Math.max(24, this.horizonY() - (cfg.TOP_MARGIN ?? 10));
-    const w = Math.min(farW * (cfg.WIDTH_OF_FAR_ROAD ?? 0.62), maxH / art.aspect);
+    const horizon = this.horizonY();
+    const farRoad = this.roadAt(worldYForScreen(horizon + shift + 1, shift, this.height));
+    const maxH = Math.max(24, horizon + shift - (cfg.TOP_MARGIN ?? 6));
+    const w = Math.min(farRoad.roadWidth * (cfg.WIDTH_OF_ROAD ?? 1.25), maxH / art.aspect);
     const h = w * art.aspect;
     const ctx = this.ctx;
     ctx.save();
-    ctx.globalAlpha = cfg.ALPHA ?? 0.88;
-    ctx.drawImage(art.canvas, this.width * 0.5 - w / 2, this.horizonY() + 3 - h, w, h);
+    ctx.globalAlpha = cfg.ALPHA ?? 1;
+    ctx.drawImage(art.canvas, this.width * 0.5 - w / 2, horizon + (cfg.BASE_SINK ?? 2) - h, w, h);
     ctx.restore();
   }
 
@@ -2444,8 +2458,8 @@ export class GardenArt {
 
   collectFenceRows(segments) {
     if (!this.usePack()) return;
-    const kit = this.ensureFenceKit();
-    if (!kit) return;
+    // Garden obstacles are drawn in code and do not need the fence sprite kit.
+    if (!this.useGardenObstacles() && !this.ensureFenceKit()) return;
 
     (segments || []).forEach((segment) => {
       const rows = new Map();
@@ -2532,8 +2546,7 @@ export class GardenArt {
   collectRevealTestProps(camera) {
     const stage = this.revealTestStage();
     if (!stage || !this.usePack()) return;
-    const kit = this.ensureFenceKit();
-    if (!kit) return;
+    if (!this.useGardenObstacles() && !this.ensureFenceKit()) return;
     const cam = camera || dummyCamera();
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const cx = this.width * 0.5;
@@ -2626,10 +2639,10 @@ export class GardenArt {
 
   drawFenceRow(prop) {
     if (!prop || !prop.spans || !prop.spans.length) return;
-    const kit = this.ensureFenceKit();
-    if (!kit) return;
-    const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
     const garden = this.useGardenObstacles();
+    const kit = garden ? null : this.ensureFenceKit();
+    if (!garden && !kit) return;
+    const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
     const h = garden
       ? this.obstacleArt.height(prop.look, this.catH(), scale)
       : this.catH() * (CONFIG.VISUAL.FENCE_NEAR_CAT ?? 0.98) * scale;
