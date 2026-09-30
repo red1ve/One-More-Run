@@ -16,18 +16,11 @@ const INK = '#4A3428'; // InkBrown
 const SHADOW = '#C4A97A'; // ShadowDust
 const SAND = '#F7DCA0'; // FloorSand
 
-// Клочки изгороди (второй лист). Цветущие 10, 11, 13, 15 — вес 1, остальные — вес 3:
-// цветёт примерно каждый пятый клочок (4 из 19), как на референсе.
+// Клочки изгороди (второй лист). Цветущие — 10, 11, 13, 15, остальные без цветов.
 // Первый лист (hedge-01..07) лежит в папке как запас и в игру не грузится.
-const HEDGE_PICK = [
-  'hedge-10', 'hedge-11', 'hedge-13', 'hedge-15',
-  'hedge-08', 'hedge-08', 'hedge-08', 'hedge-09', 'hedge-09', 'hedge-09',
-  'hedge-12', 'hedge-12', 'hedge-12', 'hedge-14', 'hedge-14', 'hedge-14',
-  'hedge-16', 'hedge-16', 'hedge-16'
-];
-const FLOWERING = 4; // первые 4 в списке — цветущие
-const FAR_PLAIN_WIDTH = 44; // px: клочки уже этой ширины — без цветов
-const HEDGE_SPRITES = [...new Set(HEDGE_PICK)];
+const HEDGE_FLOWERING = ['hedge-10', 'hedge-11', 'hedge-13', 'hedge-15'];
+const HEDGE_PLAIN = ['hedge-08', 'hedge-09', 'hedge-12', 'hedge-14', 'hedge-16'];
+export const HEDGE_SPRITES = [...HEDGE_FLOWERING, ...HEDGE_PLAIN];
 
 function hash(n) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -53,7 +46,8 @@ export class HedgeArt {
     // Переиспользуемые массивы, чтобы не создавать объекты каждый кадр.
     this.rows = [];
     this.clumps = [];
-    this.clumpIds = []; // номер спрайта для клочка, привязан к миру (не мигает)
+    this.clumpIds = []; // картинка × 2 + отражение: задаются номером слота и не меняются
+    this.clumpKeys = []; // номер слота клочка (для проверки scripts/phase1f-check.mjs)
   }
 
   // Края бордюра и изгороди для одной строки экрана.
@@ -109,9 +103,11 @@ export class HedgeArt {
     const lanes = packCfg.HEDGE_LANES;
     const clumps = this.clumps;
     const ids = this.clumpIds;
-    const pick = HEDGE_PICK;
+    const keys = this.clumpKeys;
+    const flowerChance = packCfg.HEDGE_FLOWER_CHANCE ?? 0.2;
     clumps.length = 0;
     ids.length = 0;
+    keys.length = 0;
     const period = packCfg.HEDGE_PERIOD ?? cfg.period;
     const nearWorld = art.screenToWorldY(art.height + 80 + (art.lastShift || 0));
     let k = Math.floor((nearWorld - progress) / period);
@@ -130,8 +126,15 @@ export class HedgeArt {
           const x = this.edgeX(side, edge, s, cfg.shoulder + cfg.curb + cfg.width * across);
           const y = p.drawY + (hash(seed + 2) - 0.5) * period * 0.4 * s;
           clumps.push(x, y, w / 2);
-          // Номер картинки и отражение — от места в мире, поэтому не мигают.
-          ids.push(Math.floor(hash(seed + 5) * pick.length) * 2 + (hash(seed + 6) < 0.5 ? 1 : 0));
+          // Картинка и отражение зависят только от номера слота (k, сторона, ряд):
+          // клочок не меняет вид по пути. Цветущий — с вероятностью HEDGE_FLOWER_CHANCE.
+          const flowering = hash(seed + 5) < flowerChance;
+          const pick = hash(seed + 7);
+          const name = flowering
+            ? Math.floor(pick * HEDGE_FLOWERING.length) % HEDGE_FLOWERING.length
+            : HEDGE_FLOWERING.length + (Math.floor(pick * HEDGE_PLAIN.length) % HEDGE_PLAIN.length);
+          ids.push(name * 2 + (hash(seed + 6) < 0.5 ? 1 : 0));
+          keys.push(k * 4 + (side < 0 ? 0 : 2) + lane);
         }
       }
     }
@@ -141,12 +144,10 @@ export class HedgeArt {
   drawPackClumps(ctx, pack) {
     const c = this.clumps;
     const ids = this.clumpIds;
-    const pick = HEDGE_PICK;
     for (let i = c.length - 3; i >= 0; i -= 3) {
       const id = ids[i / 3];
       const w = c[i + 2] * 2;
-      // Вдали цветы превращаются в белую «сыпь»: там только клочки без цветов.
-      const name = w < FAR_PLAIN_WIDTH ? pick[FLOWERING + ((id >> 1) % (pick.length - FLOWERING))] : pick[id >> 1];
+      const name = HEDGE_SPRITES[id >> 1];
       const h = w * pack.aspect(name);
       pack.draw(ctx, name, c[i] - w / 2, c[i + 1] - h * 0.6, w, (id & 1) === 1);
     }

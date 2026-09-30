@@ -52,10 +52,10 @@ export class SandArt {
     ctx.fillRect(0, top - 2, art.width, depth + 2);
   }
 
-  // Пятна и камешки привязаны к слотам мира (k). Вдали ряды на экране сливаются,
-  // поэтому там берём каждый 2-й, 4-й, 8-й… слот (всегда одни и те же — не мигают)
-  // и доходим до самого горизонта. Размер — по глубине (к горизонту почти ноль),
-  // яркость — слабее вдали (три ступени), без резкой границы.
+  // Пятна и камешки привязаны к слотам мира (k) и зависят только от номера слота.
+  // Размер — по глубине (у горизонта почти ноль), яркость — слабее вдали (три
+  // ступени). Слишком мелкие не рисуются; так как размер по пути только растёт,
+  // пятно не мигает и доходит до самого горизонта без резкой границы.
   collect(progress) {
     const art = this.art;
     const cfg = CONFIG.VISUAL.SAND || {};
@@ -66,26 +66,19 @@ export class SandArt {
     pebbles.length = 0;
     const nearWorld = art.screenToWorldY(art.height + 80 + (art.lastShift || 0));
     let k = Math.floor((nearWorld - progress) / period);
-    let step = 1;
-    let prevY = Infinity;
-    for (let guard = 0; guard < 400; guard += 1) {
+    for (let guard = 0; guard < 600; guard += 1, k -= 1) {
       const p = art.roadAt(k * period + progress);
       if (p.drawY < art.horizonY() + 1) break;
-      if (prevY - p.drawY < 2 && step < 64) {
-        // Ряды слишком близко: дальше шагаем вдвое реже, по слотам, кратным шагу.
-        step *= 2;
-        k = Math.floor(k / step) * step;
-        continue;
-      }
-      prevY = p.drawY;
       const s = p.scale;
-      const depth = 0.08 + 0.92 * p.t; // размер по глубине: у кота 1, у горизонта ≈0.1
+      const depth = p.t; // размер по глубине: у кота 1, у горизонта 0
+      // Самое крупное пятно уже меньше 0.8 px — дальше только мельче.
+      if (52 * depth < 0.8) break;
       const band = p.t > 0.45 ? 0 : p.t > 0.2 ? 1 : 2; // ступень яркости
       for (let n = 0; n < 2; n += 1) {
         const seed = k * 9.7 + n * 4.1;
         const u = (hash(seed) - 0.5) * 1.9;
         const x = p.roadCenter + u * p.roadWidth * 0.5;
-        if (hash(seed + 1) < (cfg.SPOT_CHANCE ?? 0.55)) {
+        if (hash(seed + 1) < (cfg.SPOT_CHANCE ?? 0.55) && (22 + hash(seed + 2) * 30) * depth >= 0.8) {
           spots.push(x, p.drawY, (22 + hash(seed + 2) * 30) * depth, (6 + hash(seed + 3) * 5) * depth,
             (hash(seed + 4) < 0.85 ? 0 : 1) + band * 2);
         }
@@ -94,7 +87,6 @@ export class SandArt {
           pebbles.push(px, p.drawY + hash(seed + 7) * period * 0.5 * depth, Math.max(0.5, (1.6 + hash(seed + 8) * 1.8) * depth));
         }
       }
-      k -= step;
     }
   }
 
