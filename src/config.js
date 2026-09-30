@@ -250,6 +250,7 @@ export const CONFIG = {
       OBSTACLES: true,
       SKY: true,
       ARCH: true,
+      PROPS: true,
       // Изгородь из картинок: рядов поперёк, ширина клочка (доля ширины изгороди).
       HEDGE_LANES: [0.24, 0.74],
       HEDGE_CLUMP_WIDTH: 0.72,

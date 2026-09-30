@@ -29,6 +29,12 @@ const FILES = {
   'bush-04': new URL('../../assets/art-pack/props/bush-04.png', import.meta.url).href,
   'arch-01': new URL('../../assets/art-pack/arch/arch-01.png', import.meta.url).href,
   'sky-strip': new URL('../../assets/art-pack/sky/sky-strip.jpg', import.meta.url).href,
+  'rock-01': new URL('../../assets/art-pack/props/rock-01.png', import.meta.url).href,
+  'rock-02': new URL('../../assets/art-pack/props/rock-02.png', import.meta.url).href,
+  'rock-03': new URL('../../assets/art-pack/props/rock-03.png', import.meta.url).href,
+  'fence-01': new URL('../../assets/art-pack/props/fence-01.png', import.meta.url).href,
+  'fence-02': new URL('../../assets/art-pack/props/fence-02.png', import.meta.url).href,
+  'grass-01': new URL('../../assets/art-pack/props/grass-01.png', import.meta.url).href,
   'tree-01': new URL('../../assets/art-pack/trees/tree-01.png', import.meta.url).href,
   'tree-02': new URL('../../assets/art-pack/trees/tree-02.png', import.meta.url).href,
   'tree-03': new URL('../../assets/art-pack/trees/tree-03.png', import.meta.url).href,
@@ -38,8 +44,8 @@ const FILES = {
 // Где ствол касается земли (доля ширины), из assets/art-pack/trees/anchors.json.
 export const TREE_BASE_X = { 'tree-01': 0.526, 'tree-02': 0.513, 'tree-03': 0.508, 'tree-04': 0.514 };
 
-// Подсветка при подготовке копий (один раз): ворота на картинках темнее референса.
-const BRIGHTEN = { 'gate-01': 1.12, 'gate-02': 1.12, 'gate-03': 1.12 };
+// Подсветка при подготовке копий (один раз): ворота и арка на картинках темнее референса.
+const BRIGHTEN = { 'gate-01': 1.12, 'gate-02': 1.12, 'gate-03': 1.12, 'arch-01': 1.12 };
 
 function brighten(canvas, k) {
   const ctx = canvas.getContext('2d');

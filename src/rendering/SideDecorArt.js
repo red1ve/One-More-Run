@@ -23,6 +23,16 @@ const POLLEN = '#E8B84A'; // CoinAmber
 const SHADOW = 'rgba(74, 52, 40, 0.16)'; // тень на траве: InkBrown 16%
 
 const TREE_SPRITES = ['tree-01', 'tree-02', 'tree-03', 'tree-04'];
+// Мелочи газона (art-pack/props): вид предмета → картинки и ширина в долях роста кота
+// (подобрана под размеры кодовых предметов).
+const PROP_SPRITES = {
+  flowerBush: { names: ['bush-03', 'bush-04'], width: 0.72 },
+  bush: { names: ['bush-01', 'bush-02'], width: 0.6 },
+  rock: { names: ['rock-01', 'rock-02', 'rock-03'], width: 0.32 },
+  fence: { names: ['fence-01', 'fence-02'], width: 0.66 },
+  flowers: { names: ['grass-01'], width: 0.3 }
+};
+const ALL_PROP_SPRITES = Object.values(PROP_SPRITES).flatMap((p) => p.names);
 const KINDS = ['tree', 'tree', 'flowerBush', 'bush', 'bush', 'rock', 'fence', 'flowers'];
 
 function hash(n) {
@@ -54,6 +64,7 @@ export class SideDecorArt {
     const items = this.items;
     const catH = art.catH();
     const pack = CONFIG.VISUAL.ART_PACK?.TREES && art.artPack?.hasAll(TREE_SPRITES) ? art.artPack : null;
+    const props = CONFIG.VISUAL.ART_PACK?.PROPS && art.artPack?.hasAll(ALL_PROP_SPRITES) ? art.artPack : null;
     ctx.save();
     // Собирали от кота к горизонту; рисуем наоборот, чтобы ближнее было поверх.
     for (let i = items.length - 5; i >= 0; i -= 5) {
@@ -64,6 +75,7 @@ export class SideDecorArt {
       const seed = items[i + 4];
       if (kind === 'tree' && pack) this.drawPackTree(ctx, pack, x, y, s, seed);
       else if (kind === 'tree') this.drawTree(ctx, x, y, s, seed);
+      else if (props) this.drawPackProp(ctx, props, kind, x, y, s, seed);
       else if (kind === 'flowerBush') this.drawBush(ctx, x, y, s, seed, true);
       else if (kind === 'bush') this.drawBush(ctx, x, y, s, seed, false);
       else if (kind === 'rock') this.drawRock(ctx, x, y, s, seed);
@@ -161,6 +173,17 @@ export class SideDecorArt {
     const baseX = flip ? 1 - TREE_BASE_X[name] : TREE_BASE_X[name];
     this.groundShadow(ctx, x, y, w * 0.3);
     pack.draw(ctx, name, x - w * baseX, y - h, w, flip);
+  }
+
+  // Предмет-картинка стоит низом на земле в точке (x, y); отражение — от места в мире.
+  drawPackProp(ctx, pack, kind, x, y, s, seed) {
+    const prop = PROP_SPRITES[kind];
+    const name = prop.names[Math.floor(hash(seed + 10) * prop.names.length) % prop.names.length];
+    const w = s * prop.width * (0.85 + hash(seed + 11) * 0.3);
+    if (w < 3) return;
+    const h = w * pack.aspect(name);
+    if (kind !== 'flowers') this.groundShadow(ctx, x, y, w * 0.42);
+    pack.draw(ctx, name, x - w / 2, y - h * 0.96, w, hash(seed + 12) < 0.5);
   }
 
   drawTree(ctx, x, y, s, seed) {
