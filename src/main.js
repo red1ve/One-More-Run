@@ -1,7 +1,8 @@
 import './style.css';
-import '@fontsource/fredoka/500.css';
-import '@fontsource/fredoka/600.css';
-import '@fontsource/fredoka/700.css';
+// Только латиница Fredoka (иврит и расширенная латиница игре не нужны).
+import '@fontsource/fredoka/latin-500.css';
+import '@fontsource/fredoka/latin-600.css';
+import '@fontsource/fredoka/latin-700.css';
 import { Game } from './game/Game.js';
 import { CONFIG } from './config.js';
 import { YandexService } from './services/YandexService.js';
@@ -52,6 +53,11 @@ window.addEventListener('DOMContentLoaded', () => {
     else launchFromGesture();
   }, { passive: true });
   gameArea.addEventListener('contextmenu', (event) => event.preventDefault());
+  // iOS Safari игнорирует user-scalable=no: запрещаем масштабирование жестами явно.
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((type) => {
+    document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+  });
+  document.addEventListener('dblclick', (event) => event.preventDefault(), { passive: false });
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyM') {
