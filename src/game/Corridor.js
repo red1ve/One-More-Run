@@ -20,33 +20,6 @@ function smooth01(t) {
   return x * x * (3 - 2 * x);
 }
 
-export function worldDepth(screenY, height = CONFIG.CANVAS_HEIGHT) {
-  const horizon = corridorHorizonY();
-  const t = corridorNearT(screenY, height);
-  const approach = smooth01(t);
-  const far = CONFIG.VISUAL.DEPTH_SCALE_FAR ?? 0.9;
-  const near = CONFIG.VISUAL.DEPTH_SCALE_NEAR ?? 1.05;
-  const scale = far + (near - far) * approach;
-  return {
-    t,
-    z: 1 / Math.max(0.001, scale),
-    scale,
-    alpha: 0.86 + 0.14 * t,
-    contrast: 0.72 + 0.28 * t,
-    screenY,
-    horizon
-  };
-}
-
-export function obstacleDepthScale(screenY, height = CONFIG.CANVAS_HEIGHT) {
-  const t = corridorNearT(screenY, height);
-  const far = CONFIG.VISUAL.OBSTACLE_SCALE_FAR ?? 0.9;
-  const mid = CONFIG.VISUAL.OBSTACLE_SCALE_MID ?? 0.98;
-  const near = CONFIG.VISUAL.OBSTACLE_SCALE_NEAR ?? 1.06;
-  if (t < 0.5) return far + (mid - far) * smooth01(t * 2);
-  return mid + (near - mid) * smooth01((t - 0.5) * 2);
-}
-
 export function pathInsetAt(screenY, height = CONFIG.CANVAS_HEIGHT) {
   const farness = 1 - corridorNearT(screenY, height);
   const eased = farness * 0.55 + farness * farness * 0.45;
@@ -61,20 +34,6 @@ export function roadInnerLeft(screenY, height = CONFIG.CANVAS_HEIGHT) {
 
 export function roadInnerRight(screenY, height = CONFIG.CANVAS_HEIGHT) {
   return CONFIG.TRACK_RIGHT - pathInsetAt(screenY, height);
-}
-
-export function hedgeBorderWidth(screenY, height = CONFIG.CANVAS_HEIGHT) {
-  const t = corridorNearT(screenY, height);
-  const near = CONFIG.VISUAL.HEDGE_BORDER_NEAR;
-  const far = CONFIG.VISUAL.HEDGE_BORDER_FAR;
-  return far + (near - far) * t;
-}
-
-export function sandShoulderWidth(screenY, height = CONFIG.CANVAS_HEIGHT) {
-  const t = corridorNearT(screenY, height);
-  const near = CONFIG.VISUAL.SAND_SHOULDER_NEAR;
-  const far = CONFIG.VISUAL.SAND_SHOULDER_FAR;
-  return far + (near - far) * t;
 }
 
 export function playableXBounds(screenY, playerWidth = CONFIG.PLAYER_WIDTH, height = CONFIG.CANVAS_HEIGHT) {

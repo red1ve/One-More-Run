@@ -81,9 +81,10 @@ check('lawn trees and props keep their kind, picture and mirroring; visible ones
     decor.collect(progress);
     const it = decor.items;
     const map = new Map();
-    for (let i = 0; i < it.length; i += 10) {
-      if (it[i + 8] <= 0) continue; // невидимые (прозрачные) не считаем видимыми
-      map.set(it[i], { look: `${it[i + 1]}:${it[i + 6]}:${it[i + 7]}`, y: it[i + 3], alpha: it[i + 8] });
+    // Предмет — 8 чисел: место, вид, x, y, размер, картинка, отражение, прозрачность.
+    for (let i = 0; i < it.length; i += 8) {
+      if (it[i + 7] <= 0) continue; // невидимые (прозрачные) не считаем видимыми
+      map.set(it[i], { look: `${it[i + 1]}:${it[i + 5]}:${it[i + 6]}`, y: it[i + 3], alpha: it[i + 7] });
     }
     return map;
   });

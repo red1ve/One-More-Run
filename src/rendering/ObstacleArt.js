@@ -41,7 +41,9 @@ export class ObstacleArt {
 
   packFor(look) {
     const pack = this.pack;
-    if (!CONFIG.VISUAL.ART_PACK?.OBSTACLES || !pack) return null;
+    // Если картинки не загрузились — рисуем кодом (drawPlanter/drawGate ниже),
+    // чтобы препятствие никогда не стало невидимым.
+    if (!pack) return null;
     return pack.hasAll(look === 'gate' ? GATES : PLANTERS) && pack.hasAll(BUSHES) ? pack : null;
   }
 

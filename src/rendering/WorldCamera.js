@@ -42,7 +42,4 @@ export class WorldCamera {
     return -(this.progress + this.y);
   }
 
-  farY() {
-    return this.y * CONFIG.VISUAL.CAMERA_FAR;
-  }
 }

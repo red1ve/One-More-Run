@@ -55,7 +55,6 @@ export const CONFIG = {
   MULTIPLIER_STEP: 0.5,
   MULTIPLIER_MAX: 5.0,
   RISK_STREAK_TO_GROW: 2,
-  DIFFICULTY_GROWTH: 0.05,
   MIN_GAP: 76, // Минимально возможный проход для игрока
   REACHABILITY_MARGIN: 0.75, // Запас при проверке, успеет ли игрок доехать до прохода
 
@@ -151,12 +150,9 @@ export const CONFIG = {
     HUD_PULSE_DURATION: 0.28,
     PLAYER_PULSE_DURATION: 0.18,
     PLAYER_BOB: 1.6,
-    PLAYER_RUN_CYCLE: 9,
     PLAYER_RUN_FPS: 10,
     PLAYER_RUN_SQUASH: 0.04,
-    PLAYER_RUN_TWIST: 0.028,
     MEOW_COOLDOWN: 0.5,
-    SPEED_LINE_MAX: 10,
     SPEED_SCROLL_SCALE: 0.35,
     AUDIO_VOLUME: 0.18,
     AUDIO_COOLDOWN: 0.05,
@@ -172,7 +168,6 @@ export const CONFIG = {
   VISUAL: {
     OUTLINE_WIDTH: 4,
     SHADOW_OFFSET: 5,
-    HEDGE_BAND: 28,
     // Песок дорожки (SandArt.js): мягкие пятна и камешки.
     SAND: {
       SPOT_PERIOD: 46,
@@ -184,11 +179,8 @@ export const CONFIG = {
     // Тень кота на песке: размеры овала и плотность теней.
     CAT_SHADOW: { RX: 26, RY: 9 },
     SHADOW_ALPHA: 0.62,
-    // Высота (px) ровного песка у горизонта, прячет полоски сжатой текстуры.
-    FAR_SAND_VEIL: 70,
     // Препятствия-кашпо и ворота (ObstacleArt.js). Высота — в долях роста кота у кота.
     GARDEN_OBSTACLES: {
-      ENABLED: true,
       PLANTER_NEAR_CAT: 0.46,
       GATE_NEAR_CAT: 0.72,
       // Участок ворот уже этой доли высоты ворот рисуется как кашпо.
@@ -220,10 +212,7 @@ export const CONFIG = {
     },
     // Голубое небо, облака и дальний ряд деревьев (SkyArt.js), рисуются один раз в кэш.
     SKY: {
-      ENABLED: true,
       COLOR: '#9CDCEC',
-      // [x, высота 0..1 от верха до горизонта, размер]
-      CLOUDS: [[150, 0.3, 0.75], [60, 0.66, 0.85], [420, 0.62, 1]],
       // Картинка неба (art-pack): высота на экране, px ниже горизонта, дымка на газоне.
       STRIP_HEIGHT: 104,
       STRIP_SINK: 2,
@@ -235,22 +224,17 @@ export const CONFIG = {
       PATCH_CHANCE: 0.26,
       TUFT_CHANCE: 0.8
     },
-    // Арка в розах на горизонте (assets/environment/garden/landmarks/rose-arch.svg).
+    // Арка в розах на конце дорожки (assets/art-pack/arch/arch-wide-01.png).
     ROSE_ARCH: {
-      RASTER_WIDTH: 360,
-      // Ширина арки относительно дорожки на горизонте (столбы стоят у краёв дорожки).
-      WIDTH_OF_ROAD: 1.25,
       // Не выше неба: верх арки не ближе этого к верхнему краю экрана.
       TOP_MARGIN: 6,
       // На сколько px основание столбов заходит на конец дорожки.
       BASE_SINK: 2,
-      // arch-wide-01.png: столбы снаружи занимают эту долю ширины картинки.
-      PACK_POSTS_SPAN: 0.94,
-      ALPHA: 1
+      // Столбы снаружи занимают эту долю ширины картинки (ставятся по краям дорожки).
+      PACK_POSTS_SPAN: 0.94
     },
     // Живая изгородь с бордюром (HedgeArt.js). Размеры — у кота, дальше по перспективе.
     HEDGE_WALL: {
-      ENABLED: true,
       SHOULDER_NEAR: 8,
       CURB_NEAR: 12,
       // Ширина изгороди (только картинка, игру не меняет). Уже — шире газон за ней.
@@ -261,56 +245,23 @@ export const CONFIG = {
       // Сколько px от горизонта изгородь сужается до нуля.
       HORIZON_TAPER: 12
     },
-    // Нарисованные картинки из assets/art-pack/ (ArtPack.js). false — кодовый вариант.
+    // Как расставлять нарисованные картинки из assets/art-pack/ (ArtPack.js).
     ART_PACK: {
-      TREES: true,
-      OBSTACLES: true,
-      SKY: true,
-      ARCH: true,
-      PROPS: true,
       // Изгородь из картинок: рядов поперёк, ширина клочка (доля ширины изгороди).
       HEDGE_LANES: [0.24, 0.74],
       HEDGE_CLUMP_WIDTH: 0.72,
       HEDGE_PERIOD: 30,
       // Доля цветущих клочков (решается один раз на слот): ≈ каждый пятый.
       HEDGE_FLOWER_CHANCE: 0.2,
-      // Высота дерева в долях роста кота (как у кодового дерева).
+      // Высота дерева в долях роста кота.
       TREE_HEIGHT: 1.75
     },
-    HEDGE_BORDER_NEAR: 48,
-    HEDGE_BORDER_FAR: 26,
-    HEDGE_HEIGHT_NEAR: 82,
-    HEDGE_HEIGHT_FAR: 40,
-    HEDGE_SETBACK_NEAR: 26,
-    HEDGE_SETBACK_FAR: 11,
-    SAND_SHOULDER_NEAR: 14,
-    SAND_SHOULDER_FAR: 6,
     TREE_NEAR_CAT: 2.48,
-    TREE_FAR_SIZE: 0.94,
-    TREE_MID_SIZE: 0.97,
-    TREE_NEAR_SIZE: 1.00,
-    SAPLING_CAT: 1.08,
-    BUSH_LARGE_CAT: 1.22,
-    BUSH_SMALL_CAT: 0.78,
-    MASS_NEAR_CAT: 1.92,
-    FENCE_NEAR_CAT: 0.98,
-    FENCE_BAY: 1.18,
-    CHOICE_GATEWAY_BEHIND: 0,
     CHOICE_GATEWAY_NEAR_CAT: 1.08,
-    CHOICE_GATEWAY_OVERLAP: 0.36,
-    DEPTH_SCALE_FAR: 0.90,
-    DEPTH_SCALE_NEAR: 1.05,
-    OBSTACLE_SCALE_FAR: 0.90,
-    OBSTACLE_SCALE_MID: 0.98,
-    OBSTACLE_SCALE_NEAR: 1.06,
-    PERSPECTIVE_SQUEEZE: 0.10,
     OBSTACLE_REVEAL: 64,
-    PLANTER_LIP: 6,
-    TRACK_SEAM: 2,
     CAMERA_FOLLOW: 5.2,
     CAMERA_LEAD: 24,
     CAMERA_LAG: 14,
-    CAMERA_FAR: 0.12,
     PATH_SAND_TILE: 2600,
     SKY_BAND: 130,
     // Дорога у кота ≈364 px (как на референсе, было 331).
@@ -333,12 +284,7 @@ export const CONFIG = {
       // Stretch HIDDEN→FULL past the geometric crest so tip/mid linger a bit.
       REVEAL_SPAN: 1.32
     },
-    // Keep enough FAR lower meadow below the skyline to cover the sky gap;
-    // softenFarLowerField dissolves the plastic look without exposing backdrop.
-    // Tuck FAR plate so less flat lower meadow hangs below the skyline.
-    FAR_SKYLINE_T: 0.935,
     COIN_DRAW_SIZE: 42,
-    USE_ENVIRONMENT_ASSET_PACK: true,
     LOAF_REAR: {
       SOURCE_WIDTH: 1024,
       SOURCE_HEIGHT: 1024,
@@ -402,14 +348,6 @@ function bibleColors() {
     ShadowDust,
 
     BACKGROUND: GardenSky,
-    TRACK: FloorSand,
-    TRACK_LINES: InkBrown,
-    PLAYER: CatGinger,
-    OBSTACLE: PlanterWood,
-    RISKY_OBSTACLE: PlanterWood,
-    SAFE_PATH: hexAlpha(SafeLawn, 0.82),
-    RISKY_PATH: hexAlpha(RiskApricot, 0.88),
-    HIGH_RISK_PATH: hexAlpha(HighRiskClay, 0.88),
     SAFE_LABEL: InkBrown,
     RISKY_LABEL: CatGinger,
     HIGH_RISK_LABEL: HighRiskClay,
@@ -417,8 +355,6 @@ function bibleColors() {
     UI_HUD: hexAlpha(InkBrown, 0.55),
     UI_ACCENT: CatGinger,
     COIN: CoinAmber,
-    OVERLAY: hexAlpha(SkyPaper, 0.78),
-    FLASH_SAFE: hexAlpha(SafeLawn, 0.12),
     FLASH_RISK: hexAlpha(RiskApricot, 0.16),
     FLASH_COIN: hexAlpha(CoinAmber, 0.14),
     FLASH_FAIL: hexAlpha(HighRiskClay, 0.14),

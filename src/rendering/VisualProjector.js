@@ -20,13 +20,6 @@ export function projectorConfig() {
   };
 }
 
-export function vanishPoint(width = CONFIG.CANVAS_WIDTH) {
-  return {
-    x: width * 0.5,
-    y: corridorHorizonY()
-  };
-}
-
 export function readZoneStartWorldY() {
   const cfg = projectorConfig();
   return CONFIG.PLAYER_START_Y - cfg.readZoneAbove;
@@ -309,11 +302,3 @@ export function horizonOcclusion(
   };
 }
 
-export function isOccludedByHorizon(
-  screenX,
-  groundScreenY,
-  spriteHeight,
-  width = CONFIG.CANVAS_WIDTH
-) {
-  return horizonOcclusion(screenX, groundScreenY, spriteHeight, width).state !== 'VISIBLE';
-}

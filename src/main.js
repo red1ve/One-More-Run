@@ -28,12 +28,6 @@ window.addEventListener('DOMContentLoaded', () => {
     const seedParam = new URLSearchParams(window.location.search).get('seed');
     if (seedParam !== null && Number.isFinite(Number(seedParam))) game.runSeed = Number(seedParam);
     window.__omrGame = game;
-    // ?art=off — кодовые версии вместо картинок art-pack (кадры «до/после»).
-    if (new URLSearchParams(window.location.search).get('art') === 'off') {
-      for (const key of Object.keys(CONFIG.VISUAL.ART_PACK)) {
-        if (typeof CONFIG.VISUAL.ART_PACK[key] === 'boolean') CONFIG.VISUAL.ART_PACK[key] = false;
-      }
-    }
   }
   const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');
