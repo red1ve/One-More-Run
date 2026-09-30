@@ -14,7 +14,9 @@ export function projectorConfig() {
     readZoneAbove: vis.READ_ZONE_ABOVE ?? CONFIG.CHOICE_SHOW_HEIGHT ?? 280,
     // World-distance (from the player) at which depth reaches u = 0.5.
     // Smaller = perspective falls off faster close to the camera.
-    falloffDistance: vis.FALLOFF_DISTANCE ?? 460
+    falloffDistance: vis.FALLOFF_DISTANCE ?? 460,
+    // Насколько сильнее сжимать даль при рисовании (0 — как раньше).
+    farCompress: vis.FAR_COMPRESS ?? 0
   };
 }
 
@@ -67,6 +69,37 @@ function depthRatioToWorldOffset(u, cfg) {
   return D * (1 / clamped - 1);
 }
 
+// Кривая только для рисования (Фаза 1д): вдали всё сжимается к горизонту, чтобы
+// предметы появлялись у арки маленькими, а рядом с котом всё как было.
+// v = u^(1 + a·(1−u)²): при u = 1 (кот) v = 1 и наклон тот же; за котом (u > 1) v = u.
+// Игровой мир, хитбоксы, скорость и столкновения этого не видят (они не
+// пользуются проекцией) — это проверяет scripts/phase1e-check.mjs.
+function drawCurve(u, a) {
+  if (u >= 1 || a <= 0) return u;
+  if (u <= 0) return 0;
+  const k = 1 - u;
+  return Math.pow(u, 1 + a * k * k);
+}
+
+// Обратная к drawCurve: по высоте на экране (v) найти глубину u. Кривая
+// монотонная, поэтому хватает деления отрезка пополам.
+function inverseDrawCurve(v, a) {
+  if (v >= 1 || a <= 0) return v;
+  if (v <= 0) return 0;
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 30; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (drawCurve(mid, a) < v) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+function drawRatio(worldY, cfg) {
+  return drawCurve(depthRatio(worldY, cfg), cfg.farCompress);
+}
+
 // Road width at the player row. Gameplay X is measured against this one
 // constant width, so an object keeps the same share of the road at any depth.
 function nearRoadWidth() {
@@ -94,15 +127,16 @@ export function worldYForScreen(screenY, shift = 0, height = CONFIG.CANVAS_HEIGH
   const cfg = projectorConfig();
   const horizon = corridorHorizonY();
   const base = screenY - shift;
-  const u = (base - horizon) / Math.max(1, CONFIG.PLAYER_START_Y - horizon);
+  const v = (base - horizon) / Math.max(1, CONFIG.PLAYER_START_Y - horizon);
   // 0.002: дорожка доходит до самого горизонта (раньше 0.02 оставлял щель ~14 px).
-  const d = depthRatioToWorldOffset(clamp(u, 0.002, 4), cfg);
+  const u = inverseDrawCurve(clamp(v, 0.002, 4), cfg.farCompress);
+  const d = depthRatioToWorldOffset(Math.max(0.0005, u), cfg);
   return CONFIG.PLAYER_START_Y - d;
 }
 
 export function screenYForWorld(worldY, shift = 0) {
   const cfg = projectorConfig();
-  const u = depthRatio(worldY, cfg);
+  const u = drawRatio(worldY, cfg);
   return baseScreenYForRatio(u) + shift;
 }
 
@@ -115,7 +149,7 @@ export function projectWorldToScreen(
   const cfg = projectorConfig();
   const vanishX = CONFIG.CANVAS_WIDTH * 0.5;
   const vanishY = corridorHorizonY();
-  const u = depthRatio(worldY, cfg);
+  const u = drawRatio(worldY, cfg);
   const screenY = baseScreenYForRatio(u) + shift;
   const drawY = screenY - shift;
   const scale = scaleAt(u, cfg);

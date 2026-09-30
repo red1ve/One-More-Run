@@ -193,19 +193,41 @@ export const CONFIG = {
       GATE_NEAR_CAT: 0.72,
       // Участок ворот уже этой доли высоты ворот рисуется как кашпо.
       GATE_MIN_WIDTH: 0.9,
+      // Участок уже этой доли высоты ящика рисуется кустом (картинки art-pack).
+      BUSH_MAX_WIDTH: 0.9,
+      // На каком отрезке мира (px) новые ящики и ворота проступают из прозрачности.
+      SPAWN_FADE: 420,
       FLOWER_CHANCE: 0.3
     },
     // Боковой декор за изгородью (SideDecorArt.js): шаг слотов по миру и доля занятых.
     SIDE_DECOR: {
+      // Места для предметов по миру: каждые PERIOD px с каждой стороны газона.
       PERIOD: 70,
-      CHANCE: 0.8
+      // Деревья: группа из GROUP[0]…GROUP[1] деревьев подряд, затем пауза до
+      // следующей группы — всего EVERY мест (слева и справа группы сдвинуты).
+      // При 70 px и EVERY 10 — группа раз в 700 px мира (≈ 1.5 с бега),
+      // деревья ≈ 15% мест, остальное — мелочи и пустые места.
+      TREES: { EVERY: 10, GROUP: [1, 2], LEFT_OFFSET: 0, RIGHT_OFFSET: 5 },
+      // Доля непустых мест между группами (там мелочи: кусты, камни, заборчики, трава).
+      CHANCE: 0.8,
+      // Размер по глубине: 1 у кота, к горизонту к нулю; DEPTH_HALF — насколько
+      // быстро уменьшается (чем меньше, тем дольше предметы остаются крупными).
+      DEPTH_HALF: 1.5,
+      // Предметы мельче MIN_PX px на экране не рисуются; следующие FADE_PX px
+      // они плавно проявляются.
+      MIN_PX: 8,
+      FADE_PX: 8
     },
     // Голубое небо, облака и дальний ряд деревьев (SkyArt.js), рисуются один раз в кэш.
     SKY: {
       ENABLED: true,
       COLOR: '#9CDCEC',
       // [x, высота 0..1 от верха до горизонта, размер]
-      CLOUDS: [[150, 0.3, 0.75], [60, 0.66, 0.85], [420, 0.62, 1]]
+      CLOUDS: [[150, 0.3, 0.75], [60, 0.66, 0.85], [420, 0.62, 1]],
+      // Картинка неба (art-pack): высота на экране, px ниже горизонта, дымка на газоне.
+      STRIP_HEIGHT: 104,
+      STRIP_SINK: 2,
+      LAWN_HAZE_DEPTH: 34
     },
     // Газон за изгородью (LawnArt.js): пятна и пучки травы.
     LAWN: {
@@ -222,6 +244,8 @@ export const CONFIG = {
       TOP_MARGIN: 6,
       // На сколько px основание столбов заходит на конец дорожки.
       BASE_SINK: 2,
+      // arch-wide-01.png: столбы снаружи занимают эту долю ширины картинки.
+      PACK_POSTS_SPAN: 0.94,
       ALPHA: 1
     },
     // Живая изгородь с бордюром (HedgeArt.js). Размеры — у кота, дальше по перспективе.
@@ -229,7 +253,8 @@ export const CONFIG = {
       ENABLED: true,
       SHOULDER_NEAR: 8,
       CURB_NEAR: 12,
-      WIDTH_NEAR: 92,
+      // Ширина изгороди (только картинка, игру не меняет). Уже — шире газон за ней.
+      WIDTH_NEAR: 74,
       CLUMP_PERIOD: 22,
       CLUMP_RADIUS_NEAR: 20,
       POST_PERIOD: 130,
@@ -240,10 +265,15 @@ export const CONFIG = {
     ART_PACK: {
       TREES: true,
       OBSTACLES: true,
+      SKY: true,
+      ARCH: true,
+      PROPS: true,
       // Изгородь из картинок: рядов поперёк, ширина клочка (доля ширины изгороди).
       HEDGE_LANES: [0.24, 0.74],
       HEDGE_CLUMP_WIDTH: 0.72,
       HEDGE_PERIOD: 30,
+      // Доля цветущих клочков (решается один раз на слот): ≈ каждый пятый.
+      HEDGE_FLOWER_CHANCE: 0.2,
       // Высота дерева в долях роста кота (как у кодового дерева).
       TREE_HEIGHT: 1.75
     },
@@ -288,6 +318,9 @@ export const CONFIG = {
     PATH_INSET_FAR: 95,
     PROJECTOR: {
       FAR_ROAD_WIDTH: 170,
+      // Только для рисования: даль сжимается к горизонту (0 — без сжатия). Рядом
+      // с котом картинка та же; игра, хитбоксы и столкновения не меняются.
+      FAR_COMPRESS: 1.2,
       // Object scale = road width ratio (true perspective), capped here.
       SCALE_MAX: 1.3,
       READ_ZONE_ABOVE: 280,
@@ -295,7 +328,8 @@ export const CONFIG = {
       CREST_SIDE: 6,
       CREST_ASYM: 3.2,
       // Occlusion-only crest (road silhouette keeps CREST_PEAK).
-      REVEAL_CREST_PEAK: 48,
+      // Фаза 1д: 48 → 16, иначе сжатые к арке дальние ящики прятались бы за «холмом».
+      REVEAL_CREST_PEAK: 16,
       // Stretch HIDDEN→FULL past the geometric crest so tip/mid linger a bit.
       REVEAL_SPAN: 1.32
     },

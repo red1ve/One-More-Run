@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "node scripts/drift-probe.mjs && node scripts/phase4-check.mjs && node scripts/phase7-check.mjs && node scripts/phase8-check.mjs && node scripts/phase9-check.mjs && node scripts/phase1b-check.mjs && node scripts/l10n-check.mjs && node scripts/phase5-check.mjs",
+    "check": "node scripts/drift-probe.mjs && node scripts/phase4-check.mjs && node scripts/phase7-check.mjs && node scripts/phase8-check.mjs && node scripts/phase9-check.mjs && node scripts/phase1b-check.mjs && node scripts/l10n-check.mjs && node scripts/phase5-check.mjs && node scripts/phase1e-check.mjs && node scripts/phase1f-check.mjs",
     "verify:dist": "node scripts/verify-dist.mjs"
   },
   "devDependencies": {

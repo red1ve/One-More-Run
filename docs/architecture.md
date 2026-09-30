@@ -51,6 +51,8 @@ Keyboard, desktop mouse (left/right half of the canvas), and touch input.
 
 Canvas rendering and visual effects.
 
+Painted art (hedge clumps, trees, planters, gates, bushes, props, pergola, sky) comes from `assets/art-pack/`. The originals stay untouched; `node scripts/art-pack-game.mjs` writes game-sized copies to `assets/art-pack/game/` (WebP plus a PNG/JPG fallback). `rendering/ArtPack.js` checks WebP support once, loads one set, and keeps pre-scaled and mirrored copies so each frame only copies ready images. After replacing or adding a picture, rerun the script and add the file to `ArtPack.js` and to the script's `PLAN`.
+
 ### services/
 
 External services and browser persistence.
