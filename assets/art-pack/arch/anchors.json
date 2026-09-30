@@ -4,5 +4,11 @@
     "height": 384,
     "baseX": 0.5,
     "aspect": 0.96
+  },
+  "arch-wide-01.png": {
+    "width": 512,
+    "height": 215,
+    "baseX": 0.5,
+    "aspect": 2.38
   }
 }
