@@ -65,6 +65,7 @@ Current implementation notes:
 | Bonus coins       | P1       | DONE   |
 | NEW BEST feedback | P1       | DONE   |
 | Close call bonus (+10..30, `Track.checkGraze`) | P1 | DONE (2026-10-01) |
+| Time of day: day, golden hour, dusk, night (fireflies), dawn, with a milestone capsule | P1 | DONE (2026-10-01) |
 | Vibration on events (`HapticsService`, follows the sound switch) | P2 | DONE (2026-10-01) |
 | Streak and coin-chain pitch (pentatonic, in tune with the music) | P2 | DONE (2026-10-01) |
 

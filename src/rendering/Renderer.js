@@ -282,6 +282,89 @@ export class Renderer {
     this.ctx.globalAlpha = 1;
   }
 
+  // Время суток: цветная вуаль («умножение»), тёплое свечение сверху, затемнение по краям и
+  // светлячки поверх сада. HUD рисуется после и остаётся ярким. Днём ничего не рисуется.
+  drawTimeOfDay(look, time = 0) {
+    if (!look) return;
+    const ctx = this.ctx;
+    const w = this.width;
+    const h = this.height;
+    const tint = look.tint.map((value) => Math.round(value));
+    ctx.save();
+    if (tint.some((value) => value < 254)) {
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = `rgb(${tint[0]}, ${tint[1]}, ${tint[2]})`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    if (look.wash.alpha > 0.005) {
+      const [r, g, b] = look.wash.color.map((value) => Math.round(value));
+      ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${look.wash.alpha})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+    if (look.glow.alpha > 0.005 && typeof ctx.createLinearGradient === 'function') {
+      const [r, g, b] = look.glow.color.map((value) => Math.round(value));
+      const glow = ctx.createLinearGradient(0, 0, 0, h * 0.6);
+      glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${look.glow.alpha})`);
+      glow.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, w, h * 0.6);
+    }
+    if (look.vignette > 0.005 && typeof ctx.createRadialGradient === 'function') {
+      const edge = ctx.createRadialGradient(w / 2, h * 0.55, h * 0.3, w / 2, h * 0.55, h * 0.75);
+      edge.addColorStop(0, 'rgba(12, 16, 40, 0)');
+      edge.addColorStop(1, `rgba(12, 16, 40, ${look.vignette})`);
+      ctx.fillStyle = edge;
+      ctx.fillRect(0, 0, w, h);
+    }
+    this.drawFireflies(look.fireflies, time);
+    ctx.restore();
+  }
+
+  // Светлячки над газоном по бокам дороги: плывут и мерцают. amount — сколько их (дробное число:
+  // последний проявляется плавно). Положение зависит только от номера и времени.
+  drawFireflies(amount, time) {
+    if (!(amount > 0.05)) return;
+    const ctx = this.ctx;
+    const hash = (n) => {
+      const x = Math.sin(n * 91.7 + 13.3) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    const count = Math.ceil(amount);
+    for (let i = 0; i < count; i += 1) {
+      const visible = Math.min(1, amount - i);
+      const left = i % 2 === 0;
+      const x = (left ? 10 + hash(i) * 130 : this.width - 140 + hash(i) * 130) + Math.sin(time * 0.6 + i * 2.1) * 16;
+      const y = this.height * 0.3 + hash(i + 50) * this.height * 0.58 + Math.sin(time * 0.8 + i * 1.3) * 12;
+      const twinkle = 0.35 + 0.65 * Math.sin(time * 2.2 + i * 1.7) ** 2;
+      ctx.fillStyle = `rgba(255, 240, 150, ${0.16 * twinkle * visible})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255, 248, 190, ${0.9 * twinkle * visible})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Плашка нового этапа суток («ВЕЧЕР», «НОЧЬ»...) под HUD; alpha — плавное появление и уход.
+  drawStageToast(text, alpha = 1) {
+    if (!text || alpha <= 0) return;
+    const ctx = this.ctx;
+    ctx.font = `700 22px ${FONT_FAMILY}`;
+    const measured = typeof ctx.measureText === 'function' ? ctx.measureText(text).width : 160;
+    const width = Math.min(this.width - 48, measured + 48);
+    const top = 124;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, alpha);
+    this.garden.hudPill((this.width - width) / 2, top, width, 44);
+    ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
+    ctx.textAlign = 'center';
+    ctx.fillText(text, this.width / 2, top + 30);
+    ctx.restore();
+  }
+
   drawFlash(feel) {
     if (!feel || feel.flash <= 0) return;
     this.ctx.fillStyle = feel.flashColor;

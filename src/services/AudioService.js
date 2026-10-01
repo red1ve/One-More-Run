@@ -140,6 +140,13 @@ export class AudioService {
     else if (name === 'safe') this.tone(320, 0.06, 'sine', 0.35);
     else if (name === 'risk') this.tone(523.25 * rise, 0.1, 'triangle', 0.5);
     else if (name === 'graze') this.tone(1046.5 * rise, 0.05, 'triangle', 0.4);
+    else if (name === 'stage') {
+      // Новый этап суток: четыре ноты пентатоники вверх (до, ми, соль, до).
+      this.tone(523.25, 0.12, 'triangle', 0.42);
+      this.tone(659.25, 0.12, 'triangle', 0.42, 0.07);
+      this.tone(783.99, 0.14, 'triangle', 0.42, 0.14);
+      this.tone(1046.5, 0.28, 'sine', 0.4, 0.21);
+    }
     else if (name === 'streak') {
       this.tone(520, 0.07, 'square', 0.5);
       this.tone(720, 0.1, 'triangle', 0.45, 0.05);

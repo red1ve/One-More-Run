@@ -85,6 +85,12 @@ export class SideDecorArt {
     ctx.restore();
   }
 
+  // Прозрачность предмета у горизонта: rows — сколько строк экрана он ниже горизонта.
+  fadeAlpha(rows, fadeRows) {
+    const fade = Math.max(0, Math.min(1, rows / fadeRows));
+    return fade * fade * (3 - 2 * fade);
+  }
+
   // Сортировка части order [from, to) по y предмета: вставками (почти отсортировано, без выделений).
   sortByGround(order, from, to) {
     const items = this.items;
@@ -136,12 +142,11 @@ export class SideDecorArt {
     const nearWorld = art.screenToWorldY(art.height + 120 + (art.lastShift || 0));
     let k = Math.floor((nearWorld - progress) / period);
     for (let guard = 0; guard < 400; guard += 1, k -= 1) {
-      const p = art.roadAt(k * period + progress);
-      const rows = p.drawY - horizon;
-      if (rows < 2) break;
-      const fade = Math.min(1, rows / fadeRows);
-      const alpha = fade * fade * (3 - 2 * fade);
-      if (alpha < 0.02) break;
+      // Самый близкий из возможных предметов слота (с наибольшим сдвигом): если и он ещё в дымке
+      // у горизонта, то все предметы слота и дальних слотов тоже, цикл можно кончать.
+      const p = art.roadAt(k * period + progress + period * 0.4);
+      if (p.drawY - horizon < 2) break;
+      if (this.fadeAlpha(p.drawY - horizon, fadeRows) < 0.02) break;
       for (let side = -1; side <= 1; side += 2) {
         const kind = this.slotKind(k, side);
         if (kind < 0) continue;
@@ -151,10 +156,16 @@ export class SideDecorArt {
         const names = tree ? TREE_SPRITES : PROP_SPRITES[KINDS[kind]].names;
         const name = Math.floor(hash(seed + 7) * names.length) % names.length;
         const flip = hash(seed + 8) < 0.5 ? 1 : 0;
-        // Предмет стоит на своей линии земли y; размер и отступ считаются по дороге ИМЕННО
-        // на этой глубине (q), а не на глубине слота: тогда он ровно в перспективе.
-        const y = p.drawY + hash(seed + 3) * period * 0.4 * p.scale;
-        const q = art.roadAt(art.screenToWorldY(y));
+        // Случайный сдвиг предмета по глубине задан в МИРЕ (px дороги), а не на экране: тогда
+        // предмет стоит на мировой линии k * period + сдвиг + progress и едет вместе с дорогой с
+        // той же скоростью, что и все остальные. Порядок «дальний — ближний» между предметами
+        // поэтому никогда не меняется: дерево не может обогнать камень. Сдвиг меньше шага слота
+        // (0.4 < 1), так что порядок слотов тоже сохраняется. Размер, отступ и y считаются по
+        // дороге на этой глубине (q).
+        const q = art.roadAt(k * period + progress + hash(seed + 3) * period * 0.4);
+        const y = q.drawY;
+        const alpha = this.fadeAlpha(y - horizon, fadeRows);
+        if (alpha < 0.02) continue;
         const s = q.scale * catH;
         const size = tree ? s * treeH * variant : s * PROP_SPRITES[KINDS[kind]].width * variant;
         // Отступ от внешнего края изгороди (в ширинах дорожки + зазор HEDGE_GAP).

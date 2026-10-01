@@ -30,6 +30,13 @@
   "shortcut": {
     "button": "ADD SHORTCUT"
   },
+  "stage": {
+    "day": "DAY",
+    "golden": "GOLDEN HOUR",
+    "dusk": "DUSK",
+    "night": "NIGHT",
+    "dawn": "DAWN"
+  },
   "pause": {
     "title": "PAUSE",
     "resume": "RESUME  •  P"
