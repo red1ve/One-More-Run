@@ -6,10 +6,11 @@
 //      всё на газоне рисуется по линии земли: что ближе к камере, то поверх;
 //  (г) куст-препятствие у края дорожки не выходит за её край;
 //  (д) проходы уже, чем были; разделитель между путями развилки — нормальный куст, стены у края
-//      дорожки не бывают крошечными щепками; рискованные проходы не изменились.
+//      дорожки не бывают крошечными щепками; рискованные проходы не изменились;
+//  (е) помощь новичку (шире проходы, пока лучший счёт мал) и подсказка «шире / уже» у первой развилки.
 // Запуск: node scripts/phase1h-check.mjs (входит в npm run check).
 import { readFileSync } from 'node:fs';
-import { CONFIG, getTrackSpeed } from '../src/config.js';
+import { CONFIG, getAssist, getTrackSpeed } from '../src/config.js';
 import { Game } from '../src/game/Game.js';
 import { Track } from '../src/game/Track.js';
 import { Renderer } from '../src/rendering/Renderer.js';
@@ -286,12 +287,14 @@ check('gaps: every gap is narrower than before, the divider is a proper bush, RI
   for (const [key, value] of Object.entries(unchanged)) assert(CONFIG[key] === value, `${key} must stay ${value}, now ${CONFIG[key]}`);
 });
 
-check('gaps: generated tracks follow the widths, keep proper dividers and make no slivers at the road edge', () => {
+// Прогоняет несколько трасс с помощью новичку assist и собирает ширины проходов и стены у краёв.
+function scanTracks(assist, seeds = [1, 7, 42, 99, 123]) {
   const seen = { early: Infinity, late: Infinity };
   const rows = { edge: 0, slivers: 0, dividers: 0, smallDividers: 0 };
-  for (const seed of [1, 7, 42, 99, 123]) {
+  for (const seed of seeds) {
     const track = new Track();
     track.setSeed(seed);
+    track.setAssist(assist);
     track.reset();
     const checked = new Set();
     let time = 0;
@@ -330,11 +333,138 @@ check('gaps: generated tracks follow the widths, keep proper dividers and make n
       }
     }
   }
+  return { seen, rows };
+}
+
+check('gaps: generated tracks follow the widths, keep proper dividers and make no slivers at the road edge', () => {
+  const { seen, rows } = scanTracks(0);
   assert(seen.late === CONFIG.BREATHING_GAP_LATE, `narrowest late breathing gap is ${seen.late}, expected ${CONFIG.BREATHING_GAP_LATE}`);
   assert(seen.early >= CONFIG.BREATHING_GAP_LATE && seen.early < 176, `early breathing gap ${seen.early} out of range`);
   assert(rows.edge > 500 && rows.dividers > 50, `too few rows to judge: ${JSON.stringify(rows)}`);
   assert(rows.slivers === 0, `${rows.slivers} of ${rows.edge} visible walls at the road edge are narrower than ${CONFIG.EDGE_WALL_MIN} px`);
   assert(rows.smallDividers === 0, `${rows.smallDividers} dividers are narrower than ${CONFIG.TWO_PATHS_DIVIDER} px`);
+});
+
+// ---- помощь новичку
+
+check('assist: fades linearly with the best score and ends at UNTIL_BEST', () => {
+  assert(getAssist(0) === 1, 'a brand-new player gets full help');
+  assert(Math.abs(getAssist(CONFIG.ASSIST.UNTIL_BEST / 2) - 0.5) < 1e-9, 'half-way best score gives half help');
+  assert(getAssist(CONFIG.ASSIST.UNTIL_BEST) === 0 && getAssist(20767) === 0, 'an experienced player gets no help');
+  assert(getAssist(-5) === 1 && getAssist('abc') === 1 && getAssist(undefined) === 1, 'garbage means a new player');
+});
+
+check('assist: full help brings back the widths from before the narrowing, RISK gaps never change', () => {
+  const make = (assist, { choices, ratio }) => {
+    const track = new Track();
+    track.setAssist(assist);
+    track.generatedPlayable = 10;
+    track.choiceCount = choices;
+    track.speed = CONFIG.GAME_SPEED * ratio;
+    return track;
+  };
+  const early = { choices: 3, ratio: 1 };
+  const late = { choices: 3, ratio: 2 };
+  assert(make(1, early).getBreathingWidth() === 200 && make(1, late).getBreathingWidth() === 168, 'full help: ordinary gaps 200 / 168');
+  assert(make(0, early).getBreathingWidth() === CONFIG.BREATHING_GAP_WIDTH && make(0, late).getBreathingWidth() === CONFIG.BREATHING_GAP_LATE, 'no help: current widths');
+  assert(make(1, early).getChoiceWidths().safe === 180 && make(1, late).getChoiceWidths().safe === 160, 'full help: SAFE 180 / 160');
+  assert(make(1, { choices: 0, ratio: 1 }).getChoiceWidths().safe === CONFIG.SAFE_GAP_TUTORIAL + CONFIG.ASSIST.TUTORIAL_SAFE_BONUS_MAX, 'full help: first SAFE gap is the base plus the capped bonus');
+  for (const assist of [0, 0.3, 0.5, 1]) {
+    for (const mode of [early, late, { choices: 0, ratio: 1 }]) {
+      const track = make(assist, mode);
+      const widths = track.getChoiceWidths();
+      const expected = mode.choices === 0
+        ? [CONFIG.SAFE_GAP_TUTORIAL, CONFIG.RISKY_GAP_TUTORIAL]
+        : (mode.ratio < 1.25 ? [CONFIG.SAFE_GAP_WIDTH, CONFIG.RISKY_GAP_WIDTH] : [CONFIG.SAFE_GAP_LATE, CONFIG.RISKY_GAP_LATE]);
+      assert(widths.risk === expected[1], `RISK gap changed with assist ${assist}`);
+      assert(widths.safe >= expected[0] && (widths.safe - expected[0]) % 4 === 0, `SAFE gap ${widths.safe} must be the base plus a multiple of 4`);
+    }
+  }
+  assert(make(0.5, late).getBreathingWidth() > make(0, late).getBreathingWidth() && make(0.5, late).getBreathingWidth() < make(1, late).getBreathingWidth(), 'half help is in between');
+  const track = new Track();
+  track.setAssist(7);
+  assert(track.assist === 1, 'assist is clamped to 0..1');
+  track.setAssist('abc');
+  assert(track.assist === 0, 'garbage assist means none');
+});
+
+check('assist: tracks with full help stay reachable, keep proper edge walls and use the wider gaps', () => {
+  const { seen, rows } = scanTracks(1, [2, 11, 64]);
+  assert(seen.late === 168 && seen.early >= 168 && seen.early <= 200, `ordinary gaps with full help: early ${seen.early}, late ${seen.late}`);
+  assert(rows.edge > 200, `too few rows to judge: ${JSON.stringify(rows)}`);
+  assert(rows.slivers === 0, `${rows.slivers} of ${rows.edge} walls are slivers with full help`);
+});
+
+check('forks are never lost to the edge-wall rule: with no allowed spot the fork is still placed', () => {
+  for (const [safe, risk] of [[200, 96], [196, 96], [180, 92], [160, 88]]) {
+    const track = new Track();
+    track.setSeed(5);
+    track.reset();
+    track.getChoiceWidths = () => ({ safe, risk });
+    const geometry = track.createTwoPaths(track.segments[track.segments.length - 1].y - CONFIG.SEGMENT_HEIGHT, 'STRAIGHT');
+    assert(geometry && geometry.paths.length === 2, `no fork for SAFE ${safe} + RISK ${risk}`);
+    const widths = geometry.paths.map((path) => path.width).sort((a, b) => a - b);
+    assert(widths[0] === risk && widths[1] === safe, 'fork widths must stay as asked');
+  }
+});
+
+check('assist: a new run asks the track for help by the best score; the dev override wins', () => {
+  const calls = [];
+  const make = (bestScore, assistOverride) => ({
+    isRunning: true,
+    state: 'START',
+    bestScore,
+    assistOverride,
+    storage: { set() {}, getCoins: () => 0 },
+    feel: { reset() {} },
+    player: { reset() {} },
+    track: { setSeed() {}, setAssist(value) { calls.push(value); }, reset() {} },
+    unlockAudio() {}
+  });
+  Game.prototype.start.call(make(0));
+  Game.prototype.start.call(make(CONFIG.ASSIST.UNTIL_BEST / 2));
+  Game.prototype.start.call(make(20767));
+  Game.prototype.start.call(make(0, 0.25));
+  assert(calls.join() === '1,0.5,0,0.25', `unexpected assist values: ${calls.join()}`);
+});
+
+// ---- подсказка у первой развилки
+
+check('choice hint: visible only while the first Choice approaches, gone once any Choice is passed', () => {
+  const choice = (y, isPassed = false) => ({ isChoiceSegment: true, isPassed, paths: [{ y }] });
+  const make = (segments, extra = {}) => Object.assign(Object.create(Game.prototype), {
+    state: 'PLAYING', choiceHintSeen: false, player: { y: 840 }, track: { segments }, ...extra
+  });
+  const near = CONFIG.CHOICE_HINT_NEAR;
+  const far = CONFIG.CHOICE_HINT_FAR;
+  assert(make([choice(840 - 500)]).choiceHintVisible() === true, 'a Choice 500 px ahead shows the hint');
+  assert(make([choice(840 - near + 10)]).choiceHintVisible() === false, 'hidden when the cat is entering the row');
+  assert(make([choice(840 - far - 50)]).choiceHintVisible() === false, 'hidden while the Choice is still far away');
+  assert(make([choice(840 - 500, true)]).choiceHintVisible() === false, 'a passed Choice does not count');
+  assert(make([{ isChoiceSegment: false, isPassed: false, paths: [{ y: 340 }] }]).choiceHintVisible() === false, 'a normal row is not a Choice');
+  assert(make([choice(340)], { choiceHintSeen: true }).choiceHintVisible() === false, 'never again after the first passed Choice');
+  assert(make([choice(340)], { state: 'START' }).choiceHintVisible() === false, 'not on the start screen');
+  assert(make([choice(340)], { state: 'GAMEOVER' }).choiceHintVisible() === false, 'not on the game over screen');
+
+  const stored = [];
+  const game = Object.assign(Object.create(Game.prototype), {
+    multiplier: CONFIG.MULTIPLIER_START, riskStreak: 0, pathReward: 0, distanceScore: 0, score: 0,
+    floatingRewards: [], player: { x: 270, y: 840 }, riskHintSeen: true, choiceHintSeen: false,
+    storage: { set(key, value) { stored.push([key, value]); } }, feel: null
+  });
+  Game.prototype.applyReward.call(game, 'SAFE', false, true);
+  assert(game.choiceHintSeen === true && stored.some(([key, value]) => key === 'choiceHintSeen' && value === true), 'passing a Choice remembers the hint');
+  const before = stored.length;
+  Game.prototype.applyReward.call(game, 'SAFE', false, true);
+  assert(stored.filter(([key]) => key === 'choiceHintSeen').length === 1 && stored.length >= before, 'the hint is saved only once');
+});
+
+check('choice hint: text exists in both languages and no longer sits on the start card', () => {
+  for (const lang of ['en', 'ru']) {
+    const dict = JSON.parse(readFileSync(new URL(`../src/localization/${lang}.json`, import.meta.url), 'utf8'));
+    assert(dict.hint?.choice && dict.hint.choice.length > 10, `${lang}: hint.choice missing`);
+    assert(!dict.start.hintChoice && !dict.start.hintStreak && !dict.start.hintCoins, `${lang}: old start hints must be gone`);
+  }
 });
 
 console.log(results.join('\n'));

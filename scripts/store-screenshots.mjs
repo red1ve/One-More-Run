@@ -28,7 +28,7 @@ const setups = [
 for (const lang of ['ru', 'en']) for (const s of setups) {
   const ctx = await b.newContext({ viewport: s.viewport, deviceScaleFactor: s.scale });
   const p = await ctx.newPage();
-  await p.addInitScript(() => { try { localStorage.setItem('one_more_run_onboardingSeen','true'); localStorage.setItem('one_more_run_riskHintSeen','true'); } catch {} });
+  await p.addInitScript(() => { try { localStorage.setItem('one_more_run_choiceHintSeen','true'); localStorage.setItem('one_more_run_riskHintSeen','true'); } catch {} });
   await p.goto(`http://localhost:3000/?lang=${lang}&seed=${seed}`, { waitUntil: 'networkidle' }); await p.waitForTimeout(1500);
   await p.evaluate(() => {
     const g = window.__omrGame;

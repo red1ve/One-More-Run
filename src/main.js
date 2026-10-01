@@ -22,11 +22,15 @@ window.addEventListener('DOMContentLoaded', () => {
   );
   const game = new Game(canvas, yandex);
   // Только для разработки (npm run dev), в сборку не попадает:
-  // ?seed=42 — одна и та же трасса при каждом старте; window.__omrGame — доступ из консоли.
+  // ?seed=42 — одна и та же трасса при каждом старте; ?assist=1 — полная помощь новичку;
+  // window.__omrGame — доступ из консоли.
   // В игре для игроков seed из адреса не работает, чтобы нельзя было выучить трассу для рекорда.
   if (import.meta.env?.DEV) {
     const seedParam = new URLSearchParams(window.location.search).get('seed');
     if (seedParam !== null && Number.isFinite(Number(seedParam))) game.runSeed = Number(seedParam);
+    // ?assist=0..1 — принудительная помощь новичку (1 — самые широкие проходы), чтобы проверить без смены рекорда.
+    const assistParam = new URLSearchParams(window.location.search).get('assist');
+    if (assistParam !== null && Number.isFinite(Number(assistParam))) game.assistOverride = Number(assistParam);
     window.__omrGame = game;
   }
   const gameArea = canvas.closest('#game-container') || canvas;

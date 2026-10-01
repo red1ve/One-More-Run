@@ -84,7 +84,7 @@ Ad close, no-fill, unavailable SDK, and errors all continue to the requested run
 Offers appear only on the Game Over card, only as explicit opt-in buttons with a video icon and the words "за рекламу" / "AD":
 
 - **ПРОДОЛЖИТЬ ЗА РЕКЛАМУ / CONTINUE • AD** — once per run (`Game.revive()`): rows ahead are cleared and the cat is invulnerable for 2 s.
-- **×2 МОНЕТЫ ЗА РЕКЛАМУ / x2 COINS • AD** — once per run, only if the run collected coins; adds this run's coins again.
+- **×2 МОНЕТЫ ЗА РЕКЛАМУ / x2 COINS • AD** — once per run, only if the run collected coins; adds this run's coins again. **Switched off** (`CONFIG.YANDEX.DOUBLE_COINS_AD = false`) since 2026-10-01 because coins have no use yet; switch on together with the shop. Do not test it in the console until then.
 
 While the ad is open the game is paused (`adPaused`: movement, timers and audio stop; GameplayAPI is stopped) and restart input is ignored. Input is also ignored for `GAME_OVER_INPUT_LOCK` (0.6 s) after a crash, so a steering tap cannot restart or open an ad by accident. Without the SDK the buttons are hidden; in `npm run dev` a stub (`DEV_REWARDED_STUB`) simulates a watched ad so the flow can be tested locally.
 
@@ -167,7 +167,7 @@ The console accepts a zip archive whose root contains `index.html` (not a folder
 - [ ] Declare Russian and English (both fully localized since Phase 4); fill the catalogue name and description in both languages. Names must match the game: RU «Ещё забег», EN «One More Run».
 - [ ] Enable rewarded video and fullscreen ads for the game (monetization settings).
 - [ ] Check or switch off the sticky banner (see «Sticky banner»).
-- [ ] In the draft with the debug panel: watch a rewarded ad to the end (revive / ×2 coins happen), close one early (nothing happens), check sound is muted during ads.
+- [ ] In the draft with the debug panel: watch a rewarded ad to the end (revive happens; ×2 coins only if the switch is on), close one early (nothing happens), check sound is muted during ads.
 - [ ] Create a numeric descending leaderboard.
 - [ ] Set its Technical leaderboard name to `one_more_run_score`.
 - [ ] Test leaderboard submission as an authorized player.

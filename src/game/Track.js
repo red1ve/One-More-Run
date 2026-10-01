@@ -49,9 +49,21 @@ export class Track {
     this.runTime = 0;
     this.lastCoinZone = null;
     this.lastCoinYSlot = null;
+    this.assist = 0; // помощь новичку 0..1 (см. CONFIG.ASSIST), задаётся перед забегом
     this.director = new VariationDirector();
     this.random = systemRandom;
     this.init();
+  }
+
+  // Помощь новичку: 0 — нет, 1 — полная. Действует со следующего reset().
+  setAssist(value) {
+    const number = Number(value);
+    this.assist = Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 0;
+  }
+
+  // Прибавка к ширине прохода (px, кратна 4, чтобы не ломать сетку поиска места).
+  assistBonus(maxBonus) {
+    return Math.round((this.assist * maxBonus) / 4) * 4;
   }
 
   // Номер забега: одинаковый seed — одинаковая трасса. null — обычная случайность.
@@ -125,19 +137,24 @@ export class Track {
 
   getChoiceWidths() {
     const speedRatio = this.speed / CONFIG.GAME_SPEED;
+    const bonus = this.assistBonus(CONFIG.ASSIST.SAFE_BONUS);
     if (this.choiceCount === 0 || this.generatedPlayable < 5) {
-      return { safe: CONFIG.SAFE_GAP_TUTORIAL, risk: CONFIG.RISKY_GAP_TUTORIAL };
+      // Первая развилка: прибавка не больше TUTORIAL_SAFE_BONUS_MAX, иначе на стены у краёв
+      // остаётся меньше 58 px и развилку нельзя поставить с нормальными стенами.
+      const tutorialBonus = Math.min(bonus, CONFIG.ASSIST.TUTORIAL_SAFE_BONUS_MAX);
+      return { safe: CONFIG.SAFE_GAP_TUTORIAL + tutorialBonus, risk: CONFIG.RISKY_GAP_TUTORIAL };
     }
     if (speedRatio < 1.25) {
-      return { safe: CONFIG.SAFE_GAP_WIDTH, risk: CONFIG.RISKY_GAP_WIDTH };
+      return { safe: CONFIG.SAFE_GAP_WIDTH + bonus, risk: CONFIG.RISKY_GAP_WIDTH };
     }
-    return { safe: CONFIG.SAFE_GAP_LATE, risk: CONFIG.RISKY_GAP_LATE };
+    return { safe: CONFIG.SAFE_GAP_LATE + bonus, risk: CONFIG.RISKY_GAP_LATE };
   }
 
   getBreathingWidth() {
-    if (this.generatedPlayable < 4) return CONFIG.BREATHING_GAP_WIDTH;
-    if (this.speed / CONFIG.GAME_SPEED < 1.25) return CONFIG.BREATHING_GAP_WIDTH;
-    return CONFIG.BREATHING_GAP_LATE;
+    const bonus = this.assistBonus(CONFIG.ASSIST.BREATHING_BONUS);
+    if (this.generatedPlayable < 4) return CONFIG.BREATHING_GAP_WIDTH + bonus;
+    if (this.speed / CONFIG.GAME_SPEED < 1.25) return CONFIG.BREATHING_GAP_WIDTH + bonus;
+    return CONFIG.BREATHING_GAP_LATE + bonus;
   }
 
   isChoiceType(type) {
@@ -208,6 +225,21 @@ export class Track {
     const left = x - CONFIG.TRACK_LEFT;
     const right = CONFIG.TRACK_RIGHT - (x + width);
     return (left <= hidden || left >= min) && (right <= hidden || right >= min);
+  }
+
+  // На сколько px можно сдвигать проём (развилку), оставляя стены у краёв допустимыми, если на
+  // стены всего room px: самый длинный непрерывный отрезок допустимых положений (см. edgeWallsOk).
+  edgeDriftCapacity(room) {
+    const hidden = CONFIG.EDGE_WALL_HIDDEN;
+    const min = CONFIG.EDGE_WALL_MIN;
+    // Левая стена l: скрыта (0..hidden) или нормальная (min..room); правая room − l: то же самое.
+    const lengths = [
+      Math.min(hidden, room - min), // левая скрыта, правая нормальная
+      Math.min(hidden, room - min), // левая нормальная, правая скрыта
+      room - 2 * min, // обе нормальные
+      2 * hidden - room // обе скрыты (развилка почти во всю дорожку)
+    ];
+    return Math.max(0, ...lengths);
   }
 
   // Ближайшее к x допустимое положение левого края проёма ширины width: вплотную к левому
@@ -1045,8 +1077,7 @@ export class Track {
       // Узор не уводит развилку так далеко, чтобы стена у края стала узкой щепкой: развилка
       // либо идёт у самого края (дрейф в пределах скрытой под бордюром части), либо стоит
       // между двумя нормальными стенами.
-      const room = CONFIG.TRACK_WIDTH - start.forkWidth;
-      const drift = Math.max(CONFIG.EDGE_WALL_HIDDEN - 2, room - CONFIG.EDGE_WALL_MIN * 2 - 4);
+      const drift = Math.max(0, this.edgeDriftCapacity(CONFIG.TRACK_WIDTH - start.forkWidth) - 2);
       step = Math.min(step, drift / (offsets.length - 1));
 
       let direction = this.director.pickDriftDirection();
@@ -1090,8 +1121,8 @@ export class Track {
     const startFork = Math.max(minFork, Math.min(maxFork, preferredFork));
     const riskyLeftFirst = this.random() > 0.5;
 
-    const tryLayout = (riskyLeft, forkX) => {
-      if (!this.edgeWallsOk(forkX, forkW)) return null;
+    const tryLayout = (riskyLeft, forkX, strictEdges = true) => {
+      if (strictEdges && !this.edgeWallsOk(forkX, forkW)) return null;
       let safeX;
       let riskX;
       let dividerX;
@@ -1116,16 +1147,23 @@ export class Track {
       return { safeX, riskX, dividerX };
     };
 
+    // Сначала место со стенами у краёв по правилу (edgeWallsOk). Если для такой ширины развилки
+    // подходящего места нет (запас на стены между 40 и 58 px), берём любое достижимое: развилка
+    // важнее, чем узкая стена у края.
     let layout = null;
-    for (const riskyLeft of [riskyLeftFirst, !riskyLeftFirst]) {
-      for (let distance = 0; distance <= CONFIG.TRACK_WIDTH && !layout; distance += 8) {
-        const candidates = distance === 0
-          ? [startFork]
-          : [startFork + distance, startFork - distance];
-        for (const rawX of candidates) {
-          if (rawX < minFork || rawX > maxFork) continue;
-          layout = tryLayout(riskyLeft, this.snapToEdgeRule(rawX, forkW));
-          if (layout) break;
+    for (const strictEdges of [true, false]) {
+      if (layout) break;
+      for (const riskyLeft of [riskyLeftFirst, !riskyLeftFirst]) {
+        for (let distance = 0; distance <= CONFIG.TRACK_WIDTH && !layout; distance += 8) {
+          const candidates = distance === 0
+            ? [startFork]
+            : [startFork + distance, startFork - distance];
+          for (const rawX of candidates) {
+            if (rawX < minFork || rawX > maxFork) continue;
+            const forkX = strictEdges ? this.snapToEdgeRule(rawX, forkW) : rawX;
+            layout = tryLayout(riskyLeft, forkX, strictEdges);
+            if (layout) break;
+          }
         }
       }
     }
@@ -1208,8 +1246,8 @@ export class Track {
     const startFork = Math.max(minFork, Math.min(maxFork, preferredFork));
     const hardLeftFirst = this.random() > 0.5;
 
-    const tryLayout = (hardLeft, forkX) => {
-      if (!this.edgeWallsOk(forkX, forkW)) return null;
+    const tryLayout = (hardLeft, forkX, strictEdges = true) => {
+      if (strictEdges && !this.edgeWallsOk(forkX, forkW)) return null;
       let easyX;
       let hardX;
       let dividerX;
@@ -1234,16 +1272,23 @@ export class Track {
       return { easyX, hardX, dividerX };
     };
 
+    // Сначала место со стенами у краёв по правилу (edgeWallsOk). Если для такой ширины развилки
+    // подходящего места нет (запас на стены между 40 и 58 px), берём любое достижимое: развилка
+    // важнее, чем узкая стена у края.
     let layout = null;
-    for (const hardLeft of [hardLeftFirst, !hardLeftFirst]) {
-      for (let distance = 0; distance <= CONFIG.TRACK_WIDTH && !layout; distance += 8) {
-        const candidates = distance === 0
-          ? [startFork]
-          : [startFork + distance, startFork - distance];
-        for (const rawX of candidates) {
-          if (rawX < minFork || rawX > maxFork) continue;
-          layout = tryLayout(hardLeft, this.snapToEdgeRule(rawX, forkW));
-          if (layout) break;
+    for (const strictEdges of [true, false]) {
+      if (layout) break;
+      for (const hardLeft of [hardLeftFirst, !hardLeftFirst]) {
+        for (let distance = 0; distance <= CONFIG.TRACK_WIDTH && !layout; distance += 8) {
+          const candidates = distance === 0
+            ? [startFork]
+            : [startFork + distance, startFork - distance];
+          for (const rawX of candidates) {
+            if (rawX < minFork || rawX > maxFork) continue;
+            const forkX = strictEdges ? this.snapToEdgeRule(rawX, forkW) : rawX;
+            layout = tryLayout(hardLeft, forkX, strictEdges);
+            if (layout) break;
+          }
         }
       }
     }

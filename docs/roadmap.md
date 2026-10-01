@@ -41,7 +41,7 @@ Prepare the game for Yandex Games.
 - fullscreen ad lifecycle — DONE;
 - Developer Console setup and platform verification — NEXT;
 - explicit authorization UI — LATER, only if justified;
-- rewarded ads (revive, ×2 coins) — DONE (Phase 5).
+- rewarded ads (revive, ×2 coins) — DONE (Phase 5); ×2 coins is switched off until the shop exists.
 
 ## Version 0.4 — Polish
 

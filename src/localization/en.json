@@ -5,10 +5,10 @@
   "start": {
     "title": "ONE MORE RUN",
     "play": "TAP TO START",
-    "controls": "A/D or ←/→  •  TAP LEFT/RIGHT",
-    "hintChoice": "SAFE = SURVIVE  •  RISK = BIG SCORE",
-    "hintStreak": "RISK BUILDS STREAK → SCORE x",
-    "hintCoins": "COINS STAY BETWEEN RUNS"
+    "controls": "A/D or ←/→  •  TAP LEFT/RIGHT"
+  },
+  "hint": {
+    "choice": "WIDER = SAFER  •  NARROWER = MORE POINTS"
   },
   "sound": {
     "on": "M SOUND",
