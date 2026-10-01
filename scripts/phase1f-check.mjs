@@ -4,7 +4,8 @@
 //  (а) у каждого клочка изгороди и предмета газона (по номеру слота) картинка,
 //      отражение и вид не меняются со временем;
 //  (б) предмет, однажды ставший видимым, остаётся видимым (и не бледнеет),
-//      пока не уйдёт за нижний край экрана.
+//      пока не уйдёт за нижний край экрана;
+//  (в) предметы газона не обгоняют друг друга: порядок «дальний — ближний» никогда не меняется.
 // Запуск: node scripts/phase1f-check.mjs (входит в npm run check).
 import { CONFIG, getTrackSpeed } from '../src/config.js';
 import { GardenArt } from '../src/rendering/GardenArt.js';
@@ -93,6 +94,34 @@ check('lawn trees and props keep their kind, picture and mirroring; visible ones
   ));
   if (count < 50) throw new Error(`мало предметов: ${count}`);
   if (problems.length) throw new Error(problems.slice(0, 5).join('; '));
+});
+
+check('lawn items never overtake each other: their order on the screen only ever stays the same', () => {
+  const decor = art.sideDecor;
+  let progress = 0;
+  let previous = []; // ключи мест от дальнего к ближнему в прошлом кадре
+  let pairs = 0;
+  for (let frame = 0, time = 0; time < SECONDS; frame += 1, time += DT) {
+    progress += getTrackSpeed(time) * DT;
+    art.lastShift = -14 + Math.sin(time * 1.7) * 3;
+    decor.collect(progress);
+    const it = decor.items;
+    const order = [];
+    for (let i = 0; i < it.length; i += 8) order.push({ key: it[i], y: it[i + 3] });
+    order.sort((a, b) => a.y - b.y); // от дальнего (выше на экране) к ближнему
+    const now = order.map((item) => item.key);
+    const rank = new Map(now.map((key, index) => [key, index]));
+    // Те из прошлого кадра, кто остался на экране, должны стоять в том же порядке.
+    const stayed = previous.filter((key) => rank.has(key));
+    for (let i = 1; i < stayed.length; i += 1) {
+      pairs += 1;
+      if (rank.get(stayed[i - 1]) > rank.get(stayed[i])) {
+        throw new Error(`на кадре ${frame} предмет ${stayed[i - 1]} обогнал предмет ${stayed[i]}: дальний стал ближе ближнего`);
+      }
+    }
+    previous = now;
+  }
+  if (pairs < 5000) throw new Error(`мало пар для проверки: ${pairs}`);
 });
 
 check('tree groups follow the configured pattern (1–2 trees, then a pause)', () => {
