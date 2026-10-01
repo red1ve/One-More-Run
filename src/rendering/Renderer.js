@@ -296,17 +296,26 @@ export class Renderer {
 
     rewards.forEach((r) => {
       const isCoin = r.type === 'COIN';
+      const isGraze = r.type === 'GRAZE';
       const isRisk = isRiskPathType(r.type);
       const alpha = Math.max(0, r.life / (r.maxLife || 1));
       this.ctx.globalAlpha = alpha;
       this.ctx.fillStyle = isCoin
         ? CONFIG.COLORS.COIN
-        : (isRisk ? CONFIG.COLORS.RISKY_LABEL : CONFIG.COLORS.SAFE_LABEL);
-      const size = isRisk ? 26 : (isCoin ? 18 : 20);
+        : (isRisk || isGraze ? CONFIG.COLORS.RISKY_LABEL : CONFIG.COLORS.SAFE_LABEL);
+      const size = isRisk ? 26 : (isCoin || isGraze ? 18 : 20);
+      // «Чуть не задел» всплывает у стены, на листве и цветах: светлая обводка держит его читаемым.
+      if (isGraze) {
+        this.ctx.strokeStyle = CONFIG.COLORS.SkyPaper;
+        this.ctx.lineWidth = 4;
+        this.ctx.lineJoin = 'round';
+      }
       this.ctx.font = `700 ${size}px ${FONT_FAMILY}`;
+      if (isGraze) this.ctx.strokeText(`+${r.value}`, r.x, r.y);
       this.ctx.fillText(`+${r.value}`, r.x, r.y);
       if (r.subtitle) {
         this.ctx.font = `700 13px ${FONT_FAMILY}`;
+        if (isGraze) this.ctx.strokeText(r.subtitle, r.x, r.y + 16);
         this.ctx.fillText(r.subtitle, r.x, r.y + 16);
       }
     });

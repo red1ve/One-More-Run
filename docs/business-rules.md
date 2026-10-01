@@ -6,6 +6,8 @@ The player receives score for distance travelled.
 
 Risky paths provide additional score.
 
+Close call (2026-10-01, `CONFIG.GRAZE`): when the cat passes a wall with a clearance of 0 < gap <= 8 px between its hitbox and the wall while it is inside the row, it gets +10 score; close calls within 2.5 s of each other add +5 each (10, 15, 20, 25, 30, then 30). The bonus is not multiplied and does not touch the risk streak or multiplier. Every wall counts once, walls hidden under the curb at the road edge do not count, nothing is awarded while the cat is invulnerable after a revive. It is deliberately small next to a risky path (100 × multiplier): a bot that does not aim at walls gains 2–5%, a player who hugs every wall at most about a quarter. Hitboxes and the track do not change. The seeded-run baseline in `scripts/phase1e-check.mjs` includes it.
+
 ## Multiplier
 
 Successful risky actions increase the multiplier.

@@ -115,14 +115,15 @@ for (const mode of ['schedule', 'autopilot']) {
 
 // Эталон: записан на коде ДО изменения проекции рисования (Фаза 1д). Строки autopilot
 // обновлены 2026-10-01 вместе с намеренным сужением проходов (игра стала сложнее: бот
-// вылетает раньше) и правилом стен у краёв дорожки; schedule не изменился.
+// вылетает раньше) и правилом стен у краёв дорожки; schedule не изменился. Очки autopilot
+// обновлены вместе с бонусом «чуть не задел» (+2…5%): время вылета и число пройденных те же.
 const EXPECTED = [
   { mode: 'schedule', fps: 60, crashAt: 6.05, passed: 2, score: 70, coins: 0 },
   { mode: 'schedule', fps: 10, crashAt: 6.05, passed: 2, score: 70, coins: 0 },
   { mode: 'schedule', fps: 120, crashAt: 6.0583, passed: 2, score: 70, coins: 0 },
-  { mode: 'autopilot', fps: 60, crashAt: 39.75, passed: 81, score: 637, coins: 0 },
-  { mode: 'autopilot', fps: 10, crashAt: 73.46, passed: 232, score: 1414, coins: 4 },
-  { mode: 'autopilot', fps: 120, crashAt: 30.5333, passed: 48, score: 475, coins: 0 }
+  { mode: 'autopilot', fps: 60, crashAt: 39.75, passed: 81, score: 657, coins: 0 },
+  { mode: 'autopilot', fps: 10, crashAt: 73.46, passed: 232, score: 1484, coins: 4 },
+  { mode: 'autopilot', fps: 120, crashAt: 30.5333, passed: 48, score: 485, coins: 0 }
 ];
 
 if (process.argv.includes('--print')) {

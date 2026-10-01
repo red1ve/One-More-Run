@@ -7,6 +7,14 @@ import {
   secondsPerStep
 } from './MusicScore.js';
 
+// Во сколько раз поднимается тон на ступени step серии: ноты пентатоники (в тон музыке), выше
+// последней ступени не идёт. step 0 (или мусор) — тон не меняется.
+export function scaleRatio(step) {
+  const steps = CONFIG.FEEL.SCALE_SEMITONES;
+  const index = Math.max(0, Math.min(steps.length - 1, Math.floor(Number(step) || 0)));
+  return 2 ** (steps[index] / 12);
+}
+
 // Звуки: короткие эффекты (тоны) и спокойная музыка забега. Всё синтезируется
 // Web Audio, звуковых файлов нет. Контекст запускается только после жеста игрока
 // и приостанавливается, когда вкладка скрыта, идёт реклама или пауза платформы.
@@ -115,7 +123,9 @@ export class AudioService {
     );
   }
 
-  play(name) {
+  // options.step — ступень серии (0, 1, 2...): тон монеты, рискованного прохода и «чуть не задел»
+  // поднимается по пентатонике (scaleRatio).
+  play(name, options = {}) {
     if (!this.canPlay()) return false;
     const now = this.ctx.currentTime;
 
@@ -125,9 +135,11 @@ export class AudioService {
     }
     this.lastPlayed[name] = now;
 
-    if (name === 'coin') this.tone(980, 0.06, 'triangle', 0.45);
+    const rise = scaleRatio(options.step);
+    if (name === 'coin') this.tone(980 * rise, 0.06, 'triangle', 0.45);
     else if (name === 'safe') this.tone(320, 0.06, 'sine', 0.35);
-    else if (name === 'risk') this.tone(440, 0.09, 'square', 0.55);
+    else if (name === 'risk') this.tone(523.25 * rise, 0.1, 'triangle', 0.5);
+    else if (name === 'graze') this.tone(1046.5 * rise, 0.05, 'triangle', 0.4);
     else if (name === 'streak') {
       this.tone(520, 0.07, 'square', 0.5);
       this.tone(720, 0.1, 'triangle', 0.45, 0.05);

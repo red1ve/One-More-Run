@@ -64,6 +64,9 @@ Current implementation notes:
 | RISK streak       | P1       | DONE   |
 | Bonus coins       | P1       | DONE   |
 | NEW BEST feedback | P1       | DONE   |
+| Close call bonus (+10..30, `Track.checkGraze`) | P1 | DONE (2026-10-01) |
+| Vibration on events (`HapticsService`, follows the sound switch) | P2 | DONE (2026-10-01) |
+| Streak and coin-chain pitch (pentatonic, in tune with the music) | P2 | DONE (2026-10-01) |
 
 
 ---
@@ -163,5 +166,7 @@ Yandex integration uses `YandexService` as an optional platform layer. The game 
 Newcomer help (2026-10-01): `getAssist(bestScore)` gives 1 for a brand-new player and fades linearly to 0 at best score `ASSIST.UNTIL_BEST` (800). At the start of every run `Game.start` hands it to `Track.setAssist`; ordinary gaps get up to +32 px and the SAFE gap of a Choice up to +24 px (at the very first fork up to +20, so the edge walls still fit): at full help the widths are the ones from before the narrowing (200 / 168 and 200 / 180 / 160). RISK gaps never change. An experienced player (best 800+) sees the current narrow widths. Dev only: `?assist=0..1` forces it.
 
 Pause (2026-10-01): during a run a round pause button sits in the HUD between the score and the coin pill (same capsule style, two brown bars). It, `P` or `Esc` freezes the run (`Game.userPaused`, counted in `isGameplayPaused()`, so Yandex GameplayAPI is stopped too) and opens a card: PAUSE, score, best, RESUME (button, `P`, `Esc`, Space or Enter) and the sound row [-] [SOUND n%] [+] under it. Music keeps playing on pause so volume changes can be heard. Taps on the card never start a new run; `R` does not restart from the pause. Held keys and fingers are released on pause and resume. A hidden tab does not set the pause by itself (the game freezes while hidden and continues on return, as before).
+
+Game feel (2026-10-01): a close call (see `docs/business-rules.md`) shows a ginger «+10» with «ВПРИТИРКУ / CLOSE CALL» (and «×n» for a chain), amber sparks at the wall and a short tick that climbs the scale with the chain. A plain RISK crossing now has a soft tone (`risk`, C5 triangle) that rises one pentatonic note per streak step (C D E G A C D E, then stays on top); coins collected within 1.2 s of each other rise too. The tones are synthesized and stay in the C pentatonic of the run music. Vibration (`navigator.vibrate`, Android) pulses on close call, RISK, multiplier step, max multiplier, streak loss, new best and Game Over (patterns in `CONFIG.FEEL.HAPTIC_PATTERNS`, at most one per 60 ms, none longer than 300 ms); it is off whenever the sound is off, stops on pause, and does nothing where the browser has no vibration (iPhone, desktop).
 
 Volume (2026-10-01): one master volume for effects and music, 0-100% in 10% steps, default 50% (the level the sounds were tuned for). Buttons [-] [SOUND n%] [+] on the START and Game Over screens (tapping the middle capsule mutes), keys `-` / `+`, `M` mutes. Saved in storage keys `audioVolume` and `audioMuted`. Settings in `CONFIG.AUDIO`.

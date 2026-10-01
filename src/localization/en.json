@@ -53,6 +53,8 @@
     "streakScore": "STREAK {streak} • SCORE x{mult}",
     "riskHint": "RISK BUILDS STREAK",
     "score": "SCORE x{mult}",
+    "graze": "CLOSE CALL",
+    "grazeCombo": "CLOSE CALL x{n}",
     "streakReset": "STREAK RESET"
   }
 }
