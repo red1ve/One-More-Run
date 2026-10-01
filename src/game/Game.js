@@ -106,6 +106,8 @@ export class Game {
     this.platform?.setGameplayActive?.(
       this.state === 'PLAYING' && !this.isGameplayPaused()
     );
+    // Музыка идёт только в забеге; пауза, реклама и скрытая вкладка её приостанавливают сами.
+    this.audio?.setMusicActive?.(this.state === 'PLAYING');
   }
 
   toggleMute() {
@@ -253,6 +255,8 @@ export class Game {
 
     this.updateFloating(deltaTime);
     this.feel.update(deltaTime, this.currentSpeed);
+    const speedRange = Math.max(1, CONFIG.TRACK_SPEED_MAX - CONFIG.TRACK_SPEED_START);
+    this.audio?.setMusicIntensity?.((this.currentSpeed - CONFIG.TRACK_SPEED_START) / speedRange);
   }
 
   // Один шаг физики: движение, трасса, награды, монеты. true = столкновение.

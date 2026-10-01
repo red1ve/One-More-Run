@@ -571,7 +571,6 @@ await check('visibility and ad pause freeze gameplay and audio', () => {
   };
   audio.setAdPaused(true);
   assert(audio.play('risk') === false);
-  assert(audio.play('meow') === false);
   audio.setAdPaused(false);
   audio.setPlatformPaused(true);
   assert(audio.play('coin') === false);

@@ -152,7 +152,6 @@ export const CONFIG = {
     PLAYER_BOB: 1.6,
     PLAYER_RUN_FPS: 10,
     PLAYER_RUN_SQUASH: 0.04,
-    MEOW_COOLDOWN: 0.5,
     SPEED_SCROLL_SCALE: 0.35,
     AUDIO_VOLUME: 0.18,
     AUDIO_COOLDOWN: 0.05,
@@ -162,6 +161,20 @@ export const CONFIG = {
     INTENSITY_STREAK: 0.75,
     INTENSITY_STREAK_LOSS: 0.82,
     INTENSITY_MAX: 1
+  },
+
+  // Музыка забега (AudioService + MusicScore): спокойная мелодия без звуковых файлов.
+  // VOLUME — общая громкость музыки; она тише эффектов, чтобы монеты и удары были слышны.
+  // Темп растёт от BPM_START до BPM_MAX вместе со скоростью забега.
+  MUSIC: {
+    ENABLED: true,
+    VOLUME: 0.8,
+    BPM_START: 108,
+    BPM_MAX: 132,
+    FADE_IN: 0.9,
+    FADE_OUT: 0.7,
+    LOOKAHEAD: 0.25,
+    TICK_MS: 50
   },
 
   // Visual Bible drawing rules (presentation only)
@@ -199,9 +212,9 @@ export const CONFIG = {
       // следующей группы — всего EVERY мест (слева и справа группы сдвинуты).
       // При 70 px и EVERY 10 — группа раз в 700 px мира (≈ 1.5 с бега),
       // деревья ≈ 15% мест, остальное — мелочи и пустые места.
-      TREES: { EVERY: 10, GROUP: [1, 2], LEFT_OFFSET: 0, RIGHT_OFFSET: 5 },
+      TREES: { EVERY: 12, GROUP: [1, 2], LEFT_OFFSET: 0, RIGHT_OFFSET: 6 },
       // Доля непустых мест между группами (там мелочи: кусты, камни, заборчики, трава).
-      CHANCE: 0.8,
+      CHANCE: 0.5,
       // Размер по глубине: 1 у кота, к горизонту к нулю; DEPTH_HALF — насколько
       // быстро уменьшается (чем меньше, тем дольше предметы остаются крупными).
       DEPTH_HALF: 1.5,
@@ -254,7 +267,7 @@ export const CONFIG = {
       // Доля цветущих клочков (решается один раз на слот): ≈ каждый пятый.
       HEDGE_FLOWER_CHANCE: 0.2,
       // Высота дерева в долях роста кота.
-      TREE_HEIGHT: 1.75
+      TREE_HEIGHT: 1.45
     },
     TREE_NEAR_CAT: 2.48,
     CHOICE_GATEWAY_NEAR_CAT: 1.08,

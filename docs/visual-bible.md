@@ -296,7 +296,7 @@ If a skin needs a new head, longer body, different ears, or different eye layout
 
 ### Production gameplay assets
 
-PLAYING uses four run frames built from `assets/characters/loaf-rear.svg` (1024 source, drawn at 150 px since Phase 1b (was 127) to match the reference, torso about 43 px wide, paws aligned to the 36×36 hitbox bottom). Floating reward numbers spawn 139 px above the hitbox centre so they clear the ears. START may show `assets/characters/loaf-front.svg` above the existing title without moving copy. Hitbox is 36×36 since Phase 1b (about 85% of the drawn torso width). Player x/y are unchanged. Successful RISK / DUAL_RISK crossings play `assets/audio/meow.ogg` through AudioService.
+PLAYING uses four run frames built from `assets/characters/loaf-rear.svg` (1024 source, drawn at 150 px since Phase 1b (was 127) to match the reference, torso about 43 px wide, paws aligned to the 36×36 hitbox bottom). Floating reward numbers spawn 139 px above the hitbox centre so they clear the ears. START may show `assets/characters/loaf-front.svg` above the existing title without moving copy. Hitbox is 36×36 since Phase 1b (about 85% of the drawn torso width). Player x/y are unchanged. Successful RISK / DUAL_RISK crossings give visual feedback only (flash, particles, pulse, shake); the old meow sound was removed on 2026-10-01.
 
 ### Production asset rules
 

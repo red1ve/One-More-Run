@@ -529,9 +529,11 @@ export class GardenArt {
     this.lastProgress = cam.progress || 0;
     this.lawn.draw(cam);
     this.skyArt.drawLawnHaze(this.ctx, this.horizonY());
-    this.sideDecor.draw(cam);
     this.drawPath(camera);
     this.hedges.draw(cam);
+    // Деревья и мелочи газона рисуются ПОСЛЕ изгороди: ближний предмет перекрывает
+    // изгородь за ним (кроны нависают над ней), но не заходит на песок.
+    this.sideDecor.draw(cam);
     this.drawCrestLandform();
     this.collectAndDrawWorld(camera, segments, playerY);
     this.drawRevealCrestFeather();
@@ -679,26 +681,44 @@ export class GardenArt {
     ctx.restore();
   }
 
+  // Добавляет в текущий путь контур дорожки (слева направо вниз и обратно).
+  appendRoadRibbon(samples, outset = 0) {
+    const ctx = this.ctx;
+    const last = samples[samples.length - 1];
+    ctx.moveTo(last.roadLeft - outset, last.drawY);
+    for (let i = samples.length - 2; i >= 0; i -= 1) {
+      ctx.lineTo(samples[i].roadLeft - outset, samples[i].drawY);
+    }
+    ctx.lineTo(samples[0].roadRight + outset, samples[0].drawY);
+    for (let i = 1; i < samples.length; i += 1) {
+      ctx.lineTo(samples[i].roadRight + outset, samples[i].drawY);
+    }
+    ctx.closePath();
+  }
+
+  // Обрезка «всё, кроме дорожки»: после неё рисованное не заходит на песок.
+  // Нужна деревьям и мелочам газона, которые нависают над изгородью.
+  clipOutsideRoad() {
+    const ctx = this.ctx;
+    const samples = this.roadSamples;
+    ctx.beginPath();
+    ctx.rect(-300, -600, this.width + 600, this.height + 1600);
+    if (samples && samples.length > 1) this.appendRoadRibbon(samples, 0);
+    ctx.clip('evenodd');
+  }
+
   drawPath(camera) {
     const ctx = this.ctx;
     const cam = camera || dummyCamera();
     const progress = cam.progress || 0;
     const shift = typeof cam.gameplayShift === 'function' ? cam.gameplayShift() : 0;
     const samples = sampleRoadRibbon(shift, { height: this.height, pad: 56 });
+    this.roadSamples = samples;
     if (samples.length < 2) return;
 
     const traceRibbon = (outset = 0) => {
       ctx.beginPath();
-      const last = samples[samples.length - 1];
-      ctx.moveTo(last.roadLeft - outset, last.drawY);
-      for (let i = samples.length - 2; i >= 0; i -= 1) {
-        ctx.lineTo(samples[i].roadLeft - outset, samples[i].drawY);
-      }
-      ctx.lineTo(samples[0].roadRight + outset, samples[0].drawY);
-      for (let i = 1; i < samples.length; i += 1) {
-        ctx.lineTo(samples[i].roadRight + outset, samples[i].drawY);
-      }
-      ctx.closePath();
+      this.appendRoadRibbon(samples, outset);
     };
 
     ctx.fillStyle = this.c.ShadowDust;

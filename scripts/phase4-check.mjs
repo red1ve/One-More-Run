@@ -1443,7 +1443,6 @@ check('Audio mute and hidden tab do not play SFX', () => {
   audio.setMuted(false);
   audio.setHidden(true);
   assert(audio.play('risk') === false, 'hidden tab must not play');
-  assert(audio.play('meow') === false, 'hidden tab must not meow');
 });
 
 check('late Choice intervals keep breathing room', () => {

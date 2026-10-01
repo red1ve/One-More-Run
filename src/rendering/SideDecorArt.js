@@ -4,7 +4,9 @@ import { TREE_BASE_X } from './ArtPack.js';
 // Боковой декор на газоне за изгородью, как на референсе: деревья, кусты, камни,
 // заборчики и трава — картинки из assets/art-pack (trees/, props/). Каждый предмет
 // задаётся номером своего места в мире, стоит на земле и растёт по мере приближения.
-// Декор рисуется до изгороди, поэтому изгородь всегда перед ним.
+// Декор рисуется ПОСЛЕ изгороди и обрезается по дорожке: деревья и кусты нависают над
+// изгородью, но не над песком. Предметы сортируются по линии земли (дальние первыми),
+// поэтому ближнее всегда перекрывает дальнее.
 
 const SHADOW = 'rgba(74, 52, 40, 0.16)'; // тень на траве: InkBrown 16%
 
@@ -35,6 +37,7 @@ export class SideDecorArt {
   constructor(art) {
     this.art = art;
     this.items = [];
+    this.order = []; // индексы предметов в порядке рисования (дальние первыми)
   }
 
   cfg() {
@@ -57,8 +60,24 @@ export class SideDecorArt {
     // Пока картинки грузятся (доли секунды на старте), газон без предметов.
     if (!pack?.hasAll(TREE_SPRITES) || !pack.hasAll(ALL_PROP_SPRITES)) return;
     ctx.save();
-    // Собирали от кота к горизонту; рисуем наоборот, чтобы ближнее было поверх.
-    for (let i = items.length - STRIDE; i >= 0; i -= STRIDE) {
+    art.clipOutsideRoad();
+    // Порядок рисования — по линии земли (y): дальние первыми, ближние поверх.
+    // Случайный сдвиг предмета по y меняет порядок слотов, поэтому сортируем по y.
+    const order = this.order;
+    order.length = 0;
+    for (let i = 0; i < items.length; i += STRIDE) order.push(i);
+    for (let a = 1; a < order.length; a += 1) { // вставками: почти отсортировано, без выделений
+      const current = order[a];
+      const y = items[current + 3];
+      let b = a - 1;
+      while (b >= 0 && items[order[b] + 3] > y) {
+        order[b + 1] = order[b];
+        b -= 1;
+      }
+      order[b + 1] = current;
+    }
+    for (let n = 0; n < order.length; n += 1) {
+      const i = order[n];
       const kind = KINDS[items[i + 1]];
       const x = items[i + 2];
       const y = items[i + 3];
@@ -129,7 +148,10 @@ export class SideDecorArt {
         const outer = this.hedgeOuter(p, side);
         const room = Math.max(40, side < 0 ? outer : art.width - outer);
         const pad = (tree ? 34 : 14) * depth;
-        const x = outer + side * (pad + hash(seed + 2) * room * 0.9);
+        // Деревья стоят чуть дальше от изгороди (не ближе 12% свободной полосы):
+        // так возле дороги остаётся просвет, а не сплошная стена.
+        const lateral = tree ? 0.12 + 0.88 * hash(seed + 2) : hash(seed + 2);
+        const x = outer + side * (pad + lateral * room * 0.9);
         const y = p.drawY + hash(seed + 3) * period * 0.4 * depth;
         // ключ места, вид, x, y, размер, картинка, отражение, прозрачность
         items.push(k * 2 + (side < 0 ? 0 : 1), kind, x, y, size, name, flip, alpha);

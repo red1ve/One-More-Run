@@ -140,6 +140,7 @@ Details: `docs/visual-bible.md` §5–6.
 | Feature                        | Priority | Status  |
 | ------------------------------ | -------- | ------- |
 | Sound effects                  | P1       | DONE    |
+| Run music (synthesized loop)   | P1       | DONE    |
 | Mute (M key + HUD)             | P1       | DONE    |
 | Pause audio on tab hidden      | P0       | DONE    |
 | Unlock after user gesture      | P0       | DONE    |
@@ -148,5 +149,7 @@ Details: `docs/visual-bible.md` §5–6.
 
 
 Web Audio is created once, unlocked by a user gesture, muted via storage key `audioMuted`, and suspended while the tab is hidden.
+
+Run music (`src/services/MusicScore.js` + `AudioService`): a calm 8-bar loop (C - Am - F - G, pentatonic melody, soft bass, arpeggio and shaker) synthesized with Web Audio, no audio files. It plays only during a run, fades in and out, speeds up from 108 to 132 BPM with the track speed, and pauses together with the audio context (mute, hidden tab, ad, platform pause). Volume and tempo are in `CONFIG.MUSIC`. The old cat meow on RISK crossings was removed (2026-10-01): RISK keeps its visual feedback only.
 
 Yandex integration uses `YandexService` as an optional platform layer. The game remains fully playable when `/sdk.js`, authorization, leaderboards, or ads are unavailable. Rewarded ads (Phase 5): one revive per run and ×2 coins of the run on the Game Over screen, reward only after `onRewarded`.
