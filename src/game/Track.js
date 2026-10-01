@@ -1477,6 +1477,36 @@ export class Track {
     return false;
   }
 
+  // «Чуть не задел»: стены, мимо которых кот прошёл вплотную (зазор между его хитбоксом и стеной
+  // больше 0, но не больше GRAZE.PX), пока он находится в ряду. Каждая стена считается один раз
+  // (ставится метка grazed). Стены у края дорожки до EDGE_WALL_HIDDEN не считаются: они под
+  // бордюром и не видны. Возвращает [{ x, y, side }]: точка касания и сторона стены (+1 справа).
+  checkGraze(player) {
+    const found = [];
+    const halfW = player.width / 2;
+    const halfH = player.height / 2;
+    const left = player.x - halfW;
+    const right = player.x + halfW;
+    const maxGap = CONFIG.GRAZE.PX;
+    for (const segment of this.segments) {
+      for (const obs of segment.obstacles) {
+        if (obs.grazed) continue;
+        const atEdge = obs.x <= CONFIG.TRACK_LEFT + 0.5 || obs.x + obs.width >= CONFIG.TRACK_RIGHT - 0.5;
+        if (atEdge && obs.width <= CONFIG.EDGE_WALL_HIDDEN + 0.01) continue;
+        // Кот должен быть в ряду по высоте.
+        if (!(player.y - halfH < obs.y + obs.height && player.y + halfH > obs.y)) continue;
+        const gapRight = obs.x - right; // стена справа от кота
+        const gapLeft = left - (obs.x + obs.width); // стена слева от кота
+        const gap = Math.max(gapRight, gapLeft);
+        if (gap <= 0 || gap > maxGap) continue; // касание (это столкновение) или далеко
+        obs.grazed = true;
+        const side = gapRight >= gapLeft ? 1 : -1;
+        found.push({ x: side > 0 ? obs.x : obs.x + obs.width, y: player.y, side });
+      }
+    }
+    return found;
+  }
+
   collectCoins(player) {
     let collected = 0;
     const hitbox = {

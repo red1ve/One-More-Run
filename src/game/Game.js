@@ -11,6 +11,7 @@ import { MouseInput } from '../input/MouseInput.js';
 import { TouchInput } from '../input/TouchInput.js';
 import { StorageService } from '../services/StorageService.js';
 import { AudioService } from '../services/AudioService.js';
+import { HapticsService } from '../services/HapticsService.js';
 
 export class Game {
   constructor(canvas, platformService = null) {
@@ -25,7 +26,9 @@ export class Game {
         if (this.state === 'START') this.render();
       }
     });
-    this.feel = new GameFeel(this.audio);
+    // Вибрация идёт вместе со звуком: звук выключен — телефон тоже молчит.
+    this.haptics = new HapticsService({ isEnabled: () => !this.audio.muted });
+    this.feel = new GameFeel(this.audio, this.haptics);
     this.keyboardInput = new KeyboardInput();
     this.mouseInput = new MouseInput(this.canvas);
     this.touchInput = new TouchInput(this.canvas);
@@ -113,6 +116,7 @@ export class Game {
   pause() {
     if (this.state !== 'PLAYING' || this.userPaused) return false;
     this.userPaused = true;
+    this.haptics?.stop();
     // Палец или клавиша, зажатые в момент паузы, не должны рулить котом после возврата.
     this.keyboardInput?.reset?.();
     this.mouseInput?.reset?.();
@@ -231,6 +235,8 @@ export class Game {
     this.player.reset();
     this.runCoins = 0;
     this.coinsDoubled = false;
+    this.grazeCombo = 0;
+    this.lastGrazeAt = -Infinity;
     this.rewardPending = false;
     this.reviveUsed = false;
     this.invulnerableTime = 0;
@@ -342,6 +348,11 @@ export class Game {
     const coinsGained = this.track.collectCoins(this.player);
     if (coinsGained > 0) {
       this.applyCoinPickup(coinsGained);
+    }
+
+    // «Чуть не задел»: пока кот неуязвим (после возрождения), бонус не начисляется.
+    if (!(this.invulnerableTime > 0)) {
+      for (const graze of this.track.checkGraze?.(this.player) || []) this.applyGraze(graze);
     }
 
     // После возрождения кот какое-то время неуязвим.
@@ -730,6 +741,30 @@ export class Game {
       if (lostStreak) this.feel.onStreakLost(this.player.x, this.player.y);
       else this.feel.onSafe(this.player.x, this.player.y);
     }
+  }
+
+  // Кот прошёл вплотную к стене: небольшой бонус, а касания подряд (не позже GRAZE.COMBO_WINDOW
+  // друг от друга) дают чуть больше. Бонус не умножается: главный источник очков — риск.
+  applyGraze({ x, y, side }) {
+    const cfg = CONFIG.GRAZE;
+    this.grazeCombo = this.runTime - (this.lastGrazeAt ?? -Infinity) <= cfg.COMBO_WINDOW ? this.grazeCombo + 1 : 1;
+    this.lastGrazeAt = this.runTime;
+    const bonus = Math.min(cfg.BONUS_MAX, cfg.BONUS + cfg.COMBO_STEP * (this.grazeCombo - 1));
+    this.pathReward += bonus;
+    this.score = Math.floor(this.distanceScore + this.pathReward);
+    const float = {
+      x: this.player.x,
+      y: this.player.y - CONFIG.VISUAL.LOAF_REAR.FLOAT_CLEARANCE,
+      value: bonus,
+      type: 'GRAZE',
+      subtitle: this.grazeCombo > 1 ? t('float.grazeCombo', { n: this.grazeCombo }) : t('float.graze'),
+      life: CONFIG.FEEL.FLOAT_LIFE * 0.85,
+      maxLife: CONFIG.FEEL.FLOAT_LIFE * 0.85
+    };
+    if (typeof this.pushFloat === 'function') this.pushFloat(float);
+    else this.floatingRewards.push(float);
+    this.feel?.onGraze?.({ x, y, side, combo: this.grazeCombo });
+    return bonus;
   }
 
   applyCoinPickup(amount) {

@@ -53,6 +53,8 @@
     "streakScore": "СЕРИЯ {streak} • ОЧКИ ×{mult}",
     "riskHint": "РИСК КОПИТ СЕРИЮ",
     "score": "ОЧКИ ×{mult}",
+    "graze": "ВПРИТИРКУ",
+    "grazeCombo": "ВПРИТИРКУ ×{n}",
     "streakReset": "СЕРИЯ СБРОШЕНА"
   }
 }

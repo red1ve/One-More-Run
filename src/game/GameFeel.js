@@ -13,8 +13,9 @@ export function feelIntensity({ kind, streak = 0, multiplier = 1 }) {
 }
 
 export class GameFeel {
-  constructor(audio = null) {
+  constructor(audio = null, haptics = null) {
     this.audio = audio;
+    this.haptics = haptics;
     this.particles = new ParticleSystem();
     this.reset();
   }
@@ -32,6 +33,8 @@ export class GameFeel {
     this.speedScroll = 0;
     this.gameOverAge = 0;
     this.gameOverActive = false;
+    this.coinChain = 0; // монеты подряд: тон поднимается
+    this.lastCoinAt = -Infinity;
   }
 
   update(deltaTime, speed = CONFIG.TRACK_SPEED_START) {
@@ -108,15 +111,34 @@ export class GameFeel {
       this.triggerShake(CONFIG.FEEL.SHAKE_MAX_MULT, CONFIG.FEEL.SHAKE_DURATION_MAX);
       this.hudPulse.multiplier = 1;
       this.audio?.play('max');
+      this.haptics?.pulse('max');
     } else if (stepped) {
       this.triggerShake(CONFIG.FEEL.SHAKE_STREAK, CONFIG.FEEL.SHAKE_DURATION);
       this.hudPulse.multiplier = 1;
       this.audio?.play('streak');
-    } else if (streak >= 3) {
-      this.triggerShake(CONFIG.FEEL.SHAKE_STREAK * 0.7, CONFIG.FEEL.SHAKE_DURATION);
+      this.haptics?.pulse('streak');
     } else {
-      this.triggerShake(CONFIG.FEEL.SHAKE_RISK, CONFIG.FEEL.SHAKE_DURATION);
+      this.triggerShake(streak >= 3 ? CONFIG.FEEL.SHAKE_STREAK * 0.7 : CONFIG.FEEL.SHAKE_RISK, CONFIG.FEEL.SHAKE_DURATION);
+      // Каждый подряд рискованный проход звучит на ступень выше (серия «слышна»).
+      this.audio?.play('risk', { step: streak - 1 });
+      this.haptics?.pulse('risk');
     }
+  }
+
+  // «Чуть не задел»: искры у стены, тик (выше с каждым касанием подряд) и лёгкий импульс.
+  onGraze({ x, y, side = 1, combo = 1 }) {
+    this.particles.burst({
+      x: x - side * 2,
+      y,
+      count: 4,
+      color: CONFIG.COLORS.CoinAmber,
+      speed: 55,
+      life: 0.22,
+      size: 2.2
+    });
+    this.playerPulse = Math.max(this.playerPulse, 0.25);
+    this.audio?.play('graze', { step: combo - 1 });
+    this.haptics?.pulse('graze');
   }
 
   onCoin(x, y) {
@@ -132,7 +154,10 @@ export class GameFeel {
     });
     this.hudPulse.coins = 0.7;
     this.playerPulse = 0.22;
-    this.audio?.play('coin');
+    // Монеты подряд (не позже COIN_CHAIN_WINDOW друг от друга) звучат всё выше.
+    this.coinChain = this.time - this.lastCoinAt <= CONFIG.FEEL.COIN_CHAIN_WINDOW ? this.coinChain + 1 : 0;
+    this.lastCoinAt = this.time;
+    this.audio?.play('coin', { step: this.coinChain });
   }
 
   onStreakLost(x, y) {
@@ -151,6 +176,7 @@ export class GameFeel {
     this.triggerFlash(CONFIG.COLORS.FLASH_STREAK_LOSS, CONFIG.FEEL.INTENSITY_STREAK_LOSS);
     this.triggerShake(CONFIG.FEEL.SHAKE_STREAK_LOSS, CONFIG.FEEL.SHAKE_DURATION);
     this.audio?.play('streaklost');
+    this.haptics?.pulse('lost');
   }
 
   onNewBest(x, y) {
@@ -166,6 +192,7 @@ export class GameFeel {
     this.hudPulse.multiplier = 1;
     this.triggerFlash(CONFIG.COLORS.FLASH_COIN, 0.7);
     this.audio?.play('newbest');
+    this.haptics?.pulse('best');
   }
 
   onGameOver(x, y) {
@@ -183,6 +210,7 @@ export class GameFeel {
     this.triggerShake(CONFIG.FEEL.SHAKE_GAMEOVER, CONFIG.FEEL.SHAKE_DURATION_MAX);
     this.triggerFlash(CONFIG.COLORS.FLASH_FAIL, 1);
     this.audio?.play('gameover');
+    this.haptics?.pulse('over');
   }
 }
 
