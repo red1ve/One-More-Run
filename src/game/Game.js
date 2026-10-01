@@ -1,5 +1,5 @@
 import { t } from '../localization/i18n.js';
-import { CONFIG, getTrackSpeed, getPlayerSpeed } from '../config.js';
+import { CONFIG, getTrackSpeed, getPlayerSpeed, getAssist } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WorldCamera } from '../rendering/WorldCamera.js';
 import { Player } from './Player.js';
@@ -51,7 +51,8 @@ export class Game {
     this.isRunning = false;
     this.floatingRewards = [];
     this.isNewBest = false;
-    this.showFirstRunHints = !this.storage.get('onboardingSeen', false);
+    // Подсказка про выбор «шире / уже» показывается у первой развилки, пока игрок не прошёл ни одной.
+    this.choiceHintSeen = !!this.storage.get('choiceHintSeen', false);
     this.riskHintSeen = !!this.storage.get('riskHintSeen', false);
     this.hidden = false;
     this.platformPaused = false;
@@ -211,10 +212,6 @@ export class Game {
   start() {
     if (this.isRunning && this.state === 'PLAYING') return;
     this.unlockAudio?.();
-    if (this.showFirstRunHints) {
-      this.storage.set('onboardingSeen', true);
-      this.showFirstRunHints = false;
-    }
     this.state = 'PLAYING';
     this.userPaused = false;
     this.isNewBest = false;
@@ -238,6 +235,8 @@ export class Game {
     this.player.invulnerable = 0;
     // runSeed задан (например ?seed=42 в адресе) — трасса каждый раз одинаковая.
     this.track.setSeed?.(this.runSeed ?? null);
+    // Новичку (малый лучший счёт) проходы шире; опытному игроку — как есть. См. CONFIG.ASSIST.
+    this.track.setAssist?.(this.assistOverride ?? getAssist(this.bestScore));
     this.track.reset();
     this.camera?.reset?.();
     this.keyboardInput?.reset?.();
@@ -364,13 +363,27 @@ export class Game {
   }
 
   canOfferDoubleCoins() {
-    return this.state === 'GAMEOVER'
+    return !!CONFIG.YANDEX.DOUBLE_COINS_AD
+      && this.state === 'GAMEOVER'
       && (this.runCoins || 0) > 0
       && !this.coinsDoubled
       && !this.rewardPending
       && !this.launchPending
       && !this.isGameplayPaused()
       && !!this.platform?.canShowRewarded?.();
+  }
+
+  // Подсказка у первой развилки: пока игрок не прошёл ни одной и ближайшая развилка приближается
+  // (она в пределах экрана, но кот ещё не въехал в неё).
+  choiceHintVisible() {
+    if (this.choiceHintSeen || this.state !== 'PLAYING') return false;
+    for (const segment of this.track.segments) {
+      if (!segment.isChoiceSegment || segment.isPassed || !segment.paths.length) continue;
+      const gateY = Math.min(...segment.paths.map((path) => path.y));
+      const ahead = this.player.y - gateY;
+      if (ahead > CONFIG.CHOICE_HINT_NEAR && ahead < CONFIG.CHOICE_HINT_FAR) return true;
+    }
+    return false;
   }
 
   // Нажатие на экран (мышь или палец) в логических координатах холста.
@@ -478,6 +491,12 @@ export class Game {
     if (!Object.prototype.hasOwnProperty.call(CONFIG.REWARDS, type)) {
       console.warn('Game: неизвестный тип награды, пропуск', type);
       return;
+    }
+
+    // Игрок прошёл развилку: подсказка «шире / уже» ему больше не нужна.
+    if (isChoice && !this.choiceHintSeen) {
+      this.choiceHintSeen = true;
+      this.storage?.set?.('choiceHintSeen', true);
     }
 
     const baseReward = CONFIG.REWARDS[type];
@@ -618,6 +637,10 @@ export class Game {
       this.state === 'PLAYING' && !this.userPaused
     );
 
+    if (this.state === 'PLAYING' && !this.userPaused && this.choiceHintVisible()) {
+      this.renderer.drawChoiceHint(t('hint.choice'));
+    }
+
     if (this.state === 'PLAYING' && this.userPaused) {
       this.renderer.drawPause(
         Math.floor(this.score),
@@ -642,7 +665,7 @@ export class Game {
         }
       );
     } else if (this.state === 'START') {
-      this.renderer.drawStartScreen(this.audio?.muted, this.showFirstRunHints, this.audio?.volume);
+      this.renderer.drawStartScreen(this.audio?.muted, this.audio?.volume);
     }
   }
 }

@@ -84,6 +84,16 @@ export const CONFIG = {
   // бы крошечным кустиком-точкой, поэтому трасса таких стен не создаёт.
   EDGE_WALL_HIDDEN: 20,
   EDGE_WALL_MIN: 58,
+  // Помощь новичкам: пока лучший счёт игрока меньше UNTIL_BEST, проходы шире. Помощь линейно
+  // тает до нуля (см. getAssist). Полная помощь = ширины до сужения 2026-10-01: обычные проходы
+  // 168 / 136 + BREATHING_BONUS = 200 / 168, безопасный путь развилки 176 / 156 / 136 + SAFE_BONUS
+  // = 200 / 180 / 160. Рискованные пути не меняются: они добровольные.
+  // У самой первой развилки прибавка к безопасному пути не больше TUTORIAL_SAFE_BONUS_MAX (иначе
+  // на стены у краёв остаётся меньше EDGE_WALL_MIN): там 176 + 20 = 196 вместо прежних 200.
+  ASSIST: { UNTIL_BEST: 800, BREATHING_BONUS: 32, SAFE_BONUS: 24, TUTORIAL_SAFE_BONUS_MAX: 20 },
+  // Подсказка «шире / уже» у первой развилки видна, пока до неё от кота от NEAR до FAR px.
+  CHOICE_HINT_NEAR: 80,
+  CHOICE_HINT_FAR: 1100,
   CHOICE_GATE_HEIGHT: 64,
   CHOICE_SHOW_HEIGHT: 280,
   CHOICE_INTERVAL_INTRO: [8, 14],
@@ -131,6 +141,9 @@ export const CONFIG = {
     ADS_ENABLED: true,
     // Имитация рекламы за награду без SDK. Включается только в npm run dev (main.js).
     DEV_REWARDED_STUB: false,
+    // Кнопка «×2 монеты за рекламу» на экране проигрыша. Выключена, пока монеты некуда тратить
+    // (нет магазина): иначе игрок не получает ничего за просмотр рекламы. Включить вместе с магазином.
+    DOUBLE_COINS_AD: false,
     // Сколько ждать onRewarded после onClose, прежде чем решить, что награды нет
     // (порядок колбэков в документации Яндекса не указан).
     REWARDED_CLOSE_GRACE_MS: 250,
@@ -398,6 +411,12 @@ function hexAlpha(hex, alpha) {
   const g = parseInt(value.slice(2, 4), 16);
   const b = parseInt(value.slice(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Доля помощи новичку 0..1 по лучшему счёту: 1 — лучший счёт 0, 0 — от ASSIST.UNTIL_BEST и выше.
+export function getAssist(bestScore) {
+  const best = Math.max(0, Number(bestScore) || 0);
+  return Math.max(0, Math.min(1, 1 - best / CONFIG.ASSIST.UNTIL_BEST));
 }
 
 export function isRiskPathType(type) {

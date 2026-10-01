@@ -85,7 +85,7 @@ Current implementation notes:
 | Authorized leaderboard submit   | P1       | DONE    |
 | Explicit authorization UI       | P1       | PLANNED |
 | Leaderboard display UI          | P2       | POSTPONED (after release) |
-| Rewarded advertising (continue, x2 coins) | P1 | DONE |
+| Rewarded advertising (continue; x2 coins is switched off until the shop exists) | P1 | DONE |
 
 
 ---
@@ -101,7 +101,8 @@ Current implementation notes:
 | Mouse click strafe   | P0       | DONE    |
 | Mobile / touch       | P0       | DONE    |
 | Control hint on start| P1       | DONE    |
-| First-run SAFE/RISK clarity | P1 | DONE    |
+| First-Choice hint (replaces the start-screen hint lines) | P1 | DONE    |
+| Newcomer help (wider gaps while best score is low) | P1 | DONE |
 | Contextual streak explanation | P1 | DONE  |
 | DUAL_RISK label hierarchy | P1  | DONE    |
 | Game Over replay motivation | P1 | DONE   |
@@ -115,7 +116,7 @@ Current implementation notes:
 
 Start / Game Over are canvas overlays, not a separate menu system. UI text comes from `src/localization/en.json` / `ru.json`; the language follows the Yandex SDK (ru/be/kk/uk/uz → Russian, otherwise English).
 
-Phase 8 adds presentation-only clarity: first-run hints disappear after the first launch, the first RISK explains streak, multiplier steps identify the new score multiplier, and Game Over shows either honest NEW BEST feedback or the points still needed. Coins are described as saved between runs. During play, Choices show reward values rather than repeating the words SAFE and RISK.
+Phase 8 added presentation-only clarity (since 2026-10-01 the start-screen hint lines are replaced by one capsule at the first Choice, see `docs/ux-guidelines.md`): the first RISK explains streak, multiplier steps identify the new score multiplier, and Game Over shows either honest NEW BEST feedback or the points still needed. Coins are described as saved between runs. During play, Choices show reward values rather than repeating the words SAFE and RISK.
 
 Phase 8 deliberately does not change speed, physics, hitboxes, Choice timing/geometry, rewards, score mathematics, streak/multiplier rules, Coin behavior, reachability, or Yandex lifecycle.
 
@@ -154,7 +155,9 @@ Web Audio is created once, unlocked by a user gesture, muted via storage key `au
 
 Run music (`src/services/MusicScore.js` + `AudioService`): a very simple calm 8-bar loop (C - Am - F - G, three-note pentatonic phrases, soft bass and a long quiet chord) synthesized with Web Audio, no audio files. It plays only during a run, fades in and out, speeds up from 100 to 120 BPM with the track speed, and pauses together with the audio context (mute, hidden tab, ad, platform pause). Volume and tempo are in `CONFIG.MUSIC`. The old cat meow on RISK crossings was removed (2026-10-01): RISK keeps its visual feedback only.
 
-Yandex integration uses `YandexService` as an optional platform layer. The game remains fully playable when `/sdk.js`, authorization, leaderboards, or ads are unavailable. Rewarded ads (Phase 5): one revive per run and ×2 coins of the run on the Game Over screen, reward only after `onRewarded`.
+Yandex integration uses `YandexService` as an optional platform layer. The game remains fully playable when `/sdk.js`, authorization, leaderboards, or ads are unavailable. Rewarded ads (Phase 5): one revive per run (and, behind the switch `YANDEX.DOUBLE_COINS_AD`, ×2 coins of the run), reward only after `onRewarded`. The ×2 coins button is OFF since 2026-10-01: coins have no use until the shop exists, so the player would get nothing for watching. Turn the switch on together with the shop.
+
+Newcomer help (2026-10-01): `getAssist(bestScore)` gives 1 for a brand-new player and fades linearly to 0 at best score `ASSIST.UNTIL_BEST` (800). At the start of every run `Game.start` hands it to `Track.setAssist`; ordinary gaps get up to +32 px and the SAFE gap of a Choice up to +24 px (at the very first fork up to +20, so the edge walls still fit): at full help the widths are the ones from before the narrowing (200 / 168 and 200 / 180 / 160). RISK gaps never change. An experienced player (best 800+) sees the current narrow widths. Dev only: `?assist=0..1` forces it.
 
 Pause (2026-10-01): during a run a round pause button sits in the HUD between the score and the coin pill (same capsule style, two brown bars). It, `P` or `Esc` freezes the run (`Game.userPaused`, counted in `isGameplayPaused()`, so Yandex GameplayAPI is stopped too) and opens a card: PAUSE, score, best, RESUME (button, `P`, `Esc`, Space or Enter) and the sound row [-] [SOUND n%] [+] under it. Music keeps playing on pause so volume changes can be heard. Taps on the card never start a new run; `R` does not restart from the pause. Held keys and fingers are released on pause and resume. A hidden tab does not set the pause by itself (the game freezes while hidden and continues on return, as before).
 

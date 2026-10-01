@@ -53,22 +53,15 @@ function makeRenderer() {
   return { context, renderer: new Renderer(context) };
 }
 
-check('first-run START explains controls and core decision briefly', () => {
+check('START is short: title, play button and controls only; the rule is explained at the first Choice', () => {
   const { context, renderer } = makeRenderer();
-  renderer.drawStartScreen(false, true);
+  renderer.drawStartScreen(false, 0.5);
   assert(context.texts.includes('TAP TO START'));
   assert(context.texts.includes('A/D or ←/→  •  TAP LEFT/RIGHT'));
-  assert(context.texts.includes('SAFE = SURVIVE  •  RISK = BIG SCORE'));
-  assert(context.texts.includes('RISK BUILDS STREAK → SCORE x'));
-  assert(context.texts.includes('COINS STAY BETWEEN RUNS'));
-});
-
-check('clarity copy disappears after first-run onboarding', () => {
-  const { context, renderer } = makeRenderer();
-  renderer.drawStartScreen(false, false);
-  assert(context.texts.includes('TAP TO START'));
-  assert(!context.texts.includes('SAFE = SURVIVE  •  RISK = BIG SCORE'));
-  assert(!context.texts.includes('COINS STAY BETWEEN RUNS'));
+  assert(!context.texts.some((text) => /WIDER|NARROWER|COINS STAY|STREAK/.test(text)), 'no hint lines on the start card');
+  const hint = makeRenderer();
+  hint.renderer.drawChoiceHint('WIDER = SAFER  •  NARROWER = MORE POINTS');
+  assert(hint.context.texts.includes('WIDER = SAFER  •  NARROWER = MORE POINTS'), 'the Choice hint is drawn');
 });
 
 check('DUAL_RISK rewards distinguish the harder corridor without RISK words', () => {
@@ -147,7 +140,7 @@ check('sprite onload notifies once without creating extra images', () => {
   assert(created === 5);
   images.forEach((image) => image.onload());
   assert(kinds[0] === 'run-0' && kinds[3] === 'run-3' && kinds[4] === 'front');
-  renderer.drawStartScreen(false, false);
+  renderer.drawStartScreen(false, 0.5);
   assert(created === 5);
 });
 
@@ -250,12 +243,11 @@ check('first RISK teaches streak, then multiplier feedback takes over', () => {
   assert(game.pathReward === CONFIG.REWARDS.RISKY * 2, 'reward still uses multiplier before growth');
 });
 
-check('starting the first run persists onboarding without changing run rules', () => {
+check('starting a run resets the run rules', () => {
   const stored = [];
   const game = {
     isRunning: true,
     state: 'START',
-    showFirstRunHints: true,
     storage: {
       set(key, value) { stored.push([key, value]); },
       getCoins() { return 5; }
@@ -275,8 +267,6 @@ check('starting the first run persists onboarding without changing run rules', (
     unlockAudio() {}
   };
   Game.prototype.start.call(game);
-  assert(game.showFirstRunHints === false);
-  assert(stored.some(([key, value]) => key === 'onboardingSeen' && value === true));
   assert(game.state === 'PLAYING');
   assert(game.score === 0 && game.riskStreak === 0 && game.multiplier === CONFIG.MULTIPLIER_START);
   assert(game.coins === 5);

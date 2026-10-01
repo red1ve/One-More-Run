@@ -493,14 +493,14 @@ export class Renderer {
     );
   }
 
-  drawStartScreen(muted = false, showFirstRunHints = false, volume = 0.5) {
+  drawStartScreen(muted = false, volume = 0.5) {
     const cfg = this.screenCfg();
     const cx = this.width / 2;
     const cardX = cfg.CARD_X ?? 36;
     const cardW = cfg.CARD_W ?? this.width - cardX * 2;
     const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
-    const cardH = showFirstRunHints ? 374 : 262;
-    const cardY = showFirstRunHints ? 340 : 380;
+    const cardH = 262;
+    const cardY = 380;
 
     this.dimScreen(cfg.DIM_START ?? 0.12);
     this.garden.plate(cardX, cardY, cardW, cardH, 26);
@@ -513,13 +513,29 @@ export class Renderer {
 
     this.fitText(t('start.controls'), cx, cardY + 208, 600, 20, textW, CONFIG.COLORS.UI_HUD);
 
-    if (showFirstRunHints) {
-      this.fitText(t('start.hintChoice'), cx, cardY + 258, 700, 21, textW, CONFIG.COLORS.UI_TEXT);
-      this.fitText(t('start.hintStreak'), cx, cardY + 294, 600, 20, textW, CONFIG.COLORS.UI_HUD);
-      this.fitText(t('start.hintCoins'), cx, cardY + 326, 600, 20, textW, CONFIG.COLORS.UI_HUD);
-    }
-
     this.drawSoundControls(cx, cardY + cardH + 44, muted, volume);
+  }
+
+  // Подсказка у первой развилки: одна строка в капсуле под HUD. Правило игры («шире — надёжнее,
+  // уже — больше очков») игрок видит ровно тогда, когда перед ним появляется выбор.
+  drawChoiceHint(text) {
+    const ctx = this.ctx;
+    const textMax = this.width - 48 - 36; // ширина строки: экран минус поля и отступы капсулы
+    let font = 20;
+    ctx.font = `700 ${font}px ${FONT_FAMILY}`;
+    let measured = typeof ctx.measureText === 'function' ? ctx.measureText(text).width : textMax;
+    if (measured > textMax) {
+      font = Math.max(14, Math.floor(font * (textMax / measured)));
+      ctx.font = `700 ${font}px ${FONT_FAMILY}`;
+      measured = Math.min(textMax, ctx.measureText(text).width);
+    }
+    const width = measured + 36;
+    const cx = this.width / 2;
+    const top = 74;
+    this.garden.hudPill(cx - width / 2, top, width, 40);
+    ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
+    ctx.textAlign = 'center';
+    ctx.fillText(text, cx, top + 27);
   }
 
   // Звук на экранах: [−] капсула «ЗВУК n%» (нажатие включает и выключает) [+].

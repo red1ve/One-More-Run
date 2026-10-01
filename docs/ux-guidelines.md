@@ -95,13 +95,9 @@ The interface must not cover important gameplay information.
 
 ## Retention and clarity
 
-The first START screen may briefly explain:
+The START screen is short: title, the play button and one controls line. It carries no rules text (changed 2026-10-01: three hint lines were too wordy and few players read them).
 
-- SAFE favors survival;
-- RISK favors score and builds streak;
-- Coins remain between runs.
-
-These hints disappear after the first run. During gameplay, the first RISK may provide one short contextual streak hint; multiplier growth then uses compact score-multiplier feedback.
+The rule is taught where it matters: while the first Choice of a new player approaches, one capsule under the HUD says "WIDER = SAFER • NARROWER = MORE POINTS" (`hint.choice`, `Game.choiceHintVisible`). It disappears when the cat reaches the row and never returns after the first Choice has been passed (storage key `choiceHintSeen`). During gameplay, the first RISK may provide one short contextual streak hint; multiplier growth then uses compact score-multiplier feedback.
 
 Choice rewards (`+10`, `+100`, `+150`, `+250`) must remain readable at speed. SAFE/RISK words are not shown on every Choice during play. DUAL_RISK distinguishes the narrower, higher-value branch with `+250` and a deeper clay gate, without changing geometry or rewards.
 
