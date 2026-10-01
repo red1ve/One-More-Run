@@ -15,6 +15,21 @@
     "off": "M MUTED",
     "level": "SOUND {n}%"
   },
+  "leaderboard": {
+    "button": "LEADERBOARD",
+    "title": "LEADERBOARD",
+    "loading": "LOADING...",
+    "empty": "NO SCORES YET",
+    "error": "NOT AVAILABLE RIGHT NOW",
+    "player": "PLAYER",
+    "you": "YOU",
+    "signinHint": "SIGN IN TO GET YOUR SCORE ON THE BOARD",
+    "signin": "SIGN IN",
+    "close": "CLOSE"
+  },
+  "shortcut": {
+    "button": "ADD SHORTCUT"
+  },
   "pause": {
     "title": "PAUSE",
     "resume": "RESUME  •  P"

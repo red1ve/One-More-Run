@@ -61,7 +61,7 @@ Make the game look and feel finished.
 
 ## Version 1.0 — Release
 
-Status (2026-10): Phases 0–6 done — reference look with the painted art pack, Russian/English, rewarded ads, final QA on phone/tablet/desktop sizes, dead code removed, honest catalogue screenshots in `docs/store/screenshots/`, build 3.7 MB (0.65 MB downloaded at start). Left: console setup, upload, moderation (Phase 7, owner; see `docs/yandex-integration.md`). Postponed to after release: leaderboard screen, skin shop (Phase 5b), performance pass (Phase 2).
+Status (2026-10): Phases 0–6 done — reference look with the painted art pack, Russian/English, rewarded ads, final QA on phone/tablet/desktop sizes, dead code removed, honest catalogue screenshots in `docs/store/screenshots/`, build 3.7 MB (0.65 MB downloaded at start). Left: console setup, upload, moderation (Phase 7, owner; see `docs/yandex-integration.md`). The leaderboard screen, cloud save, rating request and shortcut prompt were added on 2026-10-01 (see `docs/yandex-integration.md`). Postponed to after release: skin shop (Phase 5b), performance pass (Phase 2).
 
 Goal:
 

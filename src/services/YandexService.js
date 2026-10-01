@@ -1,5 +1,45 @@
 import { CONFIG } from '../config.js';
 
+// Ответ getEntries → { entries, userRank }. Места в ответе обычно с 1; если платформа вернула
+// первое место как 0, сдвигаем всё на 1. Пропуск мест между записями помечается gapBefore
+// (между верхом таблицы и окрестностями игрока рисуется «…»).
+function normalizeLeaderboard(response) {
+  const raw = Array.isArray(response?.entries) ? response.entries : [];
+  const rawUserRank = Number(response?.userRank);
+  const hasUser = Number.isFinite(rawUserRank) && rawUserRank > 0;
+  const byRank = new Map();
+  for (const item of raw) {
+    const rank = Number(item?.rank);
+    const score = Number(item?.score);
+    if (!Number.isFinite(rank) || !Number.isFinite(score) || rank < 0 || byRank.has(rank)) continue;
+    const name = typeof item?.player?.publicName === 'string' ? item.player.publicName.trim() : '';
+    byRank.set(rank, { rank, score: Math.floor(score), name, isYou: hasUser && rank === rawUserRank });
+  }
+  const entries = [...byRank.values()].sort((a, b) => a.rank - b.rank);
+  const shift = entries.length > 0 && entries[0].rank === 0 ? 1 : 0;
+  let previous = 0;
+  for (const entry of entries) {
+    entry.rank += shift;
+    entry.gapBefore = previous > 0 && entry.rank - previous > 1;
+    previous = entry.rank;
+  }
+  return { entries, userRank: hasUser ? rawUserRank + shift : null };
+}
+
+// Придуманная таблица для npm run dev (config.DEV_PLATFORM_STUB), чтобы проверить экран без SDK.
+function devLeaderboard(myBest) {
+  const names = ['Мурка', 'Barsik', 'Ginger', 'Лапка', 'Tux', 'Рыжик', 'Mochi', 'Пушок', 'Luna', 'Снежок'];
+  const entries = names.map((name, index) => ({
+    rank: index + 1, score: 21400 - index * 1850, name, isYou: false, gapBefore: false
+  }));
+  entries.push(
+    { rank: 36, score: Math.floor(myBest) + 90, name: 'Cookie', isYou: false, gapBefore: true },
+    { rank: 37, score: Math.floor(myBest), name: '', isYou: true, gapBefore: false },
+    { rank: 38, score: Math.max(0, Math.floor(myBest) - 40), name: 'Лисёнок', isYou: false, gapBefore: false }
+  );
+  return { ok: true, entries, userRank: 37, authorized: true };
+}
+
 export class YandexService {
   constructor(options = {}) {
     this.config = options.config || CONFIG.YANDEX;
@@ -21,6 +61,13 @@ export class YandexService {
     this.adPromise = null;
     this.lastSubmittedScore = null;
     this.scorePromise = null;
+    this.playerPromise = null;
+    this.authorized = false;
+    this.pendingCloudData = null;
+    this.cloudTimer = null;
+    this.lastCloudSaveAt = 0;
+    this.leaderboardCache = null;
+    this.reviewRequested = false;
     this.lifecycleHandlers = { onPause: null, onResume: null };
 
     this.handlePlatformPause = () => this.lifecycleHandlers.onPause?.();
@@ -193,6 +240,180 @@ export class YandexService {
     } catch (error) {
       this.log('Yandex leaderboard score submission skipped.', error);
       return false;
+    }
+  }
+
+  // --- Игрок и его данные в облаке Яндекса (рекорд, монеты, подсказки) ---
+  // Каждый вызов защищён: любая ошибка платформы даёт «нет данных», игра продолжает работать
+  // на локальном сохранении.
+
+  async getPlayer() {
+    if (!this.isReady() || typeof this.ysdk.getPlayer !== 'function') return null;
+    if (!this.playerPromise) {
+      this.playerPromise = Promise.resolve()
+        .then(() => this.ysdk.getPlayer({ scopes: false }))
+        .catch((error) => {
+          this.log('Yandex player is not available.', error);
+          return null;
+        });
+    }
+    const player = await this.playerPromise;
+    if (!player) this.playerPromise = null; // в следующий раз попробуем ещё раз
+    return player;
+  }
+
+  isAuthorized() {
+    return this.isReady() && this.authorized === true;
+  }
+
+  async refreshAuthorization() {
+    const player = await this.getPlayer();
+    this.authorized = !!player && typeof player.isAuthorized === 'function' && player.isAuthorized() === true;
+    return this.authorized;
+  }
+
+  async loadCloudData() {
+    try {
+      const player = await this.getPlayer();
+      if (!player || typeof player.getData !== 'function') return null;
+      const data = await player.getData(this.config.CLOUD_KEYS);
+      return data && typeof data === 'object' ? data : null;
+    } catch (error) {
+      this.log('Yandex cloud data load skipped.', error);
+      return null;
+    }
+  }
+
+  // Ставит запись в очередь. Платформа разрешает 100 запросов за 5 минут, поэтому пишем не чаще
+  // CLOUD_SAVE_MIN_INTERVAL_MS: лишние сохранения склеиваются, уходит самое свежее состояние.
+  saveCloudData(data) {
+    if (!this.isReady() || !data || typeof data !== 'object') return false;
+    this.pendingCloudData = { ...data };
+    const wait = this.lastCloudSaveAt + this.config.CLOUD_SAVE_MIN_INTERVAL_MS - Date.now();
+    if (wait <= 0) {
+      this.flushCloudData();
+    } else if (!this.cloudTimer) {
+      this.cloudTimer = setTimeout(() => {
+        this.cloudTimer = null;
+        this.flushCloudData();
+      }, wait);
+      this.cloudTimer.unref?.();
+    }
+    return true;
+  }
+
+  async flushCloudData() {
+    const data = this.pendingCloudData;
+    if (!data) return false;
+    this.pendingCloudData = null;
+    this.lastCloudSaveAt = Date.now();
+    try {
+      const player = await this.getPlayer();
+      if (!player || typeof player.setData !== 'function') return false;
+      await player.setData(data, true);
+      return true;
+    } catch (error) {
+      this.log('Yandex cloud data save skipped.', error);
+      return false;
+    }
+  }
+
+  // --- Вход в аккаунт (нужен для таблицы лидеров, оценки и облака) ---
+
+  async openAuth() {
+    if (!this.isReady() || typeof this.ysdk.auth?.openAuthDialog !== 'function') return false;
+    try {
+      await this.ysdk.auth.openAuthDialog();
+    } catch (error) {
+      this.log('Yandex authorization was not completed.', error);
+      return false;
+    }
+    // После входа игрок, таблица и «последний отправленный счёт» устарели.
+    this.playerPromise = null;
+    this.leaderboardCache = null;
+    this.lastSubmittedScore = null;
+    return this.refreshAuthorization();
+  }
+
+  // --- Таблица лидеров ---
+
+  canShowLeaderboard() {
+    if (this.isReady()) return typeof this.ysdk?.leaderboards?.getEntries === 'function';
+    return !!this.config.DEV_PLATFORM_STUB;
+  }
+
+  // Возвращает { ok, entries, userRank, authorized } или { ok: false, reason }.
+  // entries: { rank (с 1), score, name, isYou, gapBefore }, по возрастанию места.
+  async getLeaderboard({ myBest = 0 } = {}) {
+    if (!this.isReady()) {
+      return this.config.DEV_PLATFORM_STUB ? devLeaderboard(myBest) : { ok: false, reason: 'unavailable' };
+    }
+    const cache = this.leaderboardCache;
+    if (cache && Date.now() - cache.at < this.config.LEADERBOARD_CACHE_MS) return cache.result;
+    if (typeof this.ysdk.leaderboards?.getEntries !== 'function') return { ok: false, reason: 'unavailable' };
+
+    try {
+      const response = await this.ysdk.leaderboards.getEntries(this.config.LEADERBOARD_NAME, {
+        quantityTop: this.config.LEADERBOARD_TOP,
+        includeUser: true,
+        quantityAround: this.config.LEADERBOARD_AROUND
+      });
+      const authorized = await this.refreshAuthorization();
+      const result = { ok: true, ...normalizeLeaderboard(response), authorized };
+      this.leaderboardCache = { at: Date.now(), result };
+      return result;
+    } catch (error) {
+      this.log('Yandex leaderboard is not available.', error);
+      return { ok: false, reason: 'error' };
+    }
+  }
+
+  // --- Оценка игры (один запрос за сессию, только когда платформа разрешает) ---
+
+  async requestReview() {
+    if (!this.isReady()) {
+      return this.config.DEV_PLATFORM_STUB ? { asked: true, sent: false, simulated: true } : { asked: false, reason: 'UNAVAILABLE' };
+    }
+    if (this.reviewRequested) return { asked: false, reason: 'ALREADY_ASKED' };
+    const feedback = this.ysdk.feedback;
+    if (typeof feedback?.canReview !== 'function' || typeof feedback.requestReview !== 'function') {
+      return { asked: false, reason: 'UNAVAILABLE' };
+    }
+    try {
+      const { value, reason } = (await feedback.canReview()) || {};
+      if (!value) return { asked: false, reason: reason || 'UNKNOWN' };
+      this.reviewRequested = true;
+      const result = (await feedback.requestReview()) || {};
+      return { asked: true, sent: !!(result.feedbackSent ?? result.sentFeedback) };
+    } catch (error) {
+      this.log('Yandex review request skipped.', error);
+      return { asked: false, reason: 'ERROR' };
+    }
+  }
+
+  // --- Ярлык игры на экране ---
+
+  async canShowShortcut() {
+    if (!this.isReady()) return !!this.config.DEV_PLATFORM_STUB;
+    if (typeof this.ysdk.shortcut?.canShowPrompt !== 'function') return false;
+    try {
+      const result = await this.ysdk.shortcut.canShowPrompt();
+      return !!result?.canShow;
+    } catch (error) {
+      this.log('Yandex shortcut check skipped.', error);
+      return false;
+    }
+  }
+
+  async showShortcut() {
+    if (!this.isReady()) return { accepted: !!this.config.DEV_PLATFORM_STUB };
+    if (typeof this.ysdk.shortcut?.showPrompt !== 'function') return { accepted: false };
+    try {
+      const result = await this.ysdk.shortcut.showPrompt();
+      return { accepted: result?.outcome === 'accepted' };
+    } catch (error) {
+      this.log('Yandex shortcut prompt skipped.', error);
+      return { accepted: false };
     }
   }
 

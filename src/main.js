@@ -17,8 +17,8 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   const yandex = new YandexService(
-    // В npm run dev без SDK реклама за награду имитируется, чтобы проверить кнопки.
-    import.meta.env?.DEV ? { config: { ...CONFIG.YANDEX, DEV_REWARDED_STUB: true } } : {}
+    // В npm run dev без SDK реклама за награду, таблица лидеров, оценка и ярлык имитируются, чтобы проверить экраны.
+    import.meta.env?.DEV ? { config: { ...CONFIG.YANDEX, DEV_REWARDED_STUB: true, DEV_PLATFORM_STUB: true } } : {}
   );
   const game = new Game(canvas, yandex);
   // Только для разработки (npm run dev), в сборку не попадает:
@@ -83,7 +83,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Пауза: P или Esc ставят и снимают её во время забега.
     if (e.code === 'KeyP' || e.code === 'Escape') {
-      game.togglePause();
+      // Esc сначала закрывает окно таблицы лидеров, если оно открыто.
+      if (game.leaderboard) game.closeLeaderboard();
+      else game.togglePause();
       return;
     }
 
@@ -136,5 +138,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (devLang) applyLanguage(devLang);
   yandex.init().then(() => {
     if (!devLang) applyLanguage(yandex.getLanguage());
+    // SDK готов: подтягиваем облачное сохранение, узнаём, можно ли предложить ярлык.
+    game.onPlatformReady();
   });
 });

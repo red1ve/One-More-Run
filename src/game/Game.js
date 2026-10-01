@@ -60,6 +60,8 @@ export class Game {
     this.userPaused = false; // игрок поставил забег на паузу кнопкой, P или Esc
     this.launchPending = false;
     this.adFinished = false;
+    this.leaderboard = null; // null — закрыта; иначе { status, entries, userRank, authorized, signingIn }
+    this.shortcutAvailable = false; // платформа разрешает предложить ярлык
 
     this.platform?.setLifecycleHandlers?.({
       onPause: () => this.setPlatformPaused(true),
@@ -175,7 +177,7 @@ export class Game {
   }
 
   tryLaunch() {
-    if (this.state === 'PLAYING' || this.launchPending || this.rewardPending) return false;
+    if (this.state === 'PLAYING' || this.launchPending || this.rewardPending || this.leaderboard) return false;
     // Первые мгновения после проигрыша нажатия не перезапускают игру:
     // игрок успевает увидеть экран и кнопки «за рекламу».
     if (this.state === 'GAMEOVER' && this.gameOverInputLocked?.()) return false;
@@ -373,6 +375,167 @@ export class Game {
       && !!this.platform?.canShowRewarded?.();
   }
 
+  // --- Платформа Яндекса: облако, таблица лидеров, оценка, ярлык ---
+  // Все вызовы безопасны без SDK: платформа сама возвращает «нет данных», игра работает локально.
+
+  // Стартовый экран рисуется по событиям (цикла ещё нет): после асинхронного ответа перерисовываем.
+  requestRender() {
+    if (!this.isRunning) this.render();
+  }
+
+  // Что хранится в облаке (ключи — CONFIG.YANDEX.CLOUD_KEYS).
+  cloudSnapshot() {
+    return {
+      bestScore: this.bestScore || 0,
+      coins: this.storage.getCoins(),
+      choiceHintSeen: !!this.choiceHintSeen,
+      riskHintSeen: !!this.riskHintSeen
+    };
+  }
+
+  // Сливает данные из облака с локальными: берём большее число, подсказки — «видел где-то».
+  // Ничего не теряется ни на устройстве, ни в облаке. true = локальные данные изменились.
+  applyCloudData(data) {
+    if (!data || typeof data !== 'object') return false;
+    const whole = (value) => {
+      const number = Math.floor(Number(value));
+      return Number.isFinite(number) && number > 0 ? number : 0;
+    };
+    let changed = false;
+    const best = Math.max(this.bestScore || 0, whole(data.bestScore));
+    if (best !== (this.bestScore || 0)) {
+      this.bestScore = best;
+      this.storage.set('bestScore', best);
+      changed = true;
+    }
+    const coins = Math.max(this.storage.getCoins(), whole(data.coins));
+    if (coins !== this.storage.getCoins()) {
+      this.storage.set('coins', coins);
+      this.coins = coins;
+      changed = true;
+    }
+    for (const key of ['choiceHintSeen', 'riskHintSeen']) {
+      if (data[key] === true && !this[key]) {
+        this[key] = true;
+        this.storage.set(key, true);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  // Забирает данные из облака, сливает с локальными и отправляет объединённое обратно.
+  async syncCloud() {
+    const data = await Promise.resolve(this.platform?.loadCloudData?.()).catch(() => null);
+    if (!data) return false;
+    this.applyCloudData(data);
+    this.platform.saveCloudData?.(this.cloudSnapshot());
+    this.requestRender();
+    return true;
+  }
+
+  // Платформа готова (SDK загружен): облако и доступность ярлыка.
+  async onPlatformReady() {
+    const shortcut = Promise.resolve(this.platform?.canShowShortcut?.()).catch(() => false);
+    await this.syncCloud();
+    this.shortcutAvailable = !!(await shortcut);
+    this.requestRender();
+  }
+
+  canShowLeaderboard() {
+    return !!this.platform?.canShowLeaderboard?.();
+  }
+
+  openLeaderboard() {
+    if (this.leaderboard || !this.canShowLeaderboard()) return false;
+    this.leaderboard = { status: 'loading', entries: [], userRank: null, authorized: true, signingIn: false };
+    this.loadLeaderboard();
+    this.requestRender();
+    return true;
+  }
+
+  async loadLeaderboard() {
+    const board = this.leaderboard;
+    if (!board) return;
+    board.status = 'loading';
+    const result = await Promise.resolve(this.platform?.getLeaderboard?.({ myBest: this.bestScore }))
+      .catch(() => ({ ok: false }));
+    if (this.leaderboard !== board) return; // пока грузилось, окно закрыли
+    if (result?.ok) {
+      board.status = result.entries.length ? 'ready' : 'empty';
+      board.entries = result.entries;
+      board.userRank = result.userRank ?? null;
+      board.authorized = result.authorized !== false;
+    } else {
+      board.status = 'error';
+    }
+    this.requestRender();
+  }
+
+  closeLeaderboard() {
+    if (!this.leaderboard) return false;
+    this.leaderboard = null;
+    this.requestRender();
+    return true;
+  }
+
+  handleLeaderboardTap(x, y) {
+    const hit = this.renderer?.hitLeaderboardButton?.(x, y);
+    if (hit === 'close') this.closeLeaderboard();
+    else if (hit === 'signin') this.signIn();
+  }
+
+  // Вход в аккаунт из окна таблицы: после входа отправляем рекорд, забираем облако, обновляем таблицу.
+  async signIn() {
+    const board = this.leaderboard;
+    if (!board || board.signingIn) return false;
+    board.signingIn = true;
+    this.requestRender();
+    const ok = await Promise.resolve(this.platform?.openAuth?.()).catch(() => false);
+    board.signingIn = false;
+    if (!ok) {
+      this.requestRender();
+      return false;
+    }
+    if (this.bestScore > 0) await Promise.resolve(this.platform.submitScore?.(this.bestScore)).catch(() => {});
+    this.syncCloud();
+    if (this.leaderboard === board) await this.loadLeaderboard();
+    return true;
+  }
+
+  // Нажатие на кнопки «таблица лидеров» и «ярлык» (экраны START и Game Over). true = обработано.
+  handlePlatformTap(x, y) {
+    if (this.state !== 'START' && this.state !== 'GAMEOVER') return false;
+    const hit = this.renderer?.hitPlatformButton?.(x, y);
+    if (!hit) return false;
+    // Сразу после проигрыша и во время рекламы нажатия кнопок не срабатывают (как и перезапуск).
+    if (this.state === 'GAMEOVER' && (this.gameOverInputLocked() || this.rewardPending || this.launchPending)) return true;
+    if (hit === 'leaderboard') this.openLeaderboard();
+    else if (hit === 'shortcut') this.addShortcut();
+    return true;
+  }
+
+  async addShortcut() {
+    const result = await Promise.resolve(this.platform?.showShortcut?.()).catch(() => ({ accepted: false }));
+    if (result?.accepted) {
+      this.shortcutAvailable = false; // ярлык добавлен: кнопка больше не нужна
+      this.requestRender();
+    }
+  }
+
+  // Просим оценку игры после нового рекорда, начиная с REVIEW_AFTER_RUNS-го забега за сессию:
+  // игрок только что порадовался. Окно показывает платформа (один раз за сессию, только если
+  // оценка доступна); мы ждём, пока игрок увидит свой результат, и не мешаем рекламе и перезапуску.
+  maybeAskForReview() {
+    if (!this.isNewBest || (this.platform?.completedRuns ?? 0) < CONFIG.YANDEX.REVIEW_AFTER_RUNS) return false;
+    const timer = setTimeout(() => {
+      if (this.state !== 'GAMEOVER' || this.isGameplayPaused() || this.rewardPending || this.launchPending) return;
+      Promise.resolve(this.platform?.requestReview?.()).catch(() => {});
+    }, 1500);
+    timer.unref?.();
+    return true;
+  }
+
   // Подсказка у первой развилки: пока игрок не прошёл ни одной и ближайшая развилка приближается
   // (она в пределах экрана, но кот ещё не въехал в неё).
   choiceHintVisible() {
@@ -388,8 +551,14 @@ export class Game {
 
   // Нажатие на экран (мышь или палец) в логических координатах холста.
   handleTap(x, y) {
-    // Кнопки звука не запускают забег.
+    // Пока открыта таблица лидеров, нажатия достаются только ей.
+    if (this.leaderboard) {
+      this.handleLeaderboardTap(x, y);
+      return false;
+    }
+    // Кнопки звука, таблицы лидеров и ярлыка не запускают забег.
     if (this.handleSoundTap?.(x, y)) return false;
+    if (this.handlePlatformTap?.(x, y)) return false;
     // Во время забега нажатие по значку паузы ставит паузу, на паузе — кнопка «продолжить».
     if (this.state === 'PLAYING') {
       if (this.userPaused) {
@@ -595,6 +764,9 @@ export class Game {
     }
     // После возрождения это тот же забег: для частоты рекламы не считаем дважды.
     if (!this.reviveUsed) this.platform?.recordRunCompleted?.();
+    // Рекорд, монеты и подсказки уходят в облако Яндекса (платформа сама ограничивает частоту).
+    this.platform?.saveCloudData?.(this.cloudSnapshot());
+    this.maybeAskForReview?.();
     this.syncGameplayLifecycle?.();
     this.feel?.onGameOver(this.player.x, this.player.y);
     if (this.isNewBest) this.feel?.onNewBest?.(this.player.x, this.player.y);
@@ -661,11 +833,18 @@ export class Game {
           offerRevive: this.canOfferRevive(),
           offerDouble: this.canOfferDoubleCoins(),
           runCoins: this.runCoins || 0,
-          coinsDoubled: !!this.coinsDoubled
+          coinsDoubled: !!this.coinsDoubled,
+          leaderboard: this.canShowLeaderboard()
         }
       );
     } else if (this.state === 'START') {
-      this.renderer.drawStartScreen(this.audio?.muted, this.audio?.volume);
+      this.renderer.drawStartScreen(this.audio?.muted, this.audio?.volume, {
+        leaderboard: this.canShowLeaderboard(),
+        shortcut: this.shortcutAvailable
+      });
     }
+
+    // Окно таблицы лидеров лежит поверх любого экрана.
+    if (this.leaderboard) this.renderer.drawLeaderboard(this.leaderboard);
   }
 }
