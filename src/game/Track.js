@@ -137,7 +137,7 @@ export class Track {
   getBreathingWidth() {
     if (this.generatedPlayable < 4) return CONFIG.BREATHING_GAP_WIDTH;
     if (this.speed / CONFIG.GAME_SPEED < 1.25) return CONFIG.BREATHING_GAP_WIDTH;
-    return Math.max(CONFIG.RISKY_GAP_LATE + 80, 160);
+    return CONFIG.BREATHING_GAP_LATE;
   }
 
   isChoiceType(type) {
@@ -199,7 +199,35 @@ export class Track {
     return this.findGapXForTravel(width, preferredCenter, travelY);
   }
 
-  findGapXForTravel(width, preferredCenter, travelY) {
+  // Стена у края дорожки (между краем и проходом) либо скрыта под бордюром (до EDGE_WALL_HIDDEN,
+  // это проход «вплотную к краю»), либо не уже EDGE_WALL_MIN: стена между ними выглядела бы
+  // крошечным кустиком. Проверяется для прохода [x, x + width].
+  edgeWallsOk(x, width) {
+    const min = CONFIG.EDGE_WALL_MIN - 0.01;
+    const hidden = CONFIG.EDGE_WALL_HIDDEN + 0.01;
+    const left = x - CONFIG.TRACK_LEFT;
+    const right = CONFIG.TRACK_RIGHT - (x + width);
+    return (left <= hidden || left >= min) && (right <= hidden || right >= min);
+  }
+
+  // Ближайшее к x допустимое положение левого края проёма ширины width: вплотную к левому
+  // или правому краю дорожки либо с нормальными стенами с обеих сторон (см. edgeWallsOk).
+  // Развилка узкая, запаса места на стены мало, поэтому подбираем место, а не отбрасываем.
+  snapToEdgeRule(x, width) {
+    if (this.edgeWallsOk(x, width)) return x;
+    const min = CONFIG.EDGE_WALL_MIN;
+    const hidden = CONFIG.EDGE_WALL_HIDDEN;
+    const lo = CONFIG.TRACK_LEFT;
+    const room = CONFIG.TRACK_WIDTH - width;
+    const options = [lo, lo + hidden, lo + min, lo + room - min, lo + room - hidden, lo + room]
+      .filter((option) => option >= lo && option <= lo + room && this.edgeWallsOk(option, width));
+    if (!options.length) return Math.max(lo, Math.min(lo + room, x));
+    return options.reduce((best, option) => (Math.abs(option - x) < Math.abs(best - x) ? option : best));
+  }
+
+  // wallWidths — все ширины прохода, которые он примет в ряду с тем же центром
+  // (у воронки проход сужается): стены у края проверяются для каждой.
+  findGapXForTravel(width, preferredCenter, travelY, wallWidths = [width]) {
     const minX = CONFIG.TRACK_LEFT;
     const maxX = CONFIG.TRACK_RIGHT - width;
     if (maxX < minX) return null;
@@ -209,6 +237,8 @@ export class Track {
     const start = Math.max(minX, Math.min(maxX, preferredCenter - width / 2));
 
     for (let x = minX; x <= maxX; x += 4) {
+      const center = x + width / 2;
+      if (!wallWidths.every((w) => this.edgeWallsOk(center - w / 2, w))) continue;
       if (!this.allExitsReach({ x, width }, travelY)) continue;
       const score = Math.abs(x - start);
       if (score < bestScore) {
@@ -310,7 +340,9 @@ export class Track {
     return true;
   }
 
-  validateGateRows(rows, initialTravel, gateHeight) {
+  // strictEdges: дополнительно требует нормальные стены у краёв дорожки (см. edgeWallsOk).
+  // Без него проверяется только проходимость, как и раньше.
+  validateGateRows(rows, initialTravel, gateHeight, strictEdges = false) {
     if (!rows.length) return false;
     const routeCount = rows[0].openings.length;
     if (routeCount < 1) return false;
@@ -342,7 +374,48 @@ export class Track {
       }
     }
 
+    // Стены у краёв дорожки в каждом ряду: либо нет, либо не уже EDGE_WALL_MIN.
+    if (strictEdges) {
+      for (const row of rows) {
+        const first = Math.min(...row.openings.map((opening) => opening.x));
+        const last = Math.max(...row.openings.map((opening) => opening.x + opening.width));
+        if (!this.edgeWallsOk(first, last - first)) return false;
+      }
+    }
+
     return true;
+  }
+
+  // Ряды узора (сдвиг, воронка, ворота) строятся от места первого ряда, и дальние ряды
+  // могут оставить у края узкую щепку. Тогда весь узор целиком сдвигается вбок (его форма
+  // и расстояния между рядами не меняются) на ближайшее место, где все стены нормальные,
+  // а до рядов по-прежнему можно доехать. Если такого места нет, возвращается null.
+  fitRowsToEdgeRule(rows, initialTravel, gateHeight) {
+    // Кандидаты сдвига: 0, сетка через 2 px и точные сдвиги, после которых стена у края
+    // ровно EDGE_WALL_MIN или ровно 0 (нужны, когда запаса места на стены почти нет).
+    const min = CONFIG.EDGE_WALL_MIN;
+    const shifts = new Set([0]);
+    for (let delta = 2; delta <= CONFIG.TRACK_WIDTH; delta += 2) {
+      shifts.add(delta);
+      shifts.add(-delta);
+    }
+    for (const row of rows) {
+      const first = Math.min(...row.openings.map((opening) => opening.x));
+      const last = Math.max(...row.openings.map((opening) => opening.x + opening.width));
+      const left = first - CONFIG.TRACK_LEFT;
+      const right = CONFIG.TRACK_RIGHT - last;
+      const hidden = CONFIG.EDGE_WALL_HIDDEN;
+      for (const shift of [min - left, -left, hidden - left, right - min, right, right - hidden]) shifts.add(shift);
+    }
+    const ordered = [...shifts].sort((a, b) => Math.abs(a) - Math.abs(b));
+    for (const shift of ordered) {
+      const moved = shift === 0 ? rows : rows.map((row) => ({
+        ...row,
+        openings: row.openings.map((opening) => ({ ...opening, x: opening.x + shift }))
+      }));
+      if (this.validateGateRows(moved, initialTravel, gateHeight, true)) return moved;
+    }
+    return null;
   }
 
   addWallsAroundOpenings(obstacles, openings, y, height) {
@@ -359,8 +432,15 @@ export class Track {
     }
   }
 
-  compileGateRows(segmentY, rows, initialTravel, gateHeight = CONFIG.PATTERN_GATE_HEIGHT) {
-    if (!this.validateGateRows(rows, initialTravel, gateHeight)) return null;
+  compileGateRows(segmentY, gateRows, initialTravel, gateHeight = CONFIG.PATTERN_GATE_HEIGHT) {
+    // Сначала узор с нормальными стенами у краёв (при необходимости сдвинутый целиком). Если
+    // такого места нет (воронка развилки, очень узкий запас), берём узор как есть: он годится
+    // по достижимости, и лучше узкая стена у края, чем потерять узор.
+    let rows = this.fitRowsToEdgeRule(gateRows, initialTravel, gateHeight);
+    if (!rows) {
+      if (!this.validateGateRows(gateRows, initialTravel, gateHeight)) return null;
+      rows = gateRows;
+    }
 
     const obstacles = [];
     const paths = [];
@@ -570,7 +650,7 @@ export class Track {
       ];
       const firstY = segmentY + offsets[0];
       initialTravel = this.getFreeTravelTo(firstY, gateHeight);
-      const firstX = this.findGapXForTravel(widths[0], this.lastGapX, initialTravel);
+      const firstX = this.findGapXForTravel(widths[0], this.lastGapX, initialTravel, widths);
       if (firstX === null) return null;
       const center = firstX + widths[0] / 2;
       rows = offsets.map((offset, index) => ({
@@ -906,11 +986,20 @@ export class Track {
 
     if (pattern === 'FUNNEL') {
       const offsets = [460, 380, 300, 220, 140];
-      const expansionFor = (definition) => (
+      const rawExpansion = (definition) => (
         definition.type === 'SAFE'
           ? CONFIG.PATTERN_FUNNEL_EXPAND_SAFE
           : CONFIG.PATTERN_FUNNEL_EXPAND_RISK
       );
+      // Развилка и так занимает почти всю дорожку: расширение воронки уменьшается так, чтобы
+      // у самого широкого ряда с одной стороны оставалась нормальная стена (EDGE_WALL_MIN), а
+      // с другой развилка шла вплотную к краю.
+      const baseWidth = definitions.reduce((sum, definition) => sum + definition.width, 0)
+        + CONFIG.TWO_PATHS_DIVIDER * (definitions.length - 1);
+      const spare = Math.max(0, CONFIG.TRACK_WIDTH - baseWidth - (CONFIG.EDGE_WALL_MIN + 4));
+      const wanted = definitions.reduce((sum, definition) => sum + rawExpansion(definition), 0);
+      const funnelScale = wanted > 0 ? Math.min(1, spare / wanted) : 0;
+      const expansionFor = (definition) => rawExpansion(definition) * funnelScale;
       const maxDefinitions = definitions.map((definition) => ({
         ...definition,
         width: definition.width + expansionFor(definition)
@@ -953,6 +1042,12 @@ export class Track {
       } else {
         step = CONFIG.PATTERN_OFFSET_GATE_SHIFT / (offsets.length - 1);
       }
+      // Узор не уводит развилку так далеко, чтобы стена у края стала узкой щепкой: развилка
+      // либо идёт у самого края (дрейф в пределах скрытой под бордюром части), либо стоит
+      // между двумя нормальными стенами.
+      const room = CONFIG.TRACK_WIDTH - start.forkWidth;
+      const drift = Math.max(CONFIG.EDGE_WALL_HIDDEN - 2, room - CONFIG.EDGE_WALL_MIN * 2 - 4);
+      step = Math.min(step, drift / (offsets.length - 1));
 
       let direction = this.director.pickDriftDirection();
       direction = this.fitDriftDirection(
@@ -996,6 +1091,7 @@ export class Track {
     const riskyLeftFirst = this.random() > 0.5;
 
     const tryLayout = (riskyLeft, forkX) => {
+      if (!this.edgeWallsOk(forkX, forkW)) return null;
       let safeX;
       let riskX;
       let dividerX;
@@ -1026,9 +1122,9 @@ export class Track {
         const candidates = distance === 0
           ? [startFork]
           : [startFork + distance, startFork - distance];
-        for (const forkX of candidates) {
-          if (forkX < minFork || forkX > maxFork) continue;
-          layout = tryLayout(riskyLeft, forkX);
+        for (const rawX of candidates) {
+          if (rawX < minFork || rawX > maxFork) continue;
+          layout = tryLayout(riskyLeft, this.snapToEdgeRule(rawX, forkW));
           if (layout) break;
         }
       }
@@ -1113,6 +1209,7 @@ export class Track {
     const hardLeftFirst = this.random() > 0.5;
 
     const tryLayout = (hardLeft, forkX) => {
+      if (!this.edgeWallsOk(forkX, forkW)) return null;
       let easyX;
       let hardX;
       let dividerX;
@@ -1143,9 +1240,9 @@ export class Track {
         const candidates = distance === 0
           ? [startFork]
           : [startFork + distance, startFork - distance];
-        for (const forkX of candidates) {
-          if (forkX < minFork || forkX > maxFork) continue;
-          layout = tryLayout(hardLeft, forkX);
+        for (const rawX of candidates) {
+          if (rawX < minFork || rawX > maxFork) continue;
+          layout = tryLayout(hardLeft, this.snapToEdgeRule(rawX, forkW));
           if (layout) break;
         }
       }

@@ -59,12 +59,17 @@ export const CONFIG = {
   REACHABILITY_MARGIN: 0.75, // Запас при проверке, успеет ли игрок доехать до прохода
 
   // Геометрия Breathing / Choice
-  BREATHING_GAP_WIDTH: 200,
-  SAFE_GAP_TUTORIAL: 200,
+  // Проходы сужались по просьбе игрока (игра была слишком лёгкой): обычные 200 / 168 → 168 / 136,
+  // безопасный путь развилки 200 / 180 / 160 → 176 / 156 / 136. Рискованные не менялись.
+  // Что отрезано у безопасного пути, ушло в разделитель (TWO_PATHS_DIVIDER): он стал виден
+  // как нормальный куст, а не как крошечный кустик, и ширина развилки осталась прежней.
+  BREATHING_GAP_WIDTH: 168,
+  BREATHING_GAP_LATE: 136,
+  SAFE_GAP_TUTORIAL: 176,
   RISKY_GAP_TUTORIAL: 96,
-  SAFE_GAP_WIDTH: 180,
+  SAFE_GAP_WIDTH: 156,
   RISKY_GAP_WIDTH: 92,
-  SAFE_GAP_LATE: 160,
+  SAFE_GAP_LATE: 136,
   RISKY_GAP_LATE: 88,
   RISK_EASY_GAP_WIDTH: 122,
   RISK_HARD_GAP_WIDTH: 96,
@@ -72,7 +77,13 @@ export const CONFIG = {
   DUAL_RISK_CHANCE_EARLY: 0.12,
   DUAL_RISK_CHANCE_MID: 0.22,
   DUAL_RISK_CHANCE_LATE: 0.30,
-  TWO_PATHS_DIVIDER: 24,
+  TWO_PATHS_DIVIDER: 48,
+  // Стены у края дорожки. Игровое поле шире видимого песка на 18 px с каждой стороны, поэтому
+  // стена до EDGE_WALL_HIDDEN (20) целиком под бордюром и не видна (проход «вплотную к краю»),
+  // а видимая часть остальных = ширина − 18. Стена между 20 и EDGE_WALL_MIN (58) выглядела
+  // бы крошечным кустиком-точкой, поэтому трасса таких стен не создаёт.
+  EDGE_WALL_HIDDEN: 20,
+  EDGE_WALL_MIN: 58,
   CHOICE_GATE_HEIGHT: 64,
   CHOICE_SHOW_HEIGHT: 280,
   CHOICE_INTERVAL_INTRO: [8, 14],
@@ -224,7 +235,10 @@ export const CONFIG = {
       // Доля непустых мест между группами (там мелочи: кусты, камни, заборчики, трава).
       CHANCE: 0.5,
       // Предмет проявляется плавно на первых FADE_ROWS строках экрана под горизонтом.
-      FADE_ROWS: 90
+      FADE_ROWS: 90,
+      // Зазор (px у кота) между краем изгороди и ближним краем кустов, камней и заборчиков:
+      // мелочи стоят на газоне за изгородью и на неё не заходят. Деревья могут нависать.
+      HEDGE_GAP: 10
     },
     // Голубое небо, облака и дальний ряд деревьев (SkyArt.js), рисуются один раз в кэш.
     SKY: {

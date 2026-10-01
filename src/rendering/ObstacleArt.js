@@ -47,23 +47,32 @@ export class ObstacleArt {
     return pack.hasAll(look === 'gate' ? GATES : PLANTERS) && pack.hasAll(BUSHES) ? pack : null;
   }
 
-  // Совсем узкий участок (препятствие почти целиком под изгородью): куст, который
-  // растёт из изгороди и закрывает весь видимый кусочек препятствия. Столкновение то же.
-  drawPackBush(pack, x0, x1, groundY, targetH, roadLeft, roadRight, seed) {
+  // Узкий участок (меньше ящика): куст ровно по ширине препятствия (+2 px с каждой стороны):
+  // видимое = настоящее. У края дорожки куст не выходит за край: он не наезжает на бордюр
+  // и изгородь. Столкновение то же.
+  // Узкий куст чуть вытягивается вверх (не выше ящика и не больше чем в 1,5 раза),
+  // чтобы читался кустом, а не комочком.
+  drawPackBush(pack, x0, x1, groundY, tallH, roadLeft, roadRight, seed) {
     const name = BUSHES[Math.floor(hash(seed + 3) * BUSHES.length) % BUSHES.length];
     const flip = hash(seed + 4) < 0.5;
-    const w = x1 - x0;
-    const size = Math.max(w + 4, targetH * 0.8);
-    let left = (x0 + x1) / 2 - size / 2;
-    // У края дорожки куст уходит в изгородь, а к дорожке заканчивается на краю препятствия.
-    if (Number.isFinite(roadLeft) && x0 <= roadLeft + 1) left = x1 + 2 - size;
-    else if (Number.isFinite(roadRight) && x1 >= roadRight - 1) left = x0 - 2;
-    else if (size > w + 4) {
-      // Посреди дорожки куст не шире препятствия: видимое = настоящее.
-      pack.draw(this.ctx, name, x0 - 2, groundY - (w + 4) * pack.aspect(name) * 0.92, w + 4, flip);
+    let left = x0 - 2;
+    let right = x1 + 2;
+    if (Number.isFinite(roadLeft)) left = Math.max(left, roadLeft);
+    if (Number.isFinite(roadRight)) right = Math.min(right, roadRight);
+    const size = right - left;
+    if (size < 1) return;
+    const natural = size * pack.aspect(name) * 0.92;
+    const h = Math.max(natural, Math.min(natural * 1.5, tallH));
+    if (h - natural < 0.5) {
+      pack.draw(this.ctx, name, left, groundY - natural, size, flip);
       return;
     }
-    pack.draw(this.ctx, name, left, groundY - size * pack.aspect(name) * 0.92, size, flip);
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(left, groundY);
+    ctx.scale(1, h / natural);
+    pack.draw(ctx, name, 0, -natural, size, flip);
+    ctx.restore();
   }
 
   // Участок шириной w делим на n одинаковых мест (несколько ящиков/ворот рядом).
@@ -122,6 +131,8 @@ export class ObstacleArt {
   }
 
   drawSpan(look, x0, x1, groundY, catH, scale, rawSeed, roadLeft, roadRight) {
+    // Стены уже EDGE_WALL_MIN трасса не создаёт (Track.edgeWallsOk), так что всё, что уже
+    // 3 px, — это погрешность округления у края дорожки.
     if (x1 - x0 < 3) return;
     const seed = Number.isFinite(rawSeed) ? rawSeed : 1;
     // save/restore: цвета, толщина линий и прозрачность не «утекают» дальше.
@@ -134,7 +145,7 @@ export class ObstacleArt {
     if (pack && look === 'gate') {
       this.drawPackSpan(pack, GATES, x0, x1, groundY, gateH, this.height('gate', catH, scale), seed);
     } else if (pack && x1 - x0 < catH * (this.cfg().PLANTER_NEAR_CAT ?? 0.36) * scale * (this.cfg().BUSH_MAX_WIDTH ?? 0.9)) {
-      this.drawPackBush(pack, x0, x1, groundY, catH * (this.cfg().PLANTER_NEAR_CAT ?? 0.36) * scale * 1.75,
+      this.drawPackBush(pack, x0, x1, groundY, catH * (this.cfg().PLANTER_NEAR_CAT ?? 0.36) * scale * 1.1,
         roadLeft, roadRight, seed);
     } else if (pack) {
       const H = catH * (this.cfg().PLANTER_NEAR_CAT ?? 0.36) * scale;

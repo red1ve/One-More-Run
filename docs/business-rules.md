@@ -24,6 +24,10 @@ Difficulty may affect:
 
 The difficulty system must never intentionally generate an impossible situation.
 
+Gap widths (px of track, 400 px wide; the cat is 36 px). Narrowed twice on 2026-10-01 because the game felt too easy: ordinary passages `BREATHING_GAP_WIDTH` 168 for the first ~14 s and `BREATHING_GAP_LATE` 136 afterwards (were 200 / 168); the SAFE gap of a choice `SAFE_GAP_TUTORIAL / _WIDTH / _LATE` 176 / 156 / 136 (were 200 / 180 / 160). RISK gaps (`RISKY_GAP_*`, `RISK_EASY/HARD_GAP_WIDTH`) were not changed. What was cut from SAFE went into the divider between SAFE and RISK (`TWO_PATHS_DIVIDER` 24 → 48), so the fork keeps its width and the divider reads as a proper bush. The generator still widens a gap when it would otherwise be unreachable.
+
+Walls at the road edge: the playfield is 18 px wider than the visible sand on each side, so a wall up to `EDGE_WALL_HIDDEN` (20) is hidden under the curb (a passage flush with the edge) and any other wall shows `width − 18` px. A wall between 20 and `EDGE_WALL_MIN` (58) would be drawn as a speck of a bush, so `Track` never creates one (`edgeWallsOk`, `snapToEdgeRule`, `fitRowsToEdgeRule`): choice forks and gaps are placed at an allowed spot, pattern rows (offset, funnel, gates) are shifted as a whole, the funnel widening and the offset drift of a choice are reduced when there is no room. Reachability is still checked for every row (`scripts/phase1h-check.mjs`, `phase9-check.mjs`).
+
 ## Rewarded advertising
 
 Rewarded advertising is not part of the current release. There is no continue, revive, score reward, or Coin reward for watching an ad.

@@ -1,12 +1,16 @@
 import { CONFIG } from '../config.js';
 import { TREE_BASE_X } from './ArtPack.js';
+import { hedgeOuterReach } from './HedgeArt.js';
 
 // Боковой декор на газоне за изгородью, как на референсе: деревья, кусты, камни,
 // заборчики и трава — картинки из assets/art-pack (trees/, props/). Каждый предмет
 // задаётся номером своего места в мире, стоит на земле и растёт по мере приближения.
-// Декор рисуется ПОСЛЕ изгороди и обрезается по дорожке: деревья и кусты нависают над
-// изгородью, но не над песком. Предметы сортируются по линии земли (дальние первыми),
-// поэтому ближнее всегда перекрывает дальнее.
+// Декор рисуется ПОСЛЕ изгороди и обрезается по дорожке. Всё стоит на одной земле за
+// изгородью: у мелочи (кусты, камни, заборчики, трава) ближний к дороге край, у дерева
+// ствол начинается за внешним краем изгороди (крона может нависать над ней, но ствол на
+// кусте не стоит и дерево не «висит в воздухе»). Порядок рисования один для всех:
+// по линии земли (y), дальние первыми, ближние поверх. Что ближе к камере (ниже на
+// экране), то и перекрывает.
 
 const SHADOW = 'rgba(74, 52, 40, 0.16)'; // тень на траве: InkBrown 16%
 
@@ -44,11 +48,10 @@ export class SideDecorArt {
     return CONFIG.VISUAL.SIDE_DECOR || {};
   }
 
+  // Внешний край изгороди (вместе с самыми широкими клочками) на глубине p.
   hedgeOuter(p, side) {
-    const h = CONFIG.VISUAL.HEDGE_WALL || {};
-    const reach = (h.SHOULDER_NEAR ?? 8) + (h.CURB_NEAR ?? 12) + (h.WIDTH_NEAR ?? 74);
     const edge = side < 0 ? p.roadLeft : p.roadRight;
-    return edge + side * reach * p.scale;
+    return edge + side * hedgeOuterReach() * p.scale;
   }
 
   draw(camera) {
@@ -61,21 +64,12 @@ export class SideDecorArt {
     if (!pack?.hasAll(TREE_SPRITES) || !pack.hasAll(ALL_PROP_SPRITES)) return;
     ctx.save();
     art.clipOutsideRoad();
-    // Порядок рисования — по линии земли (y): дальние первыми, ближние поверх.
-    // Случайный сдвиг предмета по y меняет порядок слотов, поэтому сортируем по y.
+    // Порядок рисования — по линии земли (y): дальние первыми, ближние поверх. Случайный
+    // сдвиг предмета по y меняет порядок слотов, поэтому сортируем по y.
     const order = this.order;
     order.length = 0;
     for (let i = 0; i < items.length; i += STRIDE) order.push(i);
-    for (let a = 1; a < order.length; a += 1) { // вставками: почти отсортировано, без выделений
-      const current = order[a];
-      const y = items[current + 3];
-      let b = a - 1;
-      while (b >= 0 && items[order[b] + 3] > y) {
-        order[b + 1] = order[b];
-        b -= 1;
-      }
-      order[b + 1] = current;
-    }
+    this.sortByGround(order, 0, order.length);
     for (let n = 0; n < order.length; n += 1) {
       const i = order[n];
       const kind = KINDS[items[i + 1]];
@@ -89,6 +83,21 @@ export class SideDecorArt {
       else this.drawPackProp(ctx, pack, x, y, size, PROP_SPRITES[kind].names[name], flip, kind);
     }
     ctx.restore();
+  }
+
+  // Сортировка части order [from, to) по y предмета: вставками (почти отсортировано, без выделений).
+  sortByGround(order, from, to) {
+    const items = this.items;
+    for (let a = from + 1; a < to; a += 1) {
+      const current = order[a];
+      const y = items[current + 3];
+      let b = a - 1;
+      while (b >= from && items[order[b] + 3] > y) {
+        order[b + 1] = order[b];
+        b -= 1;
+      }
+      order[b + 1] = current;
+    }
   }
 
   // Что стоит на месте k стороны side — зависит ТОЛЬКО от номера места, не от соседей
@@ -133,26 +142,35 @@ export class SideDecorArt {
       const fade = Math.min(1, rows / fadeRows);
       const alpha = fade * fade * (3 - 2 * fade);
       if (alpha < 0.02) break;
-      const s = p.scale * catH;
       for (let side = -1; side <= 1; side += 2) {
         const kind = this.slotKind(k, side);
         if (kind < 0) continue;
         const seed = k * 13.1 + side * 5.7;
         const tree = kind === TREE;
         const variant = 0.88 + hash(seed + 9) * 0.24;
-        const size = tree ? s * treeH * variant : s * PROP_SPRITES[KINDS[kind]].width * variant;
         const names = tree ? TREE_SPRITES : PROP_SPRITES[KINDS[kind]].names;
         const name = Math.floor(hash(seed + 7) * names.length) % names.length;
         const flip = hash(seed + 8) < 0.5 ? 1 : 0;
-        // Отступ от внешнего края изгороди в ширинах дорожки: деревья стоят дальше
-        // (и могут слегка заходить на изгородь), мелочи ближе к дороге.
-        const off = tree
-          ? -0.06 + 1.3 * hash(seed + 2) ** 1.4
-          : 0.02 + 0.8 * hash(seed + 2);
-        const outer = this.hedgeOuter(p, side);
-        const x = outer + side * off * p.roadWidth;
-        if (x < -size || x > art.width + size) continue;
+        // Предмет стоит на своей линии земли y; размер и отступ считаются по дороге ИМЕННО
+        // на этой глубине (q), а не на глубине слота: тогда он ровно в перспективе.
         const y = p.drawY + hash(seed + 3) * period * 0.4 * p.scale;
+        const q = art.roadAt(art.screenToWorldY(y));
+        const s = q.scale * catH;
+        const size = tree ? s * treeH * variant : s * PROP_SPRITES[KINDS[kind]].width * variant;
+        // Отступ от внешнего края изгороди (в ширинах дорожки + зазор HEDGE_GAP).
+        // Мелочь стоит центром, поэтому её ближний край = outer + gap, центр дальше на size / 2.
+        // Дерево: ствол отступает от изгороди на зазор и пятую часть ширины кроны, поэтому
+        // стоит на газоне, а крона слегка нависает над изгородью.
+        const outer = this.hedgeOuter(q, side);
+        const gap = (cfg.HEDGE_GAP ?? 10) * q.scale;
+        let x;
+        if (tree) {
+          const crown = size / art.artPack.aspect(names[name]);
+          x = outer + side * (gap + crown * 0.2 + 1.3 * hash(seed + 2) ** 1.4 * q.roadWidth);
+        } else {
+          x = outer + side * (size / 2 + gap + 0.8 * hash(seed + 2) * q.roadWidth);
+        }
+        if (x < -size || x > art.width + size) continue;
         // ключ места, вид, x, y, размер, картинка, отражение, прозрачность
         items.push(k * 2 + (side < 0 ? 0 : 1), kind, x, y, size, name, flip, alpha);
       }
