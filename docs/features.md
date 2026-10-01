@@ -107,6 +107,7 @@ Current implementation notes:
 | Game Over replay motivation | P1 | DONE   |
 | Mute toggle          | P1       | DONE    |
 | Volume control (−/+, default 50%) | P1 | DONE |
+| Pause (HUD button, P / Esc)       | P1 | DONE |
 | Full settings menu   | P1       | PLANNED |
 | Russian localization | P0       | DONE    |
 | English UI           | P0       | DONE    |
@@ -154,5 +155,7 @@ Web Audio is created once, unlocked by a user gesture, muted via storage key `au
 Run music (`src/services/MusicScore.js` + `AudioService`): a very simple calm 8-bar loop (C - Am - F - G, three-note pentatonic phrases, soft bass and a long quiet chord) synthesized with Web Audio, no audio files. It plays only during a run, fades in and out, speeds up from 100 to 120 BPM with the track speed, and pauses together with the audio context (mute, hidden tab, ad, platform pause). Volume and tempo are in `CONFIG.MUSIC`. The old cat meow on RISK crossings was removed (2026-10-01): RISK keeps its visual feedback only.
 
 Yandex integration uses `YandexService` as an optional platform layer. The game remains fully playable when `/sdk.js`, authorization, leaderboards, or ads are unavailable. Rewarded ads (Phase 5): one revive per run and ×2 coins of the run on the Game Over screen, reward only after `onRewarded`.
+
+Pause (2026-10-01): during a run a round pause button sits in the HUD between the score and the coin pill (same capsule style, two brown bars). It, `P` or `Esc` freezes the run (`Game.userPaused`, counted in `isGameplayPaused()`, so Yandex GameplayAPI is stopped too) and opens a card: PAUSE, score, best, RESUME (button, `P`, `Esc`, Space or Enter) and the sound row [-] [SOUND n%] [+] under it. Music keeps playing on pause so volume changes can be heard. Taps on the card never start a new run; `R` does not restart from the pause. Held keys and fingers are released on pause and resume. A hidden tab does not set the pause by itself (the game freezes while hidden and continues on return, as before).
 
 Volume (2026-10-01): one master volume for effects and music, 0-100% in 10% steps, default 50% (the level the sounds were tuned for). Buttons [-] [SOUND n%] [+] on the START and Game Over screens (tapping the middle capsule mutes), keys `-` / `+`, `M` mutes. Saved in storage keys `audioVolume` and `audioMuted`. Settings in `CONFIG.AUDIO`.

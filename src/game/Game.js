@@ -56,6 +56,7 @@ export class Game {
     this.hidden = false;
     this.platformPaused = false;
     this.adPaused = false;
+    this.userPaused = false; // игрок поставил забег на паузу кнопкой, P или Esc
     this.launchPending = false;
     this.adFinished = false;
 
@@ -100,7 +101,36 @@ export class Game {
   }
 
   isGameplayPaused() {
-    return this.hidden || this.platformPaused || this.adPaused;
+    return this.hidden || this.platformPaused || this.adPaused || !!this.userPaused;
+  }
+
+  // Пауза по желанию игрока: только во время забега. Мир и время стоят, экран паузы
+  // показывает счёт и настройки звука. Музыка при этом не умолкает, чтобы было слышно,
+  // как меняется громкость.
+  pause() {
+    if (this.state !== 'PLAYING' || this.userPaused) return false;
+    this.userPaused = true;
+    // Палец или клавиша, зажатые в момент паузы, не должны рулить котом после возврата.
+    this.keyboardInput?.reset?.();
+    this.mouseInput?.reset?.();
+    this.touchInput?.reset?.();
+    this.syncGameplayLifecycle?.();
+    return true;
+  }
+
+  resume() {
+    if (!this.userPaused) return false;
+    this.userPaused = false;
+    this.keyboardInput?.reset?.();
+    this.mouseInput?.reset?.();
+    this.touchInput?.reset?.();
+    this.lastTime = performance.now();
+    this.syncGameplayLifecycle?.();
+    return true;
+  }
+
+  togglePause() {
+    return this.userPaused ? this.resume() : this.pause();
   }
 
   syncGameplayLifecycle() {
@@ -130,9 +160,10 @@ export class Game {
     return next;
   }
 
-  // Нажатие на кнопки звука (экраны START и Game Over). true = нажатие обработано.
+  // Нажатие на кнопки звука (экраны START, Game Over и пауза). true = нажатие обработано.
   handleSoundTap(x, y) {
-    if (this.state !== 'START' && this.state !== 'GAMEOVER') return false;
+    const onPause = this.state === 'PLAYING' && this.userPaused;
+    if (this.state !== 'START' && this.state !== 'GAMEOVER' && !onPause) return false;
     const hit = this.renderer?.hitSoundButton?.(x, y);
     if (!hit) return false;
     if (hit === 'minus') this.changeVolume(-1);
@@ -185,6 +216,7 @@ export class Game {
       this.showFirstRunHints = false;
     }
     this.state = 'PLAYING';
+    this.userPaused = false;
     this.isNewBest = false;
     this.score = 0;
     this.distanceScore = 0;
@@ -345,6 +377,15 @@ export class Game {
   handleTap(x, y) {
     // Кнопки звука не запускают забег.
     if (this.handleSoundTap?.(x, y)) return false;
+    // Во время забега нажатие по значку паузы ставит паузу, на паузе — кнопка «продолжить».
+    if (this.state === 'PLAYING') {
+      if (this.userPaused) {
+        if (this.renderer?.hitResumeButton?.(x, y)) this.resume();
+      } else if (this.renderer?.hitPauseButton?.(x, y)) {
+        this.pause();
+      }
+      return false;
+    }
     if (this.state === 'GAMEOVER') {
       if (this.gameOverInputLocked() || this.rewardPending) return false;
       const hit = this.renderer?.hitGameOverButton?.(x, y);
@@ -571,11 +612,20 @@ export class Game {
       this.coins,
       this.feel,
       this.audio?.muted,
-      // На экранах START и Game Over звук показан отдельной капсулой.
-      this.state === 'PLAYING'
+      // На экранах START, Game Over и паузы звук показан отдельной капсулой.
+      this.state === 'PLAYING' && !this.userPaused,
+      // Значок паузы — только пока забег идёт.
+      this.state === 'PLAYING' && !this.userPaused
     );
 
-    if (this.state === 'GAMEOVER') {
+    if (this.state === 'PLAYING' && this.userPaused) {
+      this.renderer.drawPause(
+        Math.floor(this.score),
+        this.bestScore,
+        this.audio?.muted,
+        this.audio?.volume
+      );
+    } else if (this.state === 'GAMEOVER') {
       this.renderer.drawGameOver(
         Math.floor(this.distanceScore + this.pathReward),
         this.bestScore,

@@ -296,6 +296,20 @@ export class GardenArt {
     ctx.stroke();
   }
 
+  // Кнопка паузы: круглая капсула как у остальных значков HUD и две коричневые полоски.
+  hudPauseButton(cx, cy, r) {
+    const ctx = this.ctx;
+    this.hudPill(cx - r, cy - r, r * 2, r * 2);
+    ctx.fillStyle = this.c.InkBrown;
+    const barW = r * 0.28;
+    const barH = r * 0.88;
+    const gap = r * 0.3;
+    this.roundedRectPath(cx - gap / 2 - barW, cy - barH / 2, barW, barH, barW * 0.4);
+    ctx.fill();
+    this.roundedRectPath(cx + gap / 2, cy - barH / 2, barW, barH, barW * 0.4);
+    ctx.fill();
+  }
+
   hudIconDisc(cx, cy, r, fill) {
     const ctx = this.ctx;
     ctx.fillStyle = this.c.ShadowDust;

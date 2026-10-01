@@ -77,8 +77,19 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (e.repeat) return;
 
+    // Пауза: P или Esc ставят и снимают её во время забега.
+    if (e.code === 'KeyP' || e.code === 'Escape') {
+      game.togglePause();
+      return;
+    }
+
     if (e.code === 'KeyR' || e.code === 'Space' || e.code === 'Enter') {
       if (e.code === 'Space') e.preventDefault();
+      // На паузе пробел и Enter снимают паузу, а R забег не перезапускает.
+      if (game.userPaused) {
+        if (e.code !== 'KeyR') game.resume();
+        return;
+      }
       launchFromGesture();
     }
   });

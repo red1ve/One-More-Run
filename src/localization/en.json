@@ -15,6 +15,10 @@
     "off": "M MUTED",
     "level": "SOUND {n}%"
   },
+  "pause": {
+    "title": "PAUSE",
+    "resume": "RESUME  •  P"
+  },
   "over": {
     "title": "GAME OVER",
     "newBest": "NEW BEST",
