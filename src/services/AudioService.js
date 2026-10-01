@@ -1,7 +1,15 @@
 import { CONFIG } from '../config.js';
+import {
+  LOOP_STEPS,
+  STEP_EVENTS,
+  bpmFor,
+  midiToFreq,
+  secondsPerStep
+} from './MusicScore.js';
 
-const MEOW_URL = new URL('../../assets/audio/meow.ogg', import.meta.url).href;
-
+// Звуки: короткие эффекты (тоны) и спокойная музыка забега. Всё синтезируется
+// Web Audio, звуковых файлов нет. Контекст запускается только после жеста игрока
+// и приостанавливается, когда вкладка скрыта, идёт реклама или пауза платформы.
 export class AudioService {
   constructor() {
     this.ctx = null;
@@ -11,60 +19,33 @@ export class AudioService {
     this.adPaused = false;
     this.platformPaused = false;
     this.lastPlayed = {};
-    this.meowBuffer = null;
-    this.meowBytes = null;
-    this.meowFailed = false;
-    this.meowWarned = false;
-    this.meowLoadStarted = false;
-  }
-
-  ensureMeowLoaded() {
-    if (this.meowLoadStarted || this.meowFailed) return;
-    this.meowLoadStarted = true;
-    if (typeof fetch !== 'function') {
-      this.failMeow('fetch unavailable');
-      return;
-    }
-    fetch(MEOW_URL)
-      .then((response) => {
-        if (!response.ok) throw new Error(`meow ${response.status}`);
-        return response.arrayBuffer();
-      })
-      .then((bytes) => {
-        this.meowBytes = bytes;
-        this.decodeMeow();
-      })
-      .catch(() => this.failMeow('missing or unreadable meow asset'));
-  }
-
-  failMeow(reason) {
-    this.meowFailed = true;
-    if (!this.meowWarned) {
-      this.meowWarned = true;
-      console.warn(`AudioService: RISK meow disabled (${reason})`);
-    }
+    this.volume = CONFIG.AUDIO.VOLUME_DEFAULT; // 0..1, выбирает игрок
+    this.master = null; // общий регулятор громкости: через него идёт всё (эффекты и музыка)
+    this.music = {
+      active: false, // игра просит музыку (идёт забег)
+      running: false, // планировщик крутится
+      step: 0,
+      nextTime: 0,
+      intensity: 0,
+      timer: null,
+      gain: null
+    };
   }
 
   unlock() {
     const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
     if (!Ctx) return false;
     if (!this.ctx) this.ctx = new Ctx();
+    if (!this.master) {
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.masterGain();
+      this.master.connect(this.ctx.destination);
+    }
     this.unlocked = true;
     this.syncContext();
-    this.ensureMeowLoaded();
-    this.decodeMeow();
+    // Музыку могли попросить до первого жеста: запускаем, как только звук разрешён.
+    if (this.music.active && !this.music.running) this.startMusicLoop();
     return true;
-  }
-
-  decodeMeow() {
-    if (this.meowFailed || this.meowBuffer || !this.ctx || !this.meowBytes) return;
-    if (typeof this.ctx.decodeAudioData !== 'function') return;
-    const copy = this.meowBytes.slice(0);
-    Promise.resolve(this.ctx.decodeAudioData(copy))
-      .then((buffer) => {
-        this.meowBuffer = buffer;
-      })
-      .catch(() => this.failMeow('could not decode meow asset'));
   }
 
   setMuted(muted) {
@@ -75,6 +56,23 @@ export class AudioService {
   toggleMuted() {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  // Громкость 0..1. 0,5 — «нормальная» (как настроены эффекты и музыка): выше — громче,
+  // ниже — тише. Звук выключается отдельно (M), громкость при этом сохраняется.
+  setVolume(volume) {
+    const value = Number(volume);
+    this.volume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : CONFIG.AUDIO.VOLUME_DEFAULT;
+    if (this.master) this.master.gain.value = this.masterGain();
+  }
+
+  masterGain() {
+    return this.volume * CONFIG.AUDIO.MASTER_SCALE;
+  }
+
+  // Куда подключать звуки: через общий регулятор громкости.
+  output() {
+    return this.master || this.ctx.destination;
   }
 
   setHidden(hidden) {
@@ -120,7 +118,6 @@ export class AudioService {
   play(name) {
     if (!this.canPlay()) return false;
     const now = this.ctx.currentTime;
-    if (name === 'meow') return this.playMeow(now);
 
     const last = this.lastPlayed[name] || 0;
     if (now - last < CONFIG.FEEL.AUDIO_COOLDOWN && name !== 'gameover' && name !== 'newbest') {
@@ -155,34 +152,6 @@ export class AudioService {
     return true;
   }
 
-  playMeow(now) {
-    if (
-      this.lastPlayed.meow !== undefined
-      && now - this.lastPlayed.meow < CONFIG.FEEL.MEOW_COOLDOWN
-    ) return false;
-    this.ensureMeowLoaded();
-    this.decodeMeow();
-    if (this.meowFailed) return false;
-    if (!this.meowBuffer || typeof this.ctx.createBufferSource !== 'function') return false;
-
-    try {
-      const source = this.ctx.createBufferSource();
-      const gain = this.ctx.createGain();
-      source.buffer = this.meowBuffer;
-      source.playbackRate.value = 0.97 + Math.random() * 0.06;
-      const amp = CONFIG.FEEL.AUDIO_VOLUME * (0.85 + Math.random() * 0.12);
-      gain.gain.setValueAtTime(Math.max(0.001, amp), now);
-      source.connect(gain);
-      gain.connect(this.ctx.destination);
-      source.start(now);
-      this.lastPlayed.meow = now;
-      return true;
-    } catch (error) {
-      this.failMeow(error.message || 'meow playback failed');
-      return false;
-    }
-  }
-
   tone(freq, duration, type, volume, delay = 0) {
     if (!this.ctx || this.muted || this.hidden || this.adPaused || this.platformPaused) return;
     const t = this.ctx.currentTime + delay;
@@ -195,8 +164,124 @@ export class AudioService {
     gain.gain.exponentialRampToValueAtTime(Math.max(0.001, amp), t + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.output());
     osc.start(t);
     osc.stop(t + duration + 0.02);
+  }
+
+  // --- Музыка забега ---
+  // Игра говорит только «музыка нужна / не нужна» и «насколько быстро идёт забег».
+  // Ноты ставятся в расписание Web Audio чуть вперёд; пока контекст приостановлен
+  // (пауза, реклама, звук выключен), его время стоит, и музыка стоит вместе с ним.
+
+  setMusicActive(active) {
+    const music = this.music;
+    const wanted = !!active && CONFIG.MUSIC.ENABLED;
+    if (wanted === music.active) return;
+    music.active = wanted;
+    if (wanted) {
+      if (this.unlocked && this.ctx) this.startMusicLoop();
+    } else {
+      this.stopMusicLoop();
+    }
+  }
+
+  // 0 — начало забега, 1 — максимальная скорость. Влияет на темп.
+  setMusicIntensity(t) {
+    this.music.intensity = Math.max(0, Math.min(1, Number(t) || 0));
+  }
+
+  musicBpm() {
+    return bpmFor(this.music.intensity, CONFIG.MUSIC.BPM_START, CONFIG.MUSIC.BPM_MAX);
+  }
+
+  startMusicLoop() {
+    const music = this.music;
+    if (music.running || !this.ctx) return;
+    music.running = true;
+    music.step = 0;
+    music.nextTime = this.ctx.currentTime + 0.08;
+    if (!music.gain) {
+      music.gain = this.ctx.createGain();
+      music.gain.connect(this.output());
+    }
+    const now = this.ctx.currentTime;
+    music.gain.gain.cancelScheduledValues(now);
+    music.gain.gain.setValueAtTime(0.0001, now);
+    music.gain.gain.linearRampToValueAtTime(CONFIG.MUSIC.VOLUME, now + CONFIG.MUSIC.FADE_IN);
+    this.tickMusic();
+    music.timer = setInterval(() => this.tickMusic(), CONFIG.MUSIC.TICK_MS);
+  }
+
+  stopMusicLoop() {
+    const music = this.music;
+    if (!music.running) return;
+    music.running = false;
+    if (music.timer) clearInterval(music.timer);
+    music.timer = null;
+    if (this.ctx && music.gain) {
+      const now = this.ctx.currentTime;
+      music.gain.gain.cancelScheduledValues(now);
+      music.gain.gain.setValueAtTime(Math.max(0.0001, music.gain.gain.value || CONFIG.MUSIC.VOLUME), now);
+      music.gain.gain.linearRampToValueAtTime(0.0001, now + CONFIG.MUSIC.FADE_OUT);
+    }
+  }
+
+  tickMusic() {
+    const music = this.music;
+    if (!music.running || !this.ctx) return;
+    const ahead = this.ctx.currentTime + CONFIG.MUSIC.LOOKAHEAD;
+    // Если планировщик сильно отстал (вкладка тормозила), не вываливаем кучу нот разом.
+    if (music.nextTime < this.ctx.currentTime - 0.5) music.nextTime = this.ctx.currentTime + 0.05;
+    let guard = 0;
+    while (music.nextTime < ahead && guard < 64) {
+      this.scheduleMusicStep(music.step, music.nextTime);
+      music.step = (music.step + 1) % LOOP_STEPS;
+      music.nextTime += secondsPerStep(this.musicBpm());
+      guard += 1;
+    }
+  }
+
+  scheduleMusicStep(step, time) {
+    const events = STEP_EVENTS[step];
+    const stepLength = secondsPerStep(this.musicBpm());
+    for (let i = 0; i < events.length; i += 1) {
+      const event = events[i];
+      const length = event.steps * stepLength;
+      if (event.voice === 'melody') {
+        this.musicVoice('triangle', midiToFreq(event.midi), time, length * 0.95, 0.11 * event.accent, 2800, 0.01, false);
+      } else if (event.voice === 'bass') {
+        this.musicVoice('triangle', midiToFreq(event.midi), time, length * 0.92, 0.12 * event.accent, 480, 0.02, false);
+      } else if (event.voice === 'pad') {
+        this.musicVoice('sine', midiToFreq(event.midi), time, length, 0.032 * event.accent, 1400, 0.35, true);
+      }
+    }
+  }
+
+  // Один звук музыки. Щипок (sustain = false): быстро берётся и затухает. Длинный аккорд
+  // (sustain = true): плавно нарастает, держится и плавно уходит.
+  musicVoice(type, freq, time, duration, amp, cutoff, attack = 0.01, sustain = false) {
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    const length = Math.max(0.05, duration);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, time);
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(cutoff, time);
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.linearRampToValueAtTime(Math.max(0.001, amp), time + attack);
+    if (sustain) {
+      gain.gain.linearRampToValueAtTime(Math.max(0.001, amp), time + Math.max(attack, length - 0.4));
+      gain.gain.linearRampToValueAtTime(0.0001, time + length);
+    } else {
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + length);
+    }
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.music.gain);
+    osc.start(time);
+    osc.stop(time + length + 0.03);
   }
 }

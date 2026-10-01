@@ -103,7 +103,6 @@ export class GameFeel {
     this.playerPulse = 0.7 + intensity * 0.3;
     this.hudPulse.streak = 1;
     this.triggerFlash(CONFIG.COLORS.FLASH_RISK, intensity);
-    this.audio?.play('meow');
 
     if (hitMax) {
       this.triggerShake(CONFIG.FEEL.SHAKE_MAX_MULT, CONFIG.FEEL.SHAKE_DURATION_MAX);

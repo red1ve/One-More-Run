@@ -59,12 +59,17 @@ export const CONFIG = {
   REACHABILITY_MARGIN: 0.75, // Запас при проверке, успеет ли игрок доехать до прохода
 
   // Геометрия Breathing / Choice
-  BREATHING_GAP_WIDTH: 200,
-  SAFE_GAP_TUTORIAL: 200,
+  // Проходы сужались по просьбе игрока (игра была слишком лёгкой): обычные 200 / 168 → 168 / 136,
+  // безопасный путь развилки 200 / 180 / 160 → 176 / 156 / 136. Рискованные не менялись.
+  // Что отрезано у безопасного пути, ушло в разделитель (TWO_PATHS_DIVIDER): он стал виден
+  // как нормальный куст, а не как крошечный кустик, и ширина развилки осталась прежней.
+  BREATHING_GAP_WIDTH: 168,
+  BREATHING_GAP_LATE: 136,
+  SAFE_GAP_TUTORIAL: 176,
   RISKY_GAP_TUTORIAL: 96,
-  SAFE_GAP_WIDTH: 180,
+  SAFE_GAP_WIDTH: 156,
   RISKY_GAP_WIDTH: 92,
-  SAFE_GAP_LATE: 160,
+  SAFE_GAP_LATE: 136,
   RISKY_GAP_LATE: 88,
   RISK_EASY_GAP_WIDTH: 122,
   RISK_HARD_GAP_WIDTH: 96,
@@ -72,7 +77,13 @@ export const CONFIG = {
   DUAL_RISK_CHANCE_EARLY: 0.12,
   DUAL_RISK_CHANCE_MID: 0.22,
   DUAL_RISK_CHANCE_LATE: 0.30,
-  TWO_PATHS_DIVIDER: 24,
+  TWO_PATHS_DIVIDER: 48,
+  // Стены у края дорожки. Игровое поле шире видимого песка на 18 px с каждой стороны, поэтому
+  // стена до EDGE_WALL_HIDDEN (20) целиком под бордюром и не видна (проход «вплотную к краю»),
+  // а видимая часть остальных = ширина − 18. Стена между 20 и EDGE_WALL_MIN (58) выглядела
+  // бы крошечным кустиком-точкой, поэтому трасса таких стен не создаёт.
+  EDGE_WALL_HIDDEN: 20,
+  EDGE_WALL_MIN: 58,
   CHOICE_GATE_HEIGHT: 64,
   CHOICE_SHOW_HEIGHT: 280,
   CHOICE_INTERVAL_INTRO: [8, 14],
@@ -152,7 +163,6 @@ export const CONFIG = {
     PLAYER_BOB: 1.6,
     PLAYER_RUN_FPS: 10,
     PLAYER_RUN_SQUASH: 0.04,
-    MEOW_COOLDOWN: 0.5,
     SPEED_SCROLL_SCALE: 0.35,
     AUDIO_VOLUME: 0.18,
     AUDIO_COOLDOWN: 0.05,
@@ -162,6 +172,28 @@ export const CONFIG = {
     INTENSITY_STREAK: 0.75,
     INTENSITY_STREAK_LOSS: 0.82,
     INTENSITY_MAX: 1
+  },
+
+  // Общая громкость звука (регулятор в игре). VOLUME_DEFAULT — при первом запуске (50%).
+  // MASTER_SCALE: во сколько раз усиливается звук при 100% (при 50% — ровно как настроено).
+  AUDIO: {
+    VOLUME_DEFAULT: 0.5,
+    VOLUME_STEP: 0.1,
+    MASTER_SCALE: 2
+  },
+
+  // Музыка забега (AudioService + MusicScore): спокойная мелодия без звуковых файлов.
+  // VOLUME — общая громкость музыки; она тише эффектов, чтобы монеты и удары были слышны.
+  // Темп растёт от BPM_START до BPM_MAX вместе со скоростью забега.
+  MUSIC: {
+    ENABLED: true,
+    VOLUME: 0.8,
+    BPM_START: 100,
+    BPM_MAX: 120,
+    FADE_IN: 0.9,
+    FADE_OUT: 0.7,
+    LOOKAHEAD: 0.25,
+    TICK_MS: 50
   },
 
   // Visual Bible drawing rules (presentation only)
@@ -199,16 +231,14 @@ export const CONFIG = {
       // следующей группы — всего EVERY мест (слева и справа группы сдвинуты).
       // При 70 px и EVERY 10 — группа раз в 700 px мира (≈ 1.5 с бега),
       // деревья ≈ 15% мест, остальное — мелочи и пустые места.
-      TREES: { EVERY: 10, GROUP: [1, 2], LEFT_OFFSET: 0, RIGHT_OFFSET: 5 },
+      TREES: { EVERY: 12, GROUP: [1, 2], LEFT_OFFSET: 0, RIGHT_OFFSET: 6 },
       // Доля непустых мест между группами (там мелочи: кусты, камни, заборчики, трава).
-      CHANCE: 0.8,
-      // Размер по глубине: 1 у кота, к горизонту к нулю; DEPTH_HALF — насколько
-      // быстро уменьшается (чем меньше, тем дольше предметы остаются крупными).
-      DEPTH_HALF: 1.5,
-      // Предметы мельче MIN_PX px на экране не рисуются; следующие FADE_PX px
-      // они плавно проявляются.
-      MIN_PX: 8,
-      FADE_PX: 8
+      CHANCE: 0.5,
+      // Предмет проявляется плавно на первых FADE_ROWS строках экрана под горизонтом.
+      FADE_ROWS: 90,
+      // Зазор (px у кота) между краем изгороди и ближним краем кустов, камней и заборчиков:
+      // мелочи стоят на газоне за изгородью и на неё не заходят. Деревья могут нависать.
+      HEDGE_GAP: 10
     },
     // Голубое небо, облака и дальний ряд деревьев (SkyArt.js), рисуются один раз в кэш.
     SKY: {
@@ -254,7 +284,7 @@ export const CONFIG = {
       // Доля цветущих клочков (решается один раз на слот): ≈ каждый пятый.
       HEDGE_FLOWER_CHANCE: 0.2,
       // Высота дерева в долях роста кота.
-      TREE_HEIGHT: 1.75
+      TREE_HEIGHT: 1.45
     },
     TREE_NEAR_CAT: 2.48,
     CHOICE_GATEWAY_NEAR_CAT: 1.08,

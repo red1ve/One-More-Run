@@ -1,10 +1,16 @@
 import { CONFIG } from '../config.js';
 import { TREE_BASE_X } from './ArtPack.js';
+import { hedgeOuterReach } from './HedgeArt.js';
 
 // Боковой декор на газоне за изгородью, как на референсе: деревья, кусты, камни,
 // заборчики и трава — картинки из assets/art-pack (trees/, props/). Каждый предмет
 // задаётся номером своего места в мире, стоит на земле и растёт по мере приближения.
-// Декор рисуется до изгороди, поэтому изгородь всегда перед ним.
+// Декор рисуется ПОСЛЕ изгороди и обрезается по дорожке. Всё стоит на одной земле за
+// изгородью: у мелочи (кусты, камни, заборчики, трава) ближний к дороге край, у дерева
+// ствол начинается за внешним краем изгороди (крона может нависать над ней, но ствол на
+// кусте не стоит и дерево не «висит в воздухе»). Порядок рисования один для всех:
+// по линии земли (y), дальние первыми, ближние поверх. Что ближе к камере (ниже на
+// экране), то и перекрывает.
 
 const SHADOW = 'rgba(74, 52, 40, 0.16)'; // тень на траве: InkBrown 16%
 
@@ -35,17 +41,17 @@ export class SideDecorArt {
   constructor(art) {
     this.art = art;
     this.items = [];
+    this.order = []; // индексы предметов в порядке рисования (дальние первыми)
   }
 
   cfg() {
     return CONFIG.VISUAL.SIDE_DECOR || {};
   }
 
+  // Внешний край изгороди (вместе с самыми широкими клочками) на глубине p.
   hedgeOuter(p, side) {
-    const h = CONFIG.VISUAL.HEDGE_WALL || {};
-    const reach = (h.SHOULDER_NEAR ?? 8) + (h.CURB_NEAR ?? 12) + (h.WIDTH_NEAR ?? 74);
     const edge = side < 0 ? p.roadLeft : p.roadRight;
-    return edge + side * reach * p.scale;
+    return edge + side * hedgeOuterReach() * p.scale;
   }
 
   draw(camera) {
@@ -57,8 +63,15 @@ export class SideDecorArt {
     // Пока картинки грузятся (доли секунды на старте), газон без предметов.
     if (!pack?.hasAll(TREE_SPRITES) || !pack.hasAll(ALL_PROP_SPRITES)) return;
     ctx.save();
-    // Собирали от кота к горизонту; рисуем наоборот, чтобы ближнее было поверх.
-    for (let i = items.length - STRIDE; i >= 0; i -= STRIDE) {
+    art.clipOutsideRoad();
+    // Порядок рисования — по линии земли (y): дальние первыми, ближние поверх. Случайный
+    // сдвиг предмета по y меняет порядок слотов, поэтому сортируем по y.
+    const order = this.order;
+    order.length = 0;
+    for (let i = 0; i < items.length; i += STRIDE) order.push(i);
+    this.sortByGround(order, 0, order.length);
+    for (let n = 0; n < order.length; n += 1) {
+      const i = order[n];
       const kind = KINDS[items[i + 1]];
       const x = items[i + 2];
       const y = items[i + 3];
@@ -70,6 +83,21 @@ export class SideDecorArt {
       else this.drawPackProp(ctx, pack, x, y, size, PROP_SPRITES[kind].names[name], flip, kind);
     }
     ctx.restore();
+  }
+
+  // Сортировка части order [from, to) по y предмета: вставками (почти отсортировано, без выделений).
+  sortByGround(order, from, to) {
+    const items = this.items;
+    for (let a = from + 1; a < to; a += 1) {
+      const current = order[a];
+      const y = items[current + 3];
+      let b = a - 1;
+      while (b >= from && items[order[b] + 3] > y) {
+        order[b + 1] = order[b];
+        b -= 1;
+      }
+      order[b + 1] = current;
+    }
   }
 
   // Что стоит на месте k стороны side — зависит ТОЛЬКО от номера места, не от соседей
@@ -90,47 +118,59 @@ export class SideDecorArt {
     return KINDS.indexOf(PROP_KINDS[Math.floor(hash(seed + 1) * PROP_KINDS.length) % PROP_KINDS.length]);
   }
 
-  // Размер — по глубине: 1 у кота, к горизонту плавно к нулю (DEPTH_HALF — где
-  // размер ≈ половина). Слишком мелкие на экране не рисуются, у порога — плавное
-  // проявление. Размер только растёт по мере приближения, поэтому появившийся
-  // предмет остаётся, пока не уйдёт за нижний край. Слоты вдали не пропускаются.
+  // Настоящая перспектива: и размер предмета, и его отступ от дороги растут вместе с
+  // шириной дорожки на этой глубине (как изгородь и ящики). Поэтому предмет летит от
+  // центра по прямой, а не «растёт на месте». Предмет задан номером места (k, сторона)
+  // и отступом от изгороди в ширинах дорожки; от кадра и соседей ничего не зависит.
+  // У горизонта предметы проявляются плавно (FADE_ROWS строк).
   collect(progress) {
     const art = this.art;
     const cfg = this.cfg();
     const period = cfg.PERIOD ?? 70;
-    const half = cfg.DEPTH_HALF ?? 1.5;
-    const minPx = cfg.MIN_PX ?? 8;
-    const fadePx = cfg.FADE_PX ?? 8;
-    const treeH = CONFIG.VISUAL.ART_PACK?.TREE_HEIGHT ?? 1.75;
+    const fadeRows = cfg.FADE_ROWS ?? 70;
+    const treeH = CONFIG.VISUAL.ART_PACK?.TREE_HEIGHT ?? 1.45;
     const catH = art.catH();
+    const horizon = art.horizonY();
     const items = this.items;
     items.length = 0;
     const nearWorld = art.screenToWorldY(art.height + 120 + (art.lastShift || 0));
     let k = Math.floor((nearWorld - progress) / period);
     for (let guard = 0; guard < 400; guard += 1, k -= 1) {
       const p = art.roadAt(k * period + progress);
-      if (p.drawY < art.horizonY() + 1) break;
-      const depth = (p.t * (1 + half)) / (p.t + half);
-      const s = depth * catH;
-      // Самый крупный предмет (дерево) уже мельче порога — дальше только мельче.
-      if (s * treeH * 1.12 < minPx) break;
+      const rows = p.drawY - horizon;
+      if (rows < 2) break;
+      const fade = Math.min(1, rows / fadeRows);
+      const alpha = fade * fade * (3 - 2 * fade);
+      if (alpha < 0.02) break;
       for (let side = -1; side <= 1; side += 2) {
         const kind = this.slotKind(k, side);
         if (kind < 0) continue;
         const seed = k * 13.1 + side * 5.7;
         const tree = kind === TREE;
         const variant = 0.88 + hash(seed + 9) * 0.24;
-        const size = tree ? s * treeH * variant : s * PROP_SPRITES[KINDS[kind]].width * variant;
-        if (size < minPx) continue;
-        const alpha = Math.min(1, (size - minPx) / fadePx);
         const names = tree ? TREE_SPRITES : PROP_SPRITES[KINDS[kind]].names;
         const name = Math.floor(hash(seed + 7) * names.length) % names.length;
         const flip = hash(seed + 8) < 0.5 ? 1 : 0;
-        const outer = this.hedgeOuter(p, side);
-        const room = Math.max(40, side < 0 ? outer : art.width - outer);
-        const pad = (tree ? 34 : 14) * depth;
-        const x = outer + side * (pad + hash(seed + 2) * room * 0.9);
-        const y = p.drawY + hash(seed + 3) * period * 0.4 * depth;
+        // Предмет стоит на своей линии земли y; размер и отступ считаются по дороге ИМЕННО
+        // на этой глубине (q), а не на глубине слота: тогда он ровно в перспективе.
+        const y = p.drawY + hash(seed + 3) * period * 0.4 * p.scale;
+        const q = art.roadAt(art.screenToWorldY(y));
+        const s = q.scale * catH;
+        const size = tree ? s * treeH * variant : s * PROP_SPRITES[KINDS[kind]].width * variant;
+        // Отступ от внешнего края изгороди (в ширинах дорожки + зазор HEDGE_GAP).
+        // Мелочь стоит центром, поэтому её ближний край = outer + gap, центр дальше на size / 2.
+        // Дерево: ствол отступает от изгороди на зазор и пятую часть ширины кроны, поэтому
+        // стоит на газоне, а крона слегка нависает над изгородью.
+        const outer = this.hedgeOuter(q, side);
+        const gap = (cfg.HEDGE_GAP ?? 10) * q.scale;
+        let x;
+        if (tree) {
+          const crown = size / art.artPack.aspect(names[name]);
+          x = outer + side * (gap + crown * 0.2 + 1.3 * hash(seed + 2) ** 1.4 * q.roadWidth);
+        } else {
+          x = outer + side * (size / 2 + gap + 0.8 * hash(seed + 2) * q.roadWidth);
+        }
+        if (x < -size || x > art.width + size) continue;
         // ключ места, вид, x, y, размер, картинка, отражение, прозрачность
         items.push(k * 2 + (side < 0 ? 0 : 1), kind, x, y, size, name, flip, alpha);
       }

@@ -64,7 +64,7 @@ check('NORMAL paths match obstacle gaps', () => {
   const obsY = normal.obstacles[0].y;
   assert(path.y === obsY, 'path.y != obstacle.y');
   assert(path.type === 'SAFE', 'NORMAL path should be SAFE');
-  assert(path.width >= 200 - 1, 'NORMAL gap too narrow');
+  assert(path.width >= CONFIG.BREATHING_GAP_WIDTH - 1, 'NORMAL gap too narrow');
 });
 
 check('TWO_PATHS has one SAFE and one RISK corridor', () => {
@@ -1443,7 +1443,6 @@ check('Audio mute and hidden tab do not play SFX', () => {
   audio.setMuted(false);
   audio.setHidden(true);
   assert(audio.play('risk') === false, 'hidden tab must not play');
-  assert(audio.play('meow') === false, 'hidden tab must not meow');
 });
 
 check('late Choice intervals keep breathing room', () => {

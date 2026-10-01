@@ -27,6 +27,23 @@ function hash(n) {
   return x - Math.floor(x);
 }
 
+// Случайный разброс клочков: размер = ширина × (MIN … MIN + SPAN), ряд сдвигается на ±LANE_JITTER/2.
+const CLUMP_SCALE_MIN = 0.88;
+const CLUMP_SCALE_SPAN = 0.26;
+const LANE_JITTER = 0.08;
+
+// На сколько px (у кота) листва изгороди доходит от края дорожки наружу — вместе с самыми
+// широкими клочками дальнего ряда. Всё, что стоит за изгородью (SideDecorArt), начинается
+// отсюда, чтобы не наслаиваться на неё.
+export function hedgeOuterReach() {
+  const h = CONFIG.VISUAL.HEDGE_WALL || {};
+  const a = CONFIG.VISUAL.ART_PACK || {};
+  const lanes = a.HEDGE_LANES || [0.74];
+  const outerLane = Math.max(...lanes) + LANE_JITTER / 2;
+  const clumpHalf = ((a.HEDGE_CLUMP_WIDTH ?? 0.72) * (CLUMP_SCALE_MIN + CLUMP_SCALE_SPAN)) / 2;
+  return (h.SHOULDER_NEAR ?? 8) + (h.CURB_NEAR ?? 12) + (h.WIDTH_NEAR ?? 74) * (outerLane + clumpHalf);
+}
+
 function settings() {
   const h = CONFIG.VISUAL.HEDGE_WALL || {};
   return {
@@ -121,8 +138,8 @@ export class HedgeArt {
         const edge = side < 0 ? p.roadLeft : p.roadRight;
         for (let lane = 0; lane < lanes.length; lane += 1) {
           const seed = k * 7.3 + side * 3.1 + lane * 11.7;
-          const w = cfg.width * packCfg.HEDGE_CLUMP_WIDTH * s * (0.88 + hash(seed) * 0.26);
-          const across = lanes[lane] + (hash(seed + 1) - 0.5) * 0.08;
+          const w = cfg.width * packCfg.HEDGE_CLUMP_WIDTH * s * (CLUMP_SCALE_MIN + hash(seed) * CLUMP_SCALE_SPAN);
+          const across = lanes[lane] + (hash(seed + 1) - 0.5) * LANE_JITTER;
           const x = this.edgeX(side, edge, s, cfg.shoulder + cfg.curb + cfg.width * across);
           const y = p.drawY + (hash(seed + 2) - 0.5) * period * 0.4 * s;
           clumps.push(x, y, w / 2);

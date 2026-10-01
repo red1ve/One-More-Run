@@ -303,7 +303,7 @@ function makeAudioStub() {
   };
 }
 
-check('successful RISK and DUAL_RISK play meow; SAFE does not', () => {
+check('successful RISK and DUAL_RISK feel visually and have sound effects, but no meow', () => {
   const audio = makeAudioStub();
   const feel = new GameFeel(audio);
   const game = {
@@ -321,18 +321,19 @@ check('successful RISK and DUAL_RISK play meow; SAFE does not', () => {
   };
 
   Game.prototype.applyReward.call(game, 'SAFE', false, true);
-  assert(!audio.names.includes('meow'), 'SAFE must not meow');
   assert(audio.names.includes('safe'));
 
   Game.prototype.applyReward.call(game, 'RISKY', true, true);
-  assert(audio.names.includes('meow'), 'successful RISK must meow');
+  assert(!audio.names.includes('meow'), 'RISK must not meow any more');
+  assert(feel.flash > 0, 'RISK keeps its visual flash');
+  assert(feel.playerPulse > 0, 'RISK keeps the cat pulse');
 
   audio.names.length = 0;
   Game.prototype.applyReward.call(game, 'RISKY_HARD', true, true);
-  assert(audio.names.includes('meow'), 'successful DUAL_RISK path must meow');
+  assert(!audio.names.includes('meow'), 'DUAL_RISK path must not meow');
 });
 
-check('mute, pause, ad, and missing meow asset stay safe', () => {
+check('mute, pause and ad keep sound effects silent', () => {
   const audio = new AudioService();
   audio.unlocked = true;
   audio.ctx = {
@@ -343,35 +344,17 @@ check('mute, pause, ad, and missing meow asset stay safe', () => {
   };
 
   audio.setMuted(true);
-  assert(audio.play('meow') === false, 'muted must not meow');
+  assert(audio.play('coin') === false, 'muted must stay silent');
   audio.setMuted(false);
 
   audio.setAdPaused(true);
-  assert(audio.play('meow') === false, 'ad pause must not meow');
+  assert(audio.play('coin') === false, 'ad pause must stay silent');
   audio.setAdPaused(false);
 
   audio.setPlatformPaused(true);
-  assert(audio.play('meow') === false, 'platform pause must not meow');
+  assert(audio.play('coin') === false, 'platform pause must stay silent');
   audio.setPlatformPaused(false);
-
-  audio.meowLoadStarted = true;
-  audio.meowFailed = true;
-  assert(audio.play('meow') === false, 'missing meow must not throw');
-
-  audio.meowFailed = false;
-  audio.meowBuffer = { duration: 0.4 };
-  audio.ctx.createBufferSource = () => ({
-    buffer: null,
-    playbackRate: { value: 1 },
-    connect() {},
-    start() {}
-  });
-  audio.ctx.createGain = () => ({
-    gain: { setValueAtTime() {} },
-    connect() {}
-  });
-  assert(audio.play('meow') === true, 'ready meow should play');
-  assert(audio.play('meow') === false, 'meow cooldown should suppress spam');
+  assert(typeof audio.playMeow === 'undefined', 'the meow code is gone');
 });
 
 console.log(results.join('\n'));

@@ -314,9 +314,13 @@ export class Renderer {
     this.ctx.restore();
   }
 
-  drawHUD(score, multiplier, bestScore, riskStreak = 0, coins = 0, feel = null, muted = false, showSound = true) {
+  drawHUD(score, multiplier, bestScore, riskStreak = 0, coins = 0, feel = null, muted = false, showSound = true, showPause = false) {
     const pulse = feel?.hudPulse || { streak: 0, multiplier: 0, coins: 0 };
     const ctx = this.ctx;
+    // Области нажатия запоминаются при рисовании; на экране, где кнопки нет, она не нажимается.
+    this.pauseButton = null;
+    this.resumeButton = null;
+    this.soundButtons = null;
     const measure = (text, font) => {
       ctx.font = font;
       return ctx.measureText ? ctx.measureText(text).width : String(text).length * 8;
@@ -413,6 +417,15 @@ export class Renderer {
     ctx.fillText(coinLabel, 0, 0);
     ctx.restore();
 
+    // --- Значок паузы: в свободном месте между счётом и монетами ---
+    if (showPause) {
+      const size = 46;
+      const px = Math.min(12 + scorePillW + 10, coinX - size - 8);
+      this.garden.hudPauseButton(px + size / 2, top + size / 2, size / 2);
+      // Область нажатия с запасом под палец: на телефоне холст сжимается (≈ 0.7), нужно ≥ 44 px.
+      this.pauseButton = { x: px - 12, y: top - 12, w: size + 24, h: size + 24 };
+    }
+
     if (!showSound) return;
     ctx.textAlign = 'left';
     ctx.fillStyle = muted ? CONFIG.COLORS.UI_HUD : CONFIG.COLORS.UI_TEXT;
@@ -480,7 +493,7 @@ export class Renderer {
     );
   }
 
-  drawStartScreen(muted = false, showFirstRunHints = false) {
+  drawStartScreen(muted = false, showFirstRunHints = false, volume = 0.5) {
     const cfg = this.screenCfg();
     const cx = this.width / 2;
     const cardX = cfg.CARD_X ?? 36;
@@ -506,9 +519,83 @@ export class Renderer {
       this.fitText(t('start.hintCoins'), cx, cardY + 326, 600, 20, textW, CONFIG.COLORS.UI_HUD);
     }
 
-    const soundY = cardY + cardH + 44;
-    this.screenPill(cx, soundY, 210, 44, CONFIG.COLORS.SkyPaper);
-    this.fitText(t(muted ? 'sound.off' : 'sound.on'), cx, soundY + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
+    this.drawSoundControls(cx, cardY + cardH + 44, muted, volume);
+  }
+
+  // Звук на экранах: [−] капсула «ЗВУК n%» (нажатие включает и выключает) [+].
+  // Области нажатия запоминаются для Game.handleSoundTap (с запасом под палец).
+  drawSoundControls(cx, cy, muted, volume = 0.5) {
+    const percent = Math.round((Number.isFinite(volume) ? volume : 0.5) * 100);
+    const label = muted ? t('sound.off') : t('sound.level', { n: percent });
+    this.screenPill(cx, cy, 210, 44, CONFIG.COLORS.SkyPaper);
+    this.fitText(label, cx, cy + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
+    const gap = 142;
+    for (const [sign, x] of [['−', cx - gap], ['+', cx + gap]]) {
+      this.screenPill(x, cy, 52, 44, CONFIG.COLORS.SkyPaper);
+      this.fitText(sign, x, cy + 10, 700, 30, 40, CONFIG.COLORS.UI_TEXT);
+    }
+    this.soundButtons = {
+      mute: { x: cx - 105, y: cy - 28, w: 210, h: 56 },
+      minus: { x: cx - gap - 34, y: cy - 30, w: 68, h: 60 },
+      plus: { x: cx + gap - 34, y: cy - 30, w: 68, h: 60 }
+    };
+  }
+
+  // Какая кнопка звука под точкой (логические координаты), или null.
+  hitSoundButton(x, y) {
+    for (const [name, r] of Object.entries(this.soundButtons || {})) {
+      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return name;
+    }
+    return null;
+  }
+
+  static inRect(r, x, y) {
+    return !!r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  }
+
+  // Значок паузы в HUD под точкой?
+  hitPauseButton(x, y) {
+    return Renderer.inRect(this.pauseButton, x, y);
+  }
+
+  // Кнопка «продолжить» на экране паузы под точкой?
+  hitResumeButton(x, y) {
+    return Renderer.inRect(this.resumeButton, x, y);
+  }
+
+  // Экран паузы: карточка как на других экранах — название, счёт, рекорд, «продолжить»
+  // и настройки звука под карточкой. Мир за карточкой стоит на месте.
+  drawPause(score, bestScore, muted = false, volume = 0.5) {
+    const cfg = this.screenCfg();
+    const cx = this.width / 2;
+    const cardX = cfg.CARD_X ?? 36;
+    const cardW = cfg.CARD_W ?? this.width - cardX * 2;
+    const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
+    const cardH = 392;
+    const cardY = 330;
+
+    this.dimScreen(cfg.DIM_PAUSE ?? 0.28);
+    this.garden.plate(cardX, cardY, cardW, cardH, 26);
+    this.drawSitLoaf(cardY + 14);
+
+    this.fitText(t('pause.title'), cx, cardY + 76, 700, 52, textW, CONFIG.COLORS.UI_TEXT);
+    this.fitText(`${score}`, cx, cardY + 160, 700, 68, textW, CONFIG.COLORS.UI_TEXT);
+    this.fitText(t('over.score'), cx, cardY + 188, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+
+    const pillW = 360;
+    const bestY = cardY + 236;
+    this.screenPill(cx, bestY, pillW, 46, CONFIG.COLORS.SkyPaper);
+    this.garden.hudPawIcon(cx - pillW / 2 + 28, bestY, 15);
+    this.fitText(t('over.best', { n: bestScore }), cx + 14, bestY + 7, 700, 21, pillW - 84, CONFIG.COLORS.UI_TEXT);
+
+    const resumeW = 340;
+    const resumeH = 62;
+    const resumeY = cardY + 322;
+    this.screenPill(cx, resumeY, resumeW, resumeH, CONFIG.COLORS.CoinAmber);
+    this.fitText(t('pause.resume'), cx, resumeY + 9, 700, 26, resumeW - 40, CONFIG.COLORS.UI_TEXT);
+    this.resumeButton = { x: cx - resumeW / 2, y: resumeY - resumeH / 2, w: resumeW, h: resumeH };
+
+    this.drawSoundControls(cx, cardY + cardH + 44, muted, volume);
   }
 
   // Значок «видео» на кнопках рекламы: игрок заранее видит, что это реклама.
@@ -615,9 +702,7 @@ export class Renderer {
     this.screenPill(cx, rowY + 8, 340, 62, CONFIG.COLORS.CoinAmber);
     this.fitText(t('over.restart'), cx, rowY + 17, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
 
-    const soundY = cardY + cardH + 44;
-    this.screenPill(cx, soundY, 210, 44, CONFIG.COLORS.SkyPaper);
-    this.fitText(t(extras.muted ? 'sound.off' : 'sound.on'), cx, soundY + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
+    this.drawSoundControls(cx, cardY + cardH + 44, extras.muted, extras.volume);
     this.ctx.globalAlpha = 1;
   }
 }

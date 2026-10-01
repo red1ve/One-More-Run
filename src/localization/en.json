@@ -12,7 +12,12 @@
   },
   "sound": {
     "on": "M SOUND",
-    "off": "M MUTED"
+    "off": "M MUTED",
+    "level": "SOUND {n}%"
+  },
+  "pause": {
+    "title": "PAUSE",
+    "resume": "RESUME  •  P"
   },
   "over": {
     "title": "GAME OVER",

@@ -30,7 +30,7 @@ const SECONDS = 25;
 const DT = 1 / 60;
 
 // Прогоняет прокрутку; collect(frame) возвращает Map: ключ → { look, y, alpha }.
-function scroll(collect) {
+function scroll(collect, mayVanish = (item) => item.y >= height - 40) {
   const seen = new Map(); // ключ → { look, y, alpha, gone }
   const problems = [];
   let progress = 0;
@@ -51,8 +51,8 @@ function scroll(collect) {
     }
     for (const [key, before] of seen) {
       if (before.gone || now.has(key)) continue;
-      // Пропал с экрана: допустимо только внизу, за нижним краем (с запасом на размах по Y).
-      if (before.y < height - 40) problems.push(`слот ${key} исчез на y=${before.y.toFixed(0)} (кадр ${frame})`);
+      // Пропал с экрана: допустимо только за краем экрана (внизу, у лужайки ещё и сбоку).
+      if (!mayVanish(before)) problems.push(`слот ${key} исчез на x=${(before.x ?? 0).toFixed(0)}, y=${before.y.toFixed(0)} (кадр ${frame})`);
       before.gone = true;
     }
     if (problems.length > 5) break;
@@ -84,10 +84,13 @@ check('lawn trees and props keep their kind, picture and mirroring; visible ones
     // Предмет — 8 чисел: место, вид, x, y, размер, картинка, отражение, прозрачность.
     for (let i = 0; i < it.length; i += 8) {
       if (it[i + 7] <= 0) continue; // невидимые (прозрачные) не считаем видимыми
-      map.set(it[i], { look: `${it[i + 1]}:${it[i + 5]}:${it[i + 6]}`, y: it[i + 3], alpha: it[i + 7] });
+      map.set(it[i], { look: `${it[i + 1]}:${it[i + 5]}:${it[i + 6]}`, x: it[i + 2], y: it[i + 3], size: it[i + 4], alpha: it[i + 7] });
     }
     return map;
-  });
+  }, (item) => (
+    // Предметы газона летят от центра: уходят вниз или за боковой край экрана (запас 30 px на шаг).
+    item.y >= height - 40 || item.x < -item.size + 30 || item.x > CONFIG.CANVAS_WIDTH + item.size - 30
+  ));
   if (count < 50) throw new Error(`мало предметов: ${count}`);
   if (problems.length) throw new Error(problems.slice(0, 5).join('; '));
 });

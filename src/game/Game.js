@@ -30,6 +30,7 @@ export class Game {
     this.mouseInput = new MouseInput(this.canvas);
     this.touchInput = new TouchInput(this.canvas);
     this.audio.setMuted(!!this.storage.get('audioMuted', false));
+    this.audio.setVolume(this.storage.get('audioVolume', CONFIG.AUDIO.VOLUME_DEFAULT));
 
     this.player = new Player();
     this.track = new Track();
@@ -55,6 +56,7 @@ export class Game {
     this.hidden = false;
     this.platformPaused = false;
     this.adPaused = false;
+    this.userPaused = false; // игрок поставил забег на паузу кнопкой, P или Esc
     this.launchPending = false;
     this.adFinished = false;
 
@@ -99,19 +101,76 @@ export class Game {
   }
 
   isGameplayPaused() {
-    return this.hidden || this.platformPaused || this.adPaused;
+    return this.hidden || this.platformPaused || this.adPaused || !!this.userPaused;
+  }
+
+  // Пауза по желанию игрока: только во время забега. Мир и время стоят, экран паузы
+  // показывает счёт и настройки звука. Музыка при этом не умолкает, чтобы было слышно,
+  // как меняется громкость.
+  pause() {
+    if (this.state !== 'PLAYING' || this.userPaused) return false;
+    this.userPaused = true;
+    // Палец или клавиша, зажатые в момент паузы, не должны рулить котом после возврата.
+    this.keyboardInput?.reset?.();
+    this.mouseInput?.reset?.();
+    this.touchInput?.reset?.();
+    this.syncGameplayLifecycle?.();
+    return true;
+  }
+
+  resume() {
+    if (!this.userPaused) return false;
+    this.userPaused = false;
+    this.keyboardInput?.reset?.();
+    this.mouseInput?.reset?.();
+    this.touchInput?.reset?.();
+    this.lastTime = performance.now();
+    this.syncGameplayLifecycle?.();
+    return true;
+  }
+
+  togglePause() {
+    return this.userPaused ? this.resume() : this.pause();
   }
 
   syncGameplayLifecycle() {
     this.platform?.setGameplayActive?.(
       this.state === 'PLAYING' && !this.isGameplayPaused()
     );
+    // Музыка идёт только в забеге; пауза, реклама и скрытая вкладка её приостанавливают сами.
+    this.audio?.setMusicActive?.(this.state === 'PLAYING');
   }
 
   toggleMute() {
     const muted = this.audio.toggleMuted();
     this.storage.set('audioMuted', muted);
     return muted;
+  }
+
+  // Громкость шагами по 10%. Если звук был выключен, нажатие «громче» включает его.
+  changeVolume(direction) {
+    const step = CONFIG.AUDIO.VOLUME_STEP;
+    const next = Math.round(Math.max(0, Math.min(1, this.audio.volume + direction * step)) * 10) / 10;
+    this.audio.setVolume(next);
+    this.storage.set('audioVolume', next);
+    if (direction > 0 && this.audio.muted) {
+      this.audio.setMuted(false);
+      this.storage.set('audioMuted', false);
+    }
+    return next;
+  }
+
+  // Нажатие на кнопки звука (экраны START, Game Over и пауза). true = нажатие обработано.
+  handleSoundTap(x, y) {
+    const onPause = this.state === 'PLAYING' && this.userPaused;
+    if (this.state !== 'START' && this.state !== 'GAMEOVER' && !onPause) return false;
+    const hit = this.renderer?.hitSoundButton?.(x, y);
+    if (!hit) return false;
+    if (hit === 'minus') this.changeVolume(-1);
+    else if (hit === 'plus') this.changeVolume(1);
+    else if (hit === 'mute') this.toggleMute();
+    if (this.state === 'START') this.render();
+    return true;
   }
 
   tryLaunch() {
@@ -157,6 +216,7 @@ export class Game {
       this.showFirstRunHints = false;
     }
     this.state = 'PLAYING';
+    this.userPaused = false;
     this.isNewBest = false;
     this.score = 0;
     this.distanceScore = 0;
@@ -253,6 +313,8 @@ export class Game {
 
     this.updateFloating(deltaTime);
     this.feel.update(deltaTime, this.currentSpeed);
+    const speedRange = Math.max(1, CONFIG.TRACK_SPEED_MAX - CONFIG.TRACK_SPEED_START);
+    this.audio?.setMusicIntensity?.((this.currentSpeed - CONFIG.TRACK_SPEED_START) / speedRange);
   }
 
   // Один шаг физики: движение, трасса, награды, монеты. true = столкновение.
@@ -313,6 +375,17 @@ export class Game {
 
   // Нажатие на экран (мышь или палец) в логических координатах холста.
   handleTap(x, y) {
+    // Кнопки звука не запускают забег.
+    if (this.handleSoundTap?.(x, y)) return false;
+    // Во время забега нажатие по значку паузы ставит паузу, на паузе — кнопка «продолжить».
+    if (this.state === 'PLAYING') {
+      if (this.userPaused) {
+        if (this.renderer?.hitResumeButton?.(x, y)) this.resume();
+      } else if (this.renderer?.hitPauseButton?.(x, y)) {
+        this.pause();
+      }
+      return false;
+    }
     if (this.state === 'GAMEOVER') {
       if (this.gameOverInputLocked() || this.rewardPending) return false;
       const hit = this.renderer?.hitGameOverButton?.(x, y);
@@ -539,11 +612,20 @@ export class Game {
       this.coins,
       this.feel,
       this.audio?.muted,
-      // На экранах START и Game Over звук показан отдельной капсулой.
-      this.state === 'PLAYING'
+      // На экранах START, Game Over и паузы звук показан отдельной капсулой.
+      this.state === 'PLAYING' && !this.userPaused,
+      // Значок паузы — только пока забег идёт.
+      this.state === 'PLAYING' && !this.userPaused
     );
 
-    if (this.state === 'GAMEOVER') {
+    if (this.state === 'PLAYING' && this.userPaused) {
+      this.renderer.drawPause(
+        Math.floor(this.score),
+        this.bestScore,
+        this.audio?.muted,
+        this.audio?.volume
+      );
+    } else if (this.state === 'GAMEOVER') {
       this.renderer.drawGameOver(
         Math.floor(this.distanceScore + this.pathReward),
         this.bestScore,
@@ -552,6 +634,7 @@ export class Game {
         {
           isNewBest: this.isNewBest,
           muted: this.audio?.muted,
+          volume: this.audio?.volume,
           offerRevive: this.canOfferRevive(),
           offerDouble: this.canOfferDoubleCoins(),
           runCoins: this.runCoins || 0,
@@ -559,7 +642,7 @@ export class Game {
         }
       );
     } else if (this.state === 'START') {
-      this.renderer.drawStartScreen(this.audio?.muted, this.showFirstRunHints);
+      this.renderer.drawStartScreen(this.audio?.muted, this.showFirstRunHints, this.audio?.volume);
     }
   }
 }
