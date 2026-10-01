@@ -310,6 +310,31 @@ export class GardenArt {
     ctx.fill();
   }
 
+  // Кубок для кнопки «таблица лидеров»: золотой диск, коричневая чаша на ножке с ручками.
+  hudTrophyIcon(cx, cy, r) {
+    const ctx = this.ctx;
+    this.hudIconDisc(cx, cy, r, this.coinGold);
+    ctx.fillStyle = this.c.InkBrown;
+    ctx.strokeStyle = this.c.InkBrown;
+    ctx.lineWidth = Math.max(1.3, r * 0.14);
+    // Чаша: полукруг с плоским верхом.
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.42, cy - r * 0.46);
+    ctx.lineTo(cx + r * 0.42, cy - r * 0.46);
+    ctx.quadraticCurveTo(cx + r * 0.42, cy + r * 0.2, cx, cy + r * 0.24);
+    ctx.quadraticCurveTo(cx - r * 0.42, cy + r * 0.2, cx - r * 0.42, cy - r * 0.46);
+    ctx.fill();
+    // Ручки.
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.46, cy - r * 0.2, r * 0.2, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.moveTo(cx + r * 0.46, cy - r * 0.4);
+    ctx.arc(cx + r * 0.46, cy - r * 0.2, r * 0.2, Math.PI * 1.5, Math.PI * 0.5);
+    ctx.stroke();
+    // Ножка и основание.
+    ctx.fillRect(cx - r * 0.07, cy + r * 0.2, r * 0.14, r * 0.3);
+    ctx.fillRect(cx - r * 0.3, cy + r * 0.48, r * 0.6, r * 0.14);
+  }
+
   hudIconDisc(cx, cy, r, fill) {
     const ctx = this.ctx;
     ctx.fillStyle = this.c.ShadowDust;

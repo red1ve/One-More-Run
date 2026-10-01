@@ -321,6 +321,8 @@ export class Renderer {
     this.pauseButton = null;
     this.resumeButton = null;
     this.soundButtons = null;
+    this.platformButtons = null;
+    this.leaderboardButtons = null;
     const measure = (text, font) => {
       ctx.font = font;
       return ctx.measureText ? ctx.measureText(text).width : String(text).length * 8;
@@ -493,7 +495,7 @@ export class Renderer {
     );
   }
 
-  drawStartScreen(muted = false, volume = 0.5) {
+  drawStartScreen(muted = false, volume = 0.5, platform = {}) {
     const cfg = this.screenCfg();
     const cx = this.width / 2;
     const cardX = cfg.CARD_X ?? 36;
@@ -514,6 +516,123 @@ export class Renderer {
     this.fitText(t('start.controls'), cx, cardY + 208, 600, 20, textW, CONFIG.COLORS.UI_HUD);
 
     this.drawSoundControls(cx, cardY + cardH + 44, muted, volume);
+    this.drawPlatformButtons(cx, cardY + cardH + 106, platform);
+  }
+
+  // Кнопки платформы под звуком: «таблица лидеров» и «ярлык». Рисуются только если платформа их
+  // разрешает. Области нажатия — для Game.handlePlatformTap (с запасом под палец).
+  drawPlatformButtons(cx, cy, show = {}) {
+    const items = [];
+    if (show.leaderboard) items.push('leaderboard');
+    if (show.shortcut) items.push('shortcut');
+    this.platformButtons = null;
+    if (!items.length) return;
+    const gap = 14;
+    const w = items.length === 1 ? 250 : 200;
+    const h = 44;
+    const left = cx - (w * items.length + gap * (items.length - 1)) / 2;
+    this.platformButtons = {};
+    items.forEach((name, index) => {
+      const x = left + index * (w + gap) + w / 2;
+      this.screenPill(x, cy, w, h, CONFIG.COLORS.SkyPaper);
+      if (name === 'leaderboard') {
+        this.garden.hudTrophyIcon(x - w / 2 + 28, cy, 14);
+        this.fitText(t('leaderboard.button'), x + 14, cy + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
+      } else {
+        this.fitText(t('shortcut.button'), x, cy + 7, 600, 19, w - 28, CONFIG.COLORS.UI_TEXT);
+      }
+      this.platformButtons[name] = { x: x - w / 2 - 4, y: cy - h / 2 - 8, w: w + 8, h: h + 16 };
+    });
+  }
+
+  // Какая кнопка платформы под точкой (логические координаты), или null.
+  hitPlatformButton(x, y) {
+    for (const [name, r] of Object.entries(this.platformButtons || {})) {
+      if (Renderer.inRect(r, x, y)) return name;
+    }
+    return null;
+  }
+
+  // Окно таблицы лидеров поверх экрана. board: { status: 'loading' | 'ready' | 'empty' | 'error',
+  // entries, authorized, signingIn }. Для неавторизованного игрока — кнопка «войти».
+  drawLeaderboard(board) {
+    const ctx = this.ctx;
+    const cx = this.width / 2;
+    const cardX = 36;
+    const cardW = this.width - cardX * 2;
+    const cardY = 80;
+    const cardH = 800;
+    this.leaderboardButtons = {};
+
+    this.dimScreen(0.45);
+    this.garden.plate(cardX, cardY, cardW, cardH, 26);
+    this.fitText(t('leaderboard.title'), cx, cardY + 62, 700, 40, cardW - 56, CONFIG.COLORS.UI_TEXT);
+
+    const rowTop = cardY + 112;
+    const step = 32;
+    const statusKey = { loading: 'leaderboard.loading', empty: 'leaderboard.empty', error: 'leaderboard.error' }[board?.status];
+    if (statusKey) {
+      this.fitText(t(statusKey), cx, rowTop + 120, 600, 22, cardW - 56, CONFIG.COLORS.UI_HUD);
+    } else {
+      let row = 0;
+      for (const entry of board.entries.slice(0, 14)) {
+        if (entry.gapBefore) {
+          this.fitText('…', cx, rowTop + row * step + 6, 700, 22, 40, CONFIG.COLORS.UI_HUD);
+          row += 1;
+        }
+        const y = rowTop + row * step;
+        if (entry.isYou) {
+          ctx.globalAlpha = 0.45;
+          ctx.fillStyle = CONFIG.COLORS.CoinAmber;
+          this.garden.roundedRectPath(cardX + 14, y - 22, cardW - 28, 31, 15);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+        ctx.font = `700 20px ${FONT_FAMILY}`;
+        ctx.fillStyle = CONFIG.COLORS.UI_TEXT;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${entry.rank}`, cardX + 70, y);
+        const scoreText = `${entry.score}`;
+        ctx.fillText(scoreText, cardX + cardW - 28, y);
+        const scoreWidth = typeof ctx.measureText === 'function' ? ctx.measureText(scoreText).width : 60;
+        const label = entry.name || t(entry.isYou ? 'leaderboard.you' : 'leaderboard.player');
+        const room = cardW - 98 - 28 - scoreWidth - 16;
+        ctx.font = `${entry.isYou ? 700 : 600} 20px ${FONT_FAMILY}`;
+        ctx.textAlign = 'left';
+        ctx.fillText(this.cutToWidth(label, room), cardX + 88, y);
+        row += 1;
+      }
+    }
+
+    // Не вошедший игрок видит таблицу, но в неё не попадает: предлагаем войти.
+    const needsSignIn = board?.authorized === false && (board.status === 'ready' || board.status === 'empty');
+    if (needsSignIn) {
+      this.fitText(t('leaderboard.signinHint'), cx, cardY + cardH - 168, 600, 18, cardW - 56, CONFIG.COLORS.UI_HUD);
+      this.screenPill(cx, cardY + cardH - 120, 260, 52, CONFIG.COLORS.SafeLawn);
+      this.fitText(board.signingIn ? '…' : t('leaderboard.signin'), cx, cardY + cardH - 111, 700, 22, 230, CONFIG.COLORS.UI_TEXT);
+      this.leaderboardButtons.signin = { x: cx - 134, y: cardY + cardH - 150, w: 268, h: 60 };
+    }
+
+    this.screenPill(cx, cardY + cardH - 52, 240, 56, CONFIG.COLORS.CoinAmber);
+    this.fitText(t('leaderboard.close'), cx, cardY + cardH - 43, 700, 24, 210, CONFIG.COLORS.UI_TEXT);
+    this.leaderboardButtons.close = { x: cx - 124, y: cardY + cardH - 84, w: 248, h: 64 };
+  }
+
+  // Строка, обрезанная до ширины maxWidth (px) с многоточием.
+  cutToWidth(text, maxWidth) {
+    const ctx = this.ctx;
+    if (typeof ctx.measureText !== 'function' || ctx.measureText(text).width <= maxWidth) return text;
+    let cut = text;
+    while (cut.length > 1 && ctx.measureText(`${cut}…`).width > maxWidth) cut = cut.slice(0, -1);
+    return `${cut}…`;
+  }
+
+  // Какая кнопка окна таблицы лидеров под точкой: 'close', 'signin' или null.
+  hitLeaderboardButton(x, y) {
+    for (const [name, r] of Object.entries(this.leaderboardButtons || {})) {
+      if (Renderer.inRect(r, x, y)) return name;
+    }
+    return null;
   }
 
   // Подсказка у первой развилки: одна строка в капсуле под HUD. Правило игры («шире — надёжнее,
@@ -719,6 +838,7 @@ export class Renderer {
     this.fitText(t('over.restart'), cx, rowY + 17, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
 
     this.drawSoundControls(cx, cardY + cardH + 44, extras.muted, extras.volume);
+    this.drawPlatformButtons(cx, cardY + cardH + 100, { leaderboard: extras.leaderboard });
     this.ctx.globalAlpha = 1;
   }
 }

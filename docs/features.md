@@ -83,8 +83,11 @@ Current implementation notes:
 | Build 3.7 MB (0.65 MB downloaded at start, WebP), `npm run verify:dist` | P0 | DONE |
 | Fullscreen advertising wrapper  | P0       | DONE    |
 | Authorized leaderboard submit   | P1       | DONE    |
-| Explicit authorization UI       | P1       | PLANNED |
-| Leaderboard display UI          | P2       | POSTPONED (after release) |
+| Sign-in button (in the leaderboard window) | P1 | DONE |
+| Leaderboard display UI (top 10 + your place) | P2 | DONE (2026-10-01) |
+| Cloud save (record, coins, hints; merge, nothing is lost) | P1 | DONE (2026-10-01) |
+| Rating request after a new best | P1 | DONE (2026-10-01) |
+| Desktop/home shortcut prompt | P2 | DONE (2026-10-01) |
 | Rewarded advertising (continue; x2 coins is switched off until the shop exists) | P1 | DONE |
 
 

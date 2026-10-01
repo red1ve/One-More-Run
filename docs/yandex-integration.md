@@ -67,7 +67,25 @@ await ysdk.leaderboards.setScore('one_more_run_score', score)
 
 The deprecated `ysdk.getLeaderboards()` API is not used. Score submission is not attempted every frame and is not required for local NEW BEST feedback. Unauthorized users continue with localStorage.
 
-Phase 7 does not add a leaderboard screen or automatic login prompt.
+### Leaderboard screen and sign-in (2026-10-01)
+
+The START and Game Over screens show a «ЛИДЕРЫ / LEADERBOARD» button when the SDK has `leaderboards.getEntries` (in `npm run dev` a stub with an invented table is shown instead). It opens a window over the screen with the top 10 and the places around the player (`getEntries('one_more_run_score', { quantityTop: 10, includeUser: true, quantityAround: 1 })`; `getEntries` works without authorization). The answer is normalised in `YandexService.getLeaderboard` (places start at 1, a gap between the top and the player's neighbours is drawn as «…», a missing public name is shown as «ИГРОК», the player's own row is highlighted and, without a name, labelled «ВЫ») and cached for 20 s. States: loading, ready, empty, error (the window always says something and can always be closed: button, Esc).
+
+A player who is not signed in sees the table and a green «ВОЙТИ / SIGN IN» button with the line «войдите, чтобы ваш результат попал в таблицу». It calls `ysdk.auth.openAuthDialog()`; after a successful sign-in the service forgets the old player, the table cache and the last submitted score, the game sends the best score, merges the cloud data and reloads the table. Nothing else in the game asks for a login.
+
+### Cloud save (2026-10-01)
+
+`ysdk.getPlayer({ scopes: false })` then `player.getData(keys)` / `player.setData(data, true)` (limits: 200 KB, 100 requests per 5 minutes). Stored keys (`CONFIG.YANDEX.CLOUD_KEYS`): `bestScore`, `coins`, `choiceHintSeen`, `riskHintSeen`. When the SDK is ready the game loads the cloud data and merges it with the local data: the bigger number wins, hints count as seen if seen anywhere, so nothing is ever lost on either side; the merged state is written back. At every Game Over the current state is queued for saving; writes are glued so there is at most one per `CLOUD_SAVE_MIN_INTERVAL_MS` (4 s) and the latest state wins. Sound settings stay local. localStorage stays the source of truth for instant saves; the cloud only restores progress on another device or after the site data was cleared. When the shop appears, `coins` needs a better merge than «bigger wins» (earned and spent counters).
+
+### Rating request (2026-10-01)
+
+After a NEW BEST, from the `REVIEW_AFTER_RUNS`-th (3rd) completed run of the session, the game waits 1.5 s on the Game Over card and calls `ysdk.feedback.canReview()`; only if it answers `value: true` does it call `requestReview()` (the platform allows one request per session and only for signed-in players: `NO_AUTH` is a normal answer). It never fires if the player has already restarted, an ad is open or the game is paused.
+
+### Shortcut (2026-10-01)
+
+If `ysdk.shortcut.canShowPrompt()` returns `canShow: true`, the START screen shows a «ЯРЛЫК НА ЭКРАН» button that calls `ysdk.shortcut.showPrompt()`; after `outcome: 'accepted'` the button disappears.
+
+All these calls are wrapped: an error, a missing method or an unavailable SDK means «no data / no button», never a crash. `CONFIG.YANDEX.DEV_PLATFORM_STUB` (on only in `npm run dev`) imitates the table, the rating request and the shortcut without the SDK.
 
 ## Advertising
 
@@ -172,6 +190,10 @@ The console accepts a zip archive whose root contains `index.html` (not a folder
 - [ ] Set its Technical leaderboard name to `one_more_run_score`.
 - [ ] Test leaderboard submission as an authorized player.
 - [ ] Test standalone/unauthorized behavior.
+- [ ] Draft + debug panel, leaderboard screen: the «ЛИДЕРЫ» button opens the table with the real top and your place; as a guest the «ВОЙТИ» button opens the Yandex login and, after signing in, your best score appears in the table.
+- [ ] Draft, cloud save: play a run, clear the site data (or open on another device) and reload while signed in: the best score and coins come back.
+- [ ] Draft, rating request: signed in, beat your record on the 3rd run of a session: the Yandex rating window appears once on the Game Over card (not for guests, not twice in a session).
+- [ ] Draft, shortcut: the «ЯРЛЫК НА ЭКРАН» button appears only where the platform allows it and disappears after accepting.
 - [ ] Enable monetization if required.
 - [ ] Verify fullscreen advertising and frequency behavior.
 - [ ] Verify gameplay/audio pause during ads and focus loss.
