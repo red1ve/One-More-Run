@@ -84,6 +84,24 @@ export const CONFIG = {
   // бы крошечным кустиком-точкой, поэтому трасса таких стен не создаёт.
   EDGE_WALL_HIDDEN: 20,
   EDGE_WALL_MIN: 58,
+  // Время суток в забеге (TimeOfDay.js, Renderer.drawTimeOfDay): только вид, игра не меняется.
+  // Этап начинается в момент from (секунды забега в цикле) и плавно проявляется за BLEND секунд;
+  // на каждом новом этапе показывается плашка. tint — цвет «умножения» поверх сада (все
+  // каналы ≥ 140, чтобы ночью препятствия и проходы оставались хорошо видны), glow — свечение
+  // сверху, wash — лёгкая цветная заливка (чтобы песок не серел), vignette — затемнение по краям,
+  // fireflies — светлячки над газоном.
+  TIME_OF_DAY: {
+    CYCLE: 300,
+    BLEND: 10,
+    TOAST_SECONDS: 2.6,
+    STAGES: [
+      { name: 'day', from: 0, look: { tint: [255, 255, 255], wash: { color: [255, 255, 255], alpha: 0 }, glow: { color: [255, 240, 200], alpha: 0 }, vignette: 0, fireflies: 0 } },
+      { name: 'golden', from: 60, look: { tint: [255, 230, 195], wash: { color: [255, 170, 70], alpha: 0.05 }, glow: { color: [255, 196, 110], alpha: 0.2 }, vignette: 0.1, fireflies: 0 } },
+      { name: 'dusk', from: 120, look: { tint: [248, 212, 228], wash: { color: [135, 70, 150], alpha: 0.12 }, glow: { color: [255, 150, 130], alpha: 0.16 }, vignette: 0.2, fireflies: 0 } },
+      { name: 'night', from: 180, look: { tint: [152, 176, 232], wash: { color: [28, 46, 140], alpha: 0.24 }, glow: { color: [120, 140, 220], alpha: 0.06 }, vignette: 0.3, fireflies: 14 } },
+      { name: 'dawn', from: 260, look: { tint: [250, 228, 236], wash: { color: [255, 170, 160], alpha: 0.06 }, glow: { color: [255, 176, 170], alpha: 0.14 }, vignette: 0.12, fireflies: 4 } }
+    ]
+  },
   // «Чуть не задел» (Track.checkGraze, Game.applyGraze): кот прошёл рядом со стеной — зазор от
   // 0 (не касаясь) до PX px — и получает бонус. Он невелик (рискованный проход даёт 100 × множитель):
   // BONUS, а при серии таких касаний не позже COMBO_WINDOW секунд друг от друга + COMBO_STEP
@@ -202,6 +220,7 @@ export const CONFIG = {
     HAPTIC_MIN_GAP_MS: 60,
     HAPTIC_PATTERNS: {
       graze: 8,
+      stage: [20, 40, 20],
       risk: 16,
       streak: [18, 24, 18],
       max: [30, 30, 30, 30, 60],

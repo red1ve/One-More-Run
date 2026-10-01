@@ -141,6 +141,12 @@ export class GameFeel {
     this.haptics?.pulse('graze');
   }
 
+  // Новый этап суток: мелодия вверх и лёгкая вибрация.
+  onStage() {
+    this.audio?.play('stage');
+    this.haptics?.pulse('stage');
+  }
+
   onCoin(x, y) {
     this.particles.burst({
       x,

@@ -373,7 +373,7 @@ await check('leaderboard window: Game.render draws it over START and Game Over, 
   const drawn = [];
   const renderer = {
     clear() {}, drawBackdrop() {}, drawFarWorld() {}, beginWorld() {}, drawWorld() {}, drawSegments() {}, drawPlayer() {},
-    drawParticles() {}, drawFloatingRewards() {}, endWorld() {}, drawFlash() {}, drawHUD() {},
+    drawParticles() {}, drawFloatingRewards() {}, endWorld() {}, drawFlash() {}, drawHUD() {}, drawTimeOfDay() {}, drawStageToast() {},
     drawStartScreen() { drawn.push('start'); }, drawGameOver() { drawn.push('over'); }, drawPause() {}, drawChoiceHint() {},
     drawLeaderboard(board) { drawn.push(`board:${board.status}`); }
   };

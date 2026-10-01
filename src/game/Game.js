@@ -12,6 +12,7 @@ import { TouchInput } from '../input/TouchInput.js';
 import { StorageService } from '../services/StorageService.js';
 import { AudioService } from '../services/AudioService.js';
 import { HapticsService } from '../services/HapticsService.js';
+import { timeOfDay } from './TimeOfDay.js';
 
 export class Game {
   constructor(canvas, platformService = null) {
@@ -63,6 +64,8 @@ export class Game {
     this.userPaused = false; // игрок поставил забег на паузу кнопкой, P или Esc
     this.launchPending = false;
     this.adFinished = false;
+    this.stageKey = 0; // этап суток забега (TimeOfDay.key): меняется — показываем плашку
+    this.stageToast = null; // { name, age } пока плашка на экране
     this.leaderboard = null; // null — закрыта; иначе { status, entries, userRank, authorized, signingIn }
     this.shortcutAvailable = false; // платформа разрешает предложить ярлык
 
@@ -237,6 +240,8 @@ export class Game {
     this.coinsDoubled = false;
     this.grazeCombo = 0;
     this.lastGrazeAt = -Infinity;
+    this.stageKey = timeOfDay(this.todOffset || 0).key;
+    this.stageToast = null;
     this.rewardPending = false;
     this.reviveUsed = false;
     this.invulnerableTime = 0;
@@ -319,6 +324,7 @@ export class Game {
     }
 
     this.updateFloating(deltaTime);
+    this.updateStage?.(deltaTime);
     this.feel.update(deltaTime, this.currentSpeed);
     const speedRange = Math.max(1, CONFIG.TRACK_SPEED_MAX - CONFIG.TRACK_SPEED_START);
     this.audio?.setMusicIntensity?.((this.currentSpeed - CONFIG.TRACK_SPEED_START) / speedRange);
@@ -743,6 +749,20 @@ export class Game {
     }
   }
 
+  // Новый этап суток: плашка с названием, мелодия и вибрация. Плашка живёт TOAST_SECONDS секунд
+  // игрового времени (на паузе стоит). На старте забега этап «день» без плашки.
+  updateStage(deltaTime) {
+    const stage = timeOfDay(this.runTime + (this.todOffset || 0));
+    if (stage.key !== this.stageKey) {
+      this.stageKey = stage.key;
+      this.stageToast = { name: stage.name, age: 0 };
+      this.feel?.onStage?.();
+    } else if (this.stageToast) {
+      this.stageToast.age += deltaTime;
+      if (this.stageToast.age >= CONFIG.TIME_OF_DAY.TOAST_SECONDS) this.stageToast = null;
+    }
+  }
+
   // Кот прошёл вплотную к стене: небольшой бонус, а касания подряд (не позже GRAZE.COMBO_WINDOW
   // друг от друга) дают чуть больше. Бонус не умножается: главный источник очков — риск.
   applyGraze({ x, y, side }) {
@@ -829,6 +849,11 @@ export class Game {
     this.renderer.drawFloatingRewards(this.floatingRewards);
     this.renderer.endWorld();
 
+    // Время суток лежит поверх сада (не поверх HUD). На стартовом экране всегда день.
+    if (this.state === 'PLAYING' || this.state === 'GAMEOVER') {
+      this.renderer.drawTimeOfDay(timeOfDay(this.runTime + (this.todOffset || 0)).look, time);
+    }
+
     this.renderer.drawFlash(this.feel);
     this.renderer.drawHUD(
       Math.floor(this.score),
@@ -843,6 +868,13 @@ export class Game {
       // Значок паузы — только пока забег идёт.
       this.state === 'PLAYING' && !this.userPaused
     );
+
+    if (this.state === 'PLAYING' && this.stageToast) {
+      const age = this.stageToast.age;
+      const life = CONFIG.TIME_OF_DAY.TOAST_SECONDS;
+      const alpha = Math.min(1, age / 0.25, (life - age) / 0.5);
+      this.renderer.drawStageToast(t(`stage.${this.stageToast.name}`), alpha);
+    }
 
     if (this.state === 'PLAYING' && !this.userPaused && this.choiceHintVisible()) {
       this.renderer.drawChoiceHint(t('hint.choice'));
