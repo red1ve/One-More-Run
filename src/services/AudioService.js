@@ -19,6 +19,8 @@ export class AudioService {
     this.adPaused = false;
     this.platformPaused = false;
     this.lastPlayed = {};
+    this.volume = CONFIG.AUDIO.VOLUME_DEFAULT; // 0..1, выбирает игрок
+    this.master = null; // общий регулятор громкости: через него идёт всё (эффекты и музыка)
     this.music = {
       active: false, // игра просит музыку (идёт забег)
       running: false, // планировщик крутится
@@ -26,8 +28,7 @@ export class AudioService {
       nextTime: 0,
       intensity: 0,
       timer: null,
-      gain: null,
-      noise: null
+      gain: null
     };
   }
 
@@ -35,6 +36,11 @@ export class AudioService {
     const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
     if (!Ctx) return false;
     if (!this.ctx) this.ctx = new Ctx();
+    if (!this.master) {
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.masterGain();
+      this.master.connect(this.ctx.destination);
+    }
     this.unlocked = true;
     this.syncContext();
     // Музыку могли попросить до первого жеста: запускаем, как только звук разрешён.
@@ -50,6 +56,23 @@ export class AudioService {
   toggleMuted() {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  // Громкость 0..1. 0,5 — «нормальная» (как настроены эффекты и музыка): выше — громче,
+  // ниже — тише. Звук выключается отдельно (M), громкость при этом сохраняется.
+  setVolume(volume) {
+    const value = Number(volume);
+    this.volume = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : CONFIG.AUDIO.VOLUME_DEFAULT;
+    if (this.master) this.master.gain.value = this.masterGain();
+  }
+
+  masterGain() {
+    return this.volume * CONFIG.AUDIO.MASTER_SCALE;
+  }
+
+  // Куда подключать звуки: через общий регулятор громкости.
+  output() {
+    return this.master || this.ctx.destination;
   }
 
   setHidden(hidden) {
@@ -141,7 +164,7 @@ export class AudioService {
     gain.gain.exponentialRampToValueAtTime(Math.max(0.001, amp), t + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.output());
     osc.start(t);
     osc.stop(t + duration + 0.02);
   }
@@ -180,7 +203,7 @@ export class AudioService {
     music.nextTime = this.ctx.currentTime + 0.08;
     if (!music.gain) {
       music.gain = this.ctx.createGain();
-      music.gain.connect(this.ctx.destination);
+      music.gain.connect(this.output());
     }
     const now = this.ctx.currentTime;
     music.gain.gain.cancelScheduledValues(now);
@@ -226,57 +249,39 @@ export class AudioService {
       const event = events[i];
       const length = event.steps * stepLength;
       if (event.voice === 'melody') {
-        this.musicVoice('triangle', midiToFreq(event.midi), time, length * 0.95, 0.10 * event.accent, 3200);
+        this.musicVoice('triangle', midiToFreq(event.midi), time, length * 0.95, 0.11 * event.accent, 2800, 0.01, false);
       } else if (event.voice === 'bass') {
-        this.musicVoice('triangle', midiToFreq(event.midi), time, length * 0.9, 0.13 * event.accent, 520);
-      } else if (event.voice === 'arp') {
-        this.musicVoice('sine', midiToFreq(event.midi), time, length * 0.8, 0.05 * event.accent, 2400);
-      } else if (event.voice === 'shaker') {
-        this.musicShaker(time, 0.014 * event.accent);
+        this.musicVoice('triangle', midiToFreq(event.midi), time, length * 0.92, 0.12 * event.accent, 480, 0.02, false);
+      } else if (event.voice === 'pad') {
+        this.musicVoice('sine', midiToFreq(event.midi), time, length, 0.032 * event.accent, 1400, 0.35, true);
       }
     }
   }
 
-  musicVoice(type, freq, time, duration, amp, cutoff) {
+  // Один звук музыки. Щипок (sustain = false): быстро берётся и затухает. Длинный аккорд
+  // (sustain = true): плавно нарастает, держится и плавно уходит.
+  musicVoice(type, freq, time, duration, amp, cutoff, attack = 0.01, sustain = false) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
+    const length = Math.max(0.05, duration);
     osc.type = type;
     osc.frequency.setValueAtTime(freq, time);
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(cutoff, time);
     gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.linearRampToValueAtTime(Math.max(0.001, amp), time + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.05, duration));
+    gain.gain.linearRampToValueAtTime(Math.max(0.001, amp), time + attack);
+    if (sustain) {
+      gain.gain.linearRampToValueAtTime(Math.max(0.001, amp), time + Math.max(attack, length - 0.4));
+      gain.gain.linearRampToValueAtTime(0.0001, time + length);
+    } else {
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + length);
+    }
     osc.connect(filter);
     filter.connect(gain);
     gain.connect(this.music.gain);
     osc.start(time);
-    osc.stop(time + Math.max(0.05, duration) + 0.03);
-  }
-
-  musicShaker(time, amp) {
-    const ctx = this.ctx;
-    const music = this.music;
-    if (!music.noise) {
-      const length = Math.floor(ctx.sampleRate * 0.06);
-      const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < length; i += 1) data[i] = Math.random() * 2 - 1;
-      music.noise = buffer;
-    }
-    const source = ctx.createBufferSource();
-    const filter = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-    source.buffer = music.noise;
-    filter.type = 'highpass';
-    filter.frequency.setValueAtTime(6500, time);
-    gain.gain.setValueAtTime(Math.max(0.001, amp), time);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
-    source.connect(filter);
-    filter.connect(gain);
-    gain.connect(music.gain);
-    source.start(time);
+    osc.stop(time + length + 0.03);
   }
 }

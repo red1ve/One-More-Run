@@ -30,6 +30,7 @@ export class Game {
     this.mouseInput = new MouseInput(this.canvas);
     this.touchInput = new TouchInput(this.canvas);
     this.audio.setMuted(!!this.storage.get('audioMuted', false));
+    this.audio.setVolume(this.storage.get('audioVolume', CONFIG.AUDIO.VOLUME_DEFAULT));
 
     this.player = new Player();
     this.track = new Track();
@@ -114,6 +115,31 @@ export class Game {
     const muted = this.audio.toggleMuted();
     this.storage.set('audioMuted', muted);
     return muted;
+  }
+
+  // Громкость шагами по 10%. Если звук был выключен, нажатие «громче» включает его.
+  changeVolume(direction) {
+    const step = CONFIG.AUDIO.VOLUME_STEP;
+    const next = Math.round(Math.max(0, Math.min(1, this.audio.volume + direction * step)) * 10) / 10;
+    this.audio.setVolume(next);
+    this.storage.set('audioVolume', next);
+    if (direction > 0 && this.audio.muted) {
+      this.audio.setMuted(false);
+      this.storage.set('audioMuted', false);
+    }
+    return next;
+  }
+
+  // Нажатие на кнопки звука (экраны START и Game Over). true = нажатие обработано.
+  handleSoundTap(x, y) {
+    if (this.state !== 'START' && this.state !== 'GAMEOVER') return false;
+    const hit = this.renderer?.hitSoundButton?.(x, y);
+    if (!hit) return false;
+    if (hit === 'minus') this.changeVolume(-1);
+    else if (hit === 'plus') this.changeVolume(1);
+    else if (hit === 'mute') this.toggleMute();
+    if (this.state === 'START') this.render();
+    return true;
   }
 
   tryLaunch() {
@@ -317,6 +343,8 @@ export class Game {
 
   // Нажатие на экран (мышь или палец) в логических координатах холста.
   handleTap(x, y) {
+    // Кнопки звука не запускают забег.
+    if (this.handleSoundTap?.(x, y)) return false;
     if (this.state === 'GAMEOVER') {
       if (this.gameOverInputLocked() || this.rewardPending) return false;
       const hit = this.renderer?.hitGameOverButton?.(x, y);
@@ -556,6 +584,7 @@ export class Game {
         {
           isNewBest: this.isNewBest,
           muted: this.audio?.muted,
+          volume: this.audio?.volume,
           offerRevive: this.canOfferRevive(),
           offerDouble: this.canOfferDoubleCoins(),
           runCoins: this.runCoins || 0,
@@ -563,7 +592,7 @@ export class Game {
         }
       );
     } else if (this.state === 'START') {
-      this.renderer.drawStartScreen(this.audio?.muted, this.showFirstRunHints);
+      this.renderer.drawStartScreen(this.audio?.muted, this.showFirstRunHints, this.audio?.volume);
     }
   }
 }

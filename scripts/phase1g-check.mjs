@@ -111,8 +111,9 @@ check('score: 128 steps, melody notes from the allowed set, no overlaps, loop cl
   for (let i = 1; i < melody.length; i += 1) {
     assert(melody[i - 1].step + melody[i - 1].steps <= melody[i].step, `melody notes overlap at step ${melody[i].step}`);
   }
-  assert(melody.length >= 40, 'melody is too sparse');
-  // Каждый такт: бас на «раз» и три шейкера на «и».
+  assert(melody.length >= 20 && melody.length <= 30, `melody should be simple: ${melody.length} notes`);
+  // Простота: только мелодия, бас и длинный аккорд (ни арпеджио, ни шейкера).
+  assert(!STEP_EVENTS.flat().some((e) => e.voice === 'arp' || e.voice === 'shaker'), 'too busy for a calm tune');
   for (let bar = 0; bar < 8; bar += 1) {
     const events = STEP_EVENTS[bar * STEPS_PER_BAR];
     assert(events.some((event) => event.voice === 'bass'), `bar ${bar + 1} has no bass on the downbeat`);
@@ -136,7 +137,7 @@ check('scheduler: notes go forward in time, never into the past, whole loop play
     audio.tickMusic();
   }
   audio.setMusicActive(false);
-  assert(ctx.starts.length > 200, `only ${ctx.starts.length} notes scheduled in ${seconds} s`);
+  assert(ctx.starts.length > 80, `only ${ctx.starts.length} notes scheduled in ${seconds} s`);
   let last = -1;
   const melodyFreqs = new Set([72, 74, 76, 79, 81, 84].map((midi) => Math.round(midiToFreq(midi))));
   for (const note of ctx.starts) {
@@ -148,7 +149,7 @@ check('scheduler: notes go forward in time, never into the past, whole loop play
   assert(heard.size === melodyFreqs.size, 'not every pentatonic note was played');
   // 40 секунд при 108 BPM (примерно 14,4 шага/с): круг из 128 шагов (~8,9 с) проходит несколько раз.
   const bass = ctx.starts.filter((n) => n.freq < 200);
-  assert(bass.length > 40, 'the bass line is missing');
+  assert(bass.length > 20, 'the bass line is missing');
 });
 
 check('scheduler: a stopped clock (pause, ad, muted) does not pile up notes', () => {
@@ -231,6 +232,109 @@ check('game: music runs only during PLAYING (start, revive) and stops on game ov
 check('game: music tempo follows the run speed', () => {
   const source = readFileSync(new URL('../src/game/Game.js', import.meta.url), 'utf8');
   assert(/setMusicIntensity/.test(source), 'Game does not pass the run speed to the music');
+});
+
+
+// ---- громкость
+check('volume: default 50% is the reference level, 0..100% maps to 0..2x, input is clamped', () => {
+  const audio = new AudioService();
+  assert(audio.volume === 0.5 && CONFIG.AUDIO.VOLUME_DEFAULT === 0.5, 'default volume must be 50%');
+  assert(Math.abs(audio.masterGain() - 1) < 1e-9, '50% must be exactly the level the sounds were tuned for');
+  audio.setVolume(1);
+  assert(Math.abs(audio.masterGain() - 2) < 1e-9, '100% is twice as loud');
+  audio.setVolume(0);
+  assert(audio.masterGain() === 0, '0% is silent');
+  audio.setVolume(7);
+  assert(audio.volume === 1, 'volume above 1 must be clamped');
+  audio.setVolume(-3);
+  assert(audio.volume === 0, 'volume below 0 must be clamped');
+  audio.setVolume('abc');
+  assert(audio.volume === 0.5, 'garbage falls back to the default');
+});
+
+check('volume: effects and music go through the master gain, volume changes apply live', () => {
+  const audio = makeAudio();
+  audio.master = audio.ctx.createGain();
+  audio.master.gain.value = audio.masterGain();
+  const connected = [];
+  const realCreateGain = audio.ctx.createGain.bind(audio.ctx);
+  audio.ctx.createGain = () => {
+    const node = realCreateGain();
+    const realConnect = node.connect;
+    node.connect = (target) => { connected.push(target); return realConnect(target); };
+    return node;
+  };
+  audio.ctx.currentTime = 5; // позже паузы между одинаковыми звуками
+  assert(audio.play('coin') === true, 'the effect did not play');
+  audio.setMusicActive(true);
+  audio.ctx.currentTime = 5.1;
+  audio.tickMusic();
+  audio.setMusicActive(false);
+  assert(connected.includes(audio.master), 'effects or music bypass the master volume');
+  assert(!connected.includes(audio.ctx.destination), 'something is connected straight to the speakers');
+  audio.setVolume(0.8);
+  assert(Math.abs(audio.master.gain.value - 1.6) < 1e-9, 'volume change must reach the master gain at once');
+});
+
+check('game: volume steps by 10%, saves, clamps, and plus un-mutes', () => {
+  const store = {};
+  const audio = new AudioService();
+  const game = Object.create(Game.prototype);
+  Object.assign(game, {
+    audio,
+    storage: { set(k, v) { store[k] = v; }, get(k, d) { return k in store ? store[k] : d; } }
+  });
+  assert(game.changeVolume(1) === 0.6 && store.audioVolume === 0.6, 'plus must add 10% and save it');
+  assert(game.changeVolume(-1) === 0.5 && game.changeVolume(-1) === 0.4, 'minus must subtract 10%');
+  for (let i = 0; i < 12; i += 1) game.changeVolume(-1);
+  assert(audio.volume === 0, 'volume must stop at 0');
+  for (let i = 0; i < 14; i += 1) game.changeVolume(1);
+  assert(audio.volume === 1, 'volume must stop at 100%');
+  audio.setMuted(true);
+  game.changeVolume(-1);
+  assert(audio.muted === true, 'lowering the volume must not un-mute');
+  game.changeVolume(1);
+  assert(audio.muted === false && store.audioMuted === false, 'raising the volume must un-mute');
+});
+
+check('game: taps on the sound buttons change sound but never start or restart a run', () => {
+  const store = {};
+  const audio = new AudioService();
+  let launched = 0;
+  let rendered = 0;
+  const hits = { minus: [10, 10], plus: [20, 20], mute: [30, 30] };
+  const game = Object.create(Game.prototype);
+  Object.assign(game, {
+    audio,
+    state: 'START',
+    renderer: {
+      hitSoundButton: (x, y) => Object.keys(hits).find((k) => hits[k][0] === x && hits[k][1] === y) || null
+    },
+    storage: { set(k, v) { store[k] = v; }, get(k, d) { return k in store ? store[k] : d; } },
+    tryLaunch() { launched += 1; return true; },
+    render() { rendered += 1; },
+    gameOverInputLocked: () => false,
+    rewardPending: false
+  });
+  assert(game.handleTap(10, 10) === false && audio.volume === 0.4, 'minus tap');
+  assert(game.handleTap(20, 20) === false && audio.volume === 0.5, 'plus tap');
+  assert(game.handleTap(30, 30) === false && audio.muted === true, 'mute tap');
+  assert(launched === 0 && rendered === 3, 'sound taps must not launch the game and must redraw the start screen');
+  game.handleTap(200, 200);
+  assert(launched === 1, 'a tap elsewhere still starts the run');
+  game.state = 'PLAYING';
+  game.handleTap(10, 10);
+  assert(audio.volume === 0.5, 'during a run the sound buttons are not active');
+});
+
+check('screens: the sound row has minus, level and plus with tap areas; strings in both languages', () => {
+  const en = JSON.parse(readFileSync(new URL('../src/localization/en.json', import.meta.url), 'utf8'));
+  const ru = JSON.parse(readFileSync(new URL('../src/localization/ru.json', import.meta.url), 'utf8'));
+  assert(en.sound.level.includes('{n}') && ru.sound.level.includes('{n}'), 'sound.level needs {n}');
+  const source = readFileSync(new URL('../src/rendering/Renderer.js', import.meta.url), 'utf8');
+  assert(source.includes('drawSoundControls(') && source.includes('hitSoundButton('), 'renderer has no sound controls');
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert(main.includes('Minus') && main.includes('Equal'), 'keyboard volume keys are missing');
 });
 
 console.log(results.join('\n'));

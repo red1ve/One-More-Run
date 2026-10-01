@@ -1,8 +1,9 @@
-// Музыка забега: простая спокойная мелодия «в саду». Только данные и расчёты,
+// Музыка забега: очень простая спокойная мелодия «в саду». Только данные и расчёты,
 // без звука, поэтому её можно проверить тестом. Играет AudioService.
 //
-// Размер 4/4, 8 тактов, ля-минорная пентатоника в до мажоре. Аккорды по два такта:
-// C — Am — F — G. Сетка в шестнадцатых: 16 шагов на такт, 128 шагов на круг.
+// Размер 4/4, 8 тактов, пентатоника до мажора: три ноты на фразу, длинные звуки.
+// Аккорды по два такта: C — Am — F — G. Сетка в шестнадцатых: 16 шагов на такт,
+// 128 шагов на круг. Под мелодией только мягкий бас и тихий длинный аккорд.
 
 export const STEPS_PER_BEAT = 4;
 export const BEATS_PER_BAR = 4;
@@ -22,7 +23,7 @@ export function midiToFreq(midi) {
   return 440 * 2 ** ((midi - 69) / 12);
 }
 
-// Аккорд каждого такта: корень для баса и три звука для арпеджио.
+// Аккорд каждого такта: корень для баса и три звука для длинного аккорда.
 const CHORDS = [
   { root: 48, tones: [60, 64, 67] }, // C
   { root: 48, tones: [60, 64, 67] }, // C
@@ -34,24 +35,24 @@ const CHORDS = [
   { root: 43, tones: [55, 59, 62] } // G
 ];
 
-// Мелодия: [доля от начала круга, нота, длина в долях]. Четыре фразы по два такта.
+// Мелодия: [доля от начала круга, нота, длина в долях]. Простые фразы по три ноты.
 const MELODY_BEATS = [
-  // C: вверх и обратно
-  [0, E5, 0.5], [0.5, G5, 0.5], [1, A5, 1], [2, G5, 0.5], [2.5, E5, 0.5], [3, D5, 1],
-  [4, C5, 1], [5, D5, 0.5], [5.5, E5, 0.5], [6, G5, 1.5], [7.5, E5, 0.5],
+  // C
+  [0, E5, 1], [1, G5, 1], [2, A5, 2],
+  [4, G5, 1], [5, E5, 1], [6, D5, 2],
   // Am
-  [8, E5, 0.5], [8.5, A5, 0.5], [9, C6, 1], [10, A5, 0.5], [10.5, G5, 0.5], [11, E5, 1],
-  [12, D5, 0.5], [12.5, E5, 0.5], [13, G5, 1], [14, E5, 1.5], [15.5, D5, 0.5],
+  [8, E5, 1], [9, A5, 1], [10, C6, 2],
+  [12, A5, 1], [13, G5, 1], [14, E5, 2],
   // F
-  [16, A5, 1], [17, G5, 0.5], [17.5, E5, 0.5], [18, G5, 1], [19, A5, 1],
-  [20, C6, 1], [21, A5, 0.5], [21.5, G5, 0.5], [22, A5, 1.5], [23.5, G5, 0.5],
+  [16, A5, 1], [17, G5, 1], [18, E5, 2],
+  [20, G5, 1], [21, A5, 1], [22, G5, 2],
   // G и возвращение к началу
-  [24, G5, 0.5], [24.5, E5, 0.5], [25, D5, 1], [26, E5, 0.5], [26.5, G5, 0.5], [27, A5, 1],
-  [28, G5, 1], [29, E5, 1], [30, D5, 1], [31, C5, 1]
+  [24, E5, 1], [25, D5, 1], [26, E5, 2],
+  [28, G5, 2], [30, C5, 2]
 ];
 
 // События по шагам: для каждого из 128 шагов список голосов, которые на нём стартуют.
-// Голос: { voice: 'melody' | 'bass' | 'arp' | 'shaker', midi, steps, accent }.
+// Голос: { voice: 'melody' | 'bass' | 'pad', midi, steps, accent }.
 function buildSteps() {
   const steps = Array.from({ length: LOOP_STEPS }, () => []);
   const add = (step, event) => {
@@ -67,21 +68,14 @@ function buildSteps() {
   for (let bar = 0; bar < BARS; bar += 1) {
     const chord = CHORDS[bar];
     const start = bar * STEPS_PER_BAR;
-    // Бас: корень на раз и три, квинта на два, октава на четыре.
-    add(start, { voice: 'bass', midi: chord.root, steps: 6, accent: 1 });
-    add(start + 4, { voice: 'bass', midi: chord.root + 7, steps: 4, accent: 0.7 });
-    add(start + 8, { voice: 'bass', midi: chord.root, steps: 6, accent: 0.9 });
-    add(start + 12, { voice: 'bass', midi: chord.root + 12, steps: 4, accent: 0.6 });
-    // Арпеджио: восьмые на «и», звуки аккорда по кругу.
-    const order = [0, 1, 2, 1];
-    for (let i = 0; i < 4; i += 1) {
-      add(start + 2 + i * 4, {
-        voice: 'arp', midi: chord.tones[order[i]], steps: 3, accent: 1
-      });
-    }
-    // Лёгкий «шейкер» на восьмые, сильнее на «и».
-    for (let i = 0; i < 8; i += 1) {
-      add(start + i * 2, { voice: 'shaker', midi: 0, steps: 1, accent: i % 2 === 1 ? 1 : 0.55 });
+    // Бас: корень на «раз», квинта на «три».
+    add(start, { voice: 'bass', midi: chord.root, steps: 8, accent: 1 });
+    add(start + 8, { voice: 'bass', midi: chord.root + 7, steps: 8, accent: 0.75 });
+    // Длинный тихий аккорд на два такта.
+    if (bar % 2 === 0) {
+      for (const midi of chord.tones) {
+        add(start, { voice: 'pad', midi, steps: STEPS_PER_BAR * 2, accent: 1 });
+      }
     }
   }
   return steps;
@@ -90,7 +84,7 @@ function buildSteps() {
 export const STEP_EVENTS = buildSteps();
 
 // Темп растёт вместе со скоростью забега: t от 0 (старт) до 1 (максимум).
-export function bpmFor(t, startBpm = 108, maxBpm = 132) {
+export function bpmFor(t, startBpm = 100, maxBpm = 120) {
   const clamped = Math.max(0, Math.min(1, Number(t) || 0));
   return startBpm + (maxBpm - startBpm) * clamped;
 }

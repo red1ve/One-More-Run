@@ -480,7 +480,7 @@ export class Renderer {
     );
   }
 
-  drawStartScreen(muted = false, showFirstRunHints = false) {
+  drawStartScreen(muted = false, showFirstRunHints = false, volume = 0.5) {
     const cfg = this.screenCfg();
     const cx = this.width / 2;
     const cardX = cfg.CARD_X ?? 36;
@@ -506,9 +506,34 @@ export class Renderer {
       this.fitText(t('start.hintCoins'), cx, cardY + 326, 600, 20, textW, CONFIG.COLORS.UI_HUD);
     }
 
-    const soundY = cardY + cardH + 44;
-    this.screenPill(cx, soundY, 210, 44, CONFIG.COLORS.SkyPaper);
-    this.fitText(t(muted ? 'sound.off' : 'sound.on'), cx, soundY + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
+    this.drawSoundControls(cx, cardY + cardH + 44, muted, volume);
+  }
+
+  // Звук на экранах: [−] капсула «ЗВУК n%» (нажатие включает и выключает) [+].
+  // Области нажатия запоминаются для Game.handleSoundTap (с запасом под палец).
+  drawSoundControls(cx, cy, muted, volume = 0.5) {
+    const percent = Math.round((Number.isFinite(volume) ? volume : 0.5) * 100);
+    const label = muted ? t('sound.off') : t('sound.level', { n: percent });
+    this.screenPill(cx, cy, 210, 44, CONFIG.COLORS.SkyPaper);
+    this.fitText(label, cx, cy + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
+    const gap = 142;
+    for (const [sign, x] of [['−', cx - gap], ['+', cx + gap]]) {
+      this.screenPill(x, cy, 52, 44, CONFIG.COLORS.SkyPaper);
+      this.fitText(sign, x, cy + 10, 700, 30, 40, CONFIG.COLORS.UI_TEXT);
+    }
+    this.soundButtons = {
+      mute: { x: cx - 105, y: cy - 28, w: 210, h: 56 },
+      minus: { x: cx - gap - 34, y: cy - 30, w: 68, h: 60 },
+      plus: { x: cx + gap - 34, y: cy - 30, w: 68, h: 60 }
+    };
+  }
+
+  // Какая кнопка звука под точкой (логические координаты), или null.
+  hitSoundButton(x, y) {
+    for (const [name, r] of Object.entries(this.soundButtons || {})) {
+      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return name;
+    }
+    return null;
   }
 
   // Значок «видео» на кнопках рекламы: игрок заранее видит, что это реклама.
@@ -615,9 +640,7 @@ export class Renderer {
     this.screenPill(cx, rowY + 8, 340, 62, CONFIG.COLORS.CoinAmber);
     this.fitText(t('over.restart'), cx, rowY + 17, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
 
-    const soundY = cardY + cardH + 44;
-    this.screenPill(cx, soundY, 210, 44, CONFIG.COLORS.SkyPaper);
-    this.fitText(t(extras.muted ? 'sound.off' : 'sound.on'), cx, soundY + 7, 600, 20, 184, CONFIG.COLORS.UI_TEXT);
+    this.drawSoundControls(cx, cardY + cardH + 44, extras.muted, extras.volume);
     this.ctx.globalAlpha = 1;
   }
 }

@@ -66,6 +66,15 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Громкость: «−» тише, «+» (или «=») громче, шагами по 10%.
+    const quieter = e.code === 'Minus' || e.code === 'NumpadSubtract';
+    const louder = e.code === 'Equal' || e.code === 'NumpadAdd';
+    if (quieter || louder) {
+      game.changeVolume(louder ? 1 : -1);
+      if (game.state === 'START') game.render();
+      return;
+    }
+
     if (e.repeat) return;
 
     if (e.code === 'KeyR' || e.code === 'Space' || e.code === 'Enter') {

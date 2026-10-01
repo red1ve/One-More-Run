@@ -12,7 +12,8 @@
   },
   "sound": {
     "on": "M SOUND",
-    "off": "M MUTED"
+    "off": "M MUTED",
+    "level": "SOUND {n}%"
   },
   "over": {
     "title": "GAME OVER",

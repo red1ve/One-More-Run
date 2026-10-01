@@ -109,30 +109,31 @@ export class SideDecorArt {
     return KINDS.indexOf(PROP_KINDS[Math.floor(hash(seed + 1) * PROP_KINDS.length) % PROP_KINDS.length]);
   }
 
-  // Размер — по глубине: 1 у кота, к горизонту плавно к нулю (DEPTH_HALF — где
-  // размер ≈ половина). Слишком мелкие на экране не рисуются, у порога — плавное
-  // проявление. Размер только растёт по мере приближения, поэтому появившийся
-  // предмет остаётся, пока не уйдёт за нижний край. Слоты вдали не пропускаются.
+  // Настоящая перспектива: и размер предмета, и его отступ от дороги растут вместе с
+  // шириной дорожки на этой глубине (как изгородь и ящики). Поэтому предмет летит от
+  // центра по прямой, а не «растёт на месте». Предмет задан номером места (k, сторона)
+  // и отступом от изгороди в ширинах дорожки; от кадра и соседей ничего не зависит.
+  // У горизонта предметы проявляются плавно (FADE_ROWS строк).
   collect(progress) {
     const art = this.art;
     const cfg = this.cfg();
     const period = cfg.PERIOD ?? 70;
-    const half = cfg.DEPTH_HALF ?? 1.5;
-    const minPx = cfg.MIN_PX ?? 8;
-    const fadePx = cfg.FADE_PX ?? 8;
-    const treeH = CONFIG.VISUAL.ART_PACK?.TREE_HEIGHT ?? 1.75;
+    const fadeRows = cfg.FADE_ROWS ?? 70;
+    const treeH = CONFIG.VISUAL.ART_PACK?.TREE_HEIGHT ?? 1.45;
     const catH = art.catH();
+    const horizon = art.horizonY();
     const items = this.items;
     items.length = 0;
     const nearWorld = art.screenToWorldY(art.height + 120 + (art.lastShift || 0));
     let k = Math.floor((nearWorld - progress) / period);
     for (let guard = 0; guard < 400; guard += 1, k -= 1) {
       const p = art.roadAt(k * period + progress);
-      if (p.drawY < art.horizonY() + 1) break;
-      const depth = (p.t * (1 + half)) / (p.t + half);
-      const s = depth * catH;
-      // Самый крупный предмет (дерево) уже мельче порога — дальше только мельче.
-      if (s * treeH * 1.12 < minPx) break;
+      const rows = p.drawY - horizon;
+      if (rows < 2) break;
+      const fade = Math.min(1, rows / fadeRows);
+      const alpha = fade * fade * (3 - 2 * fade);
+      if (alpha < 0.02) break;
+      const s = p.scale * catH;
       for (let side = -1; side <= 1; side += 2) {
         const kind = this.slotKind(k, side);
         if (kind < 0) continue;
@@ -140,19 +141,18 @@ export class SideDecorArt {
         const tree = kind === TREE;
         const variant = 0.88 + hash(seed + 9) * 0.24;
         const size = tree ? s * treeH * variant : s * PROP_SPRITES[KINDS[kind]].width * variant;
-        if (size < minPx) continue;
-        const alpha = Math.min(1, (size - minPx) / fadePx);
         const names = tree ? TREE_SPRITES : PROP_SPRITES[KINDS[kind]].names;
         const name = Math.floor(hash(seed + 7) * names.length) % names.length;
         const flip = hash(seed + 8) < 0.5 ? 1 : 0;
+        // Отступ от внешнего края изгороди в ширинах дорожки: деревья стоят дальше
+        // (и могут слегка заходить на изгородь), мелочи ближе к дороге.
+        const off = tree
+          ? -0.06 + 1.3 * hash(seed + 2) ** 1.4
+          : 0.02 + 0.8 * hash(seed + 2);
         const outer = this.hedgeOuter(p, side);
-        const room = Math.max(40, side < 0 ? outer : art.width - outer);
-        const pad = (tree ? 34 : 14) * depth;
-        // Деревья стоят чуть дальше от изгороди (не ближе 12% свободной полосы):
-        // так возле дороги остаётся просвет, а не сплошная стена.
-        const lateral = tree ? 0.12 + 0.88 * hash(seed + 2) : hash(seed + 2);
-        const x = outer + side * (pad + lateral * room * 0.9);
-        const y = p.drawY + hash(seed + 3) * period * 0.4 * depth;
+        const x = outer + side * off * p.roadWidth;
+        if (x < -size || x > art.width + size) continue;
+        const y = p.drawY + hash(seed + 3) * period * 0.4 * p.scale;
         // ключ места, вид, x, y, размер, картинка, отражение, прозрачность
         items.push(k * 2 + (side < 0 ? 0 : 1), kind, x, y, size, name, flip, alpha);
       }
