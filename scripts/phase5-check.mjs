@@ -76,17 +76,22 @@ await check('closing the ad early gives no revive and keeps Game Over', async ()
   assert(game.canOfferRevive(), 'revive can still be offered after a failed ad');
 });
 
-// «×2 монеты» выключена в настройках, пока нет магазина (CONFIG.YANDEX.DOUBLE_COINS_AD). Сама
-// логика сохранена для магазина, поэтому её проверяют с включённым выключателем.
-await check('the x2 coins ad is off by default: not offered even when everything else allows it', async () => {
-  assert(CONFIG.YANDEX.DOUBLE_COINS_AD === false, 'x2 coins stays off until the shop exists');
+// «×2 монеты» включена вместе с магазином (CONFIG.YANDEX.DOUBLE_COINS_AD, шаг 6б): монеты есть на что
+// тратить. Выключатель по-прежнему работает: с выключенным кнопка не предлагается.
+await check('the x2 coins ad is on now that there is a shop, and the switch still turns it off', async () => {
+  assert(CONFIG.YANDEX.DOUBLE_COINS_AD === true, 'x2 coins is on together with the shop');
   const { game } = makeGameOver({ runCoins: 4 });
-  assert(!game.canOfferDoubleCoins(), 'must not be offered while the switch is off');
-  assert(game.requestDoubleCoins() === false);
+  assert(game.canOfferDoubleCoins(), 'must be offered when everything allows it');
+  CONFIG.YANDEX.DOUBLE_COINS_AD = false;
+  try {
+    assert(!game.canOfferDoubleCoins(), 'must not be offered while the switch is off');
+    assert(game.requestDoubleCoins() === false);
+  } finally {
+    CONFIG.YANDEX.DOUBLE_COINS_AD = true;
+  }
 });
 
 await check('double coins adds this run coins once (switch on)', async () => {
-  CONFIG.YANDEX.DOUBLE_COINS_AD = true;
   try {
     const { game, coins } = makeGameOver({ runCoins: 4 });
     game.handleTap(270, 794);
@@ -95,17 +100,16 @@ await check('double coins adds this run coins once (switch on)', async () => {
     assert(game.coinsDoubled && !game.canOfferDoubleCoins(), 'only once per run');
     assert(game.requestDoubleCoins() === false);
   } finally {
-    CONFIG.YANDEX.DOUBLE_COINS_AD = false;
+    CONFIG.YANDEX.DOUBLE_COINS_AD = true;
   }
 });
 
 await check('double coins is not offered without coins this run (switch on)', async () => {
-  CONFIG.YANDEX.DOUBLE_COINS_AD = true;
   try {
     const { game } = makeGameOver({ runCoins: 0 });
     assert(!game.canOfferDoubleCoins());
   } finally {
-    CONFIG.YANDEX.DOUBLE_COINS_AD = false;
+    CONFIG.YANDEX.DOUBLE_COINS_AD = true;
   }
 });
 

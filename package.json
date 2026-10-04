@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "node scripts/drift-probe.mjs && node scripts/phase4-check.mjs && node scripts/phase7-check.mjs && node scripts/phase8-check.mjs && node scripts/phase9-check.mjs && node scripts/phase1b-check.mjs && node scripts/l10n-check.mjs && node scripts/phase5-check.mjs && node scripts/phase1e-check.mjs && node scripts/phase1f-check.mjs && node scripts/phase1g-check.mjs && node scripts/phase1h-check.mjs && node scripts/phase1i-check.mjs && node scripts/phase1j-check.mjs && node scripts/phase1k-check.mjs && node scripts/phase1l-check.mjs && node scripts/phase1m-check.mjs",
+    "check": "node scripts/drift-probe.mjs && node scripts/phase4-check.mjs && node scripts/phase7-check.mjs && node scripts/phase8-check.mjs && node scripts/phase9-check.mjs && node scripts/phase1b-check.mjs && node scripts/l10n-check.mjs && node scripts/phase5-check.mjs && node scripts/phase1e-check.mjs && node scripts/phase1f-check.mjs && node scripts/phase1g-check.mjs && node scripts/phase1h-check.mjs && node scripts/phase1i-check.mjs && node scripts/phase1j-check.mjs && node scripts/phase1k-check.mjs && node scripts/phase1l-check.mjs && node scripts/phase1m-check.mjs && node scripts/phase1n-check.mjs",
     "verify:dist": "node scripts/verify-dist.mjs"
   },
   "devDependencies": {

@@ -75,7 +75,7 @@ A player who is not signed in sees the table and a green «ВОЙТИ / SIGN IN�
 
 ### Cloud save (2026-10-01)
 
-`ysdk.getPlayer({ scopes: false })` then `player.getData(keys)` / `player.setData(data, true)` (limits: 200 KB, 100 requests per 5 minutes). Stored keys (`CONFIG.YANDEX.CLOUD_KEYS`): `bestScore`, `coins`, `choiceHintSeen`, `riskHintSeen`. When the SDK is ready the game loads the cloud data and merges it with the local data: the bigger number wins, hints count as seen if seen anywhere, so nothing is ever lost on either side; the merged state is written back. At every Game Over the current state is queued for saving; writes are glued so there is at most one per `CLOUD_SAVE_MIN_INTERVAL_MS` (4 s) and the latest state wins. Sound settings stay local. localStorage stays the source of truth for instant saves; the cloud only restores progress on another device or after the site data was cleared. When the shop appears, `coins` needs a better merge than «bigger wins» (earned and spent counters).
+`ysdk.getPlayer({ scopes: false })` then `player.getData(keys)` / `player.setData(data, true)` (limits: 200 KB, 100 requests per 5 minutes). Stored keys (`CONFIG.YANDEX.CLOUD_KEYS`): `bestScore`, `coins` (the balance, for older versions), `coinsEarned`, `coinsSpent`, `skinsOwned`, `skinSelected`, `choiceHintSeen`, `riskHintSeen`. When the SDK is ready the game loads the cloud data and merges it with the local data: the bigger number wins, owned skins are united, hints count as seen if seen anywhere, so nothing is ever lost on either side and spent coins never come back (rules in `docs/business-rules.md`); the merged state is written back. A purchase in the shop is saved at once. At every Game Over the current state is queued for saving; writes are glued so there is at most one per `CLOUD_SAVE_MIN_INTERVAL_MS` (4 s) and the latest state wins. Sound settings stay local. localStorage stays the source of truth for instant saves; the cloud only restores progress on another device or after the site data was cleared.
 
 ### Rating request (2026-10-01)
 
@@ -192,6 +192,8 @@ The console accepts a zip archive whose root contains `index.html` (not a folder
 - [ ] Test standalone/unauthorized behavior.
 - [ ] Draft + debug panel, leaderboard screen: the «ЛИДЕРЫ» button opens the table with the real top and your place; as a guest the «ВОЙТИ» button opens the Yandex login and, after signing in, your best score appears in the table.
 - [ ] Draft, cloud save: play a run, clear the site data (or open on another device) and reload while signed in: the best score and coins come back.
+- [ ] Draft, shop: with some coins press «МАГАЗИН» on the start screen, buy a skin: the coins drop by the price, the running cat and the sitting cat wear it; reload: the skin and the balance stay; open the game on another device (or clear the site data) while signed in: the skin and the balance come back, the spent coins do not.
+- [ ] Draft, shop: play on two devices, buy different skins on each, sync both: both devices keep both skins and the balance is not negative.
 - [ ] Draft, rating request: signed in, beat your record on the 3rd run of a session: the Yandex rating window appears once on the Game Over card (not for guests, not twice in a session).
 - [ ] Draft, shortcut: the «ЯРЛЫК НА ЭКРАН» button appears only where the platform allows it and disappears after accepting.
 - [ ] Enable monetization if required.

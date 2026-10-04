@@ -13,6 +13,7 @@ import { StorageService } from '../services/StorageService.js';
 import { AudioService } from '../services/AudioService.js';
 import { HapticsService } from '../services/HapticsService.js';
 import { timeOfDay } from './TimeOfDay.js';
+import { Shop } from './Shop.js';
 
 export class Game {
   constructor(canvas, platformService = null) {
@@ -48,6 +49,8 @@ export class Game {
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
     this.coins = this.storage.getCoins();
+    this.shop = new Shop(this.storage);
+    this.shopWindow = null; // null — закрыт; иначе { message } (подсказка «не хватает монет»)
 
     this.currentSpeed = CONFIG.TRACK_SPEED_START;
     this.runTime = 0;
@@ -73,6 +76,7 @@ export class Game {
       onPause: () => this.setPlatformPaused(true),
       onResume: () => this.setPlatformPaused(false)
     });
+    this.applySelectedSkin();
   }
 
   unlockAudio() {
@@ -184,7 +188,7 @@ export class Game {
   }
 
   tryLaunch() {
-    if (this.state === 'PLAYING' || this.launchPending || this.rewardPending || this.leaderboard) return false;
+    if (this.state === 'PLAYING' || this.launchPending || this.rewardPending || this.leaderboard || this.shopWindow) return false;
     // Первые мгновения после проигрыша нажатия не перезапускают игру:
     // игрок успевает увидеть экран и кнопки «за рекламу».
     if (this.state === 'GAMEOVER' && this.gameOverInputLocked?.()) return false;
@@ -406,14 +410,15 @@ export class Game {
   cloudSnapshot() {
     return {
       bestScore: this.bestScore || 0,
-      coins: this.storage.getCoins(),
+      ...this.shop.snapshot(), // монеты (заработано / потрачено), купленные скины и выбранный
       choiceHintSeen: !!this.choiceHintSeen,
       riskHintSeen: !!this.riskHintSeen
     };
   }
 
-  // Сливает данные из облака с локальными: берём большее число, подсказки — «видел где-то».
-  // Ничего не теряется ни на устройстве, ни в облаке. true = локальные данные изменились.
+  // Сливает данные из облака с локальными: рекорд и счётчики монет — по большему значению, купленные
+  // скины — объединение (Shop.merge), подсказки — «видел где-то». Ничего не теряется ни на устройстве,
+  // ни в облаке, а потраченное не возвращается. true = локальные данные изменились.
   applyCloudData(data) {
     if (!data || typeof data !== 'object') return false;
     const whole = (value) => {
@@ -427,10 +432,10 @@ export class Game {
       this.storage.set('bestScore', best);
       changed = true;
     }
-    const coins = Math.max(this.storage.getCoins(), whole(data.coins));
-    if (coins !== this.storage.getCoins()) {
-      this.storage.set('coins', coins);
-      this.coins = coins;
+    const skinBefore = this.shop.selected();
+    if (this.shop.merge(data)) {
+      this.coins = this.storage.getCoins();
+      if (this.shop.selected() !== skinBefore) this.applySelectedSkin();
       changed = true;
     }
     for (const key of ['choiceHintSeen', 'riskHintSeen']) {
@@ -530,8 +535,90 @@ export class Game {
     // Сразу после проигрыша и во время рекламы нажатия кнопок не срабатывают (как и перезапуск).
     if (this.state === 'GAMEOVER' && (this.gameOverInputLocked() || this.rewardPending || this.launchPending)) return true;
     if (hit === 'leaderboard') this.openLeaderboard();
+    else if (hit === 'shop') this.openShop();
     else if (hit === 'shortcut') this.addShortcut();
     return true;
+  }
+
+  // --- Магазин скинов (Shop.js): открывается с экранов START и Game Over ---
+
+  // Скин, выбранный в магазине, надевается на бегущего и сидящего кота (Renderer.setSkin).
+  applySelectedSkin() {
+    const id = this.shop.selected();
+    if (id === CONFIG.SHOP.DEFAULT_SKIN && !this.renderer?.skinRequest) return;
+    Promise.resolve(this.renderer?.setSkin?.(id)).then(() => this.requestRender?.()).catch(() => {});
+  }
+
+  openShop() {
+    if (this.shopWindow || (this.state !== 'START' && this.state !== 'GAMEOVER')) return false;
+    this.shopWindow = { message: null };
+    this.renderer?.loadSkinPreviews?.(this.shop.ids(), () => this.requestRender());
+    this.requestRender();
+    return true;
+  }
+
+  closeShop() {
+    if (!this.shopWindow) return false;
+    this.shopWindow = null;
+    this.requestRender();
+    return true;
+  }
+
+  // Что нарисовать в окне магазина.
+  shopView() {
+    return { skins: this.shop.list(), balance: this.shop.balance(), message: this.shopWindow?.message || null };
+  }
+
+  handleShopTap(x, y) {
+    const hit = this.renderer?.hitShopButton?.(x, y);
+    if (!hit) return false;
+    if (hit.type === 'close') return this.closeShop();
+    if (hit.type === 'skin') return this.tapSkin(hit.id);
+    return false;
+  }
+
+  // Купленный скин надевается, неоплаченный покупается (если хватает монет) и сразу надевается.
+  tapSkin(id) {
+    if (!this.shopWindow) return false;
+    const owned = this.shop.isOwned(id);
+    let changed = false;
+    if (owned) {
+      changed = this.shop.select(id);
+    } else {
+      const result = this.shop.buy(id);
+      if (!result.ok) {
+        if (result.reason === 'poor') {
+          this.showShopMessage(t('shop.missing', { n: result.missing }));
+          this.audio?.play?.('nope');
+        }
+        return false;
+      }
+      changed = true;
+      this.audio?.play?.('buy');
+      this.haptics?.pulse?.('best');
+      // Покупка сразу уходит в облако: монеты и скин не должны потеряться, если игрок закроет игру.
+      this.platform?.saveCloudData?.(this.cloudSnapshot());
+    }
+    this.coins = this.storage.getCoins();
+    if (changed) this.applySelectedSkin();
+    this.shopWindow.message = null;
+    this.requestRender();
+    return changed;
+  }
+
+  // Подсказка в окне магазина гаснет через CONFIG.SHOP.MESSAGE_SECONDS.
+  showShopMessage(message) {
+    const shopWindow = this.shopWindow;
+    if (!shopWindow) return;
+    shopWindow.message = message;
+    this.requestRender();
+    const timer = setTimeout(() => {
+      if (this.shopWindow === shopWindow && shopWindow.message === message) {
+        shopWindow.message = null;
+        this.requestRender();
+      }
+    }, CONFIG.SHOP.MESSAGE_SECONDS * 1000);
+    timer.unref?.();
   }
 
   async addShortcut() {
@@ -570,7 +657,11 @@ export class Game {
 
   // Нажатие на экран (мышь или палец) в логических координатах холста.
   handleTap(x, y) {
-    // Пока открыта таблица лидеров, нажатия достаются только ей.
+    // Пока открыт магазин или таблица лидеров, нажатия достаются только им.
+    if (this.shopWindow) {
+      this.handleShopTap(x, y);
+      return false;
+    }
     if (this.leaderboard) {
       this.handleLeaderboardTap(x, y);
       return false;
@@ -908,10 +999,14 @@ export class Game {
       );
     } else if (this.state === 'START') {
       this.renderer.drawStartScreen(this.audio?.muted, this.audio?.volume, {
+        shop: true,
         leaderboard: this.canShowLeaderboard(),
         shortcut: this.shortcutAvailable
       });
     }
+
+    // Окна магазина и таблицы лидеров лежат поверх любого экрана.
+    if (this.shopWindow) this.renderer.drawShop(this.shopView());
 
     // Окно таблицы лидеров лежит поверх любого экрана.
     if (this.leaderboard) this.renderer.drawLeaderboard(this.leaderboard);

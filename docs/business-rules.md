@@ -45,6 +45,18 @@ Fairness rules (guarded by `scripts/phase1l-check.mjs`):
 
 Dev only: `?start=100` starts the run at the 100th second (speed, time of day and the planter as in a long run); with `?seed=11` the first swaying row of that seed comes at ~136 s.
 
+## Coins and the skin shop (2026-10-05)
+
+Coins are collected on the track (+1, not score). They are stored as two counters, **earned** and **spent**; the balance is their difference (`StorageService`: `coinCounters`, `addCoins`, `spendCoins`). An old save with the single `coins` number becomes `earned`. The balance can never go negative, a purchase is refused if the balance is smaller than the price.
+
+The shop (`Shop.js`, `CONFIG.SHOP`) sells the 8 cat skins for coins; all prices are in `CONFIG.SHOP.SKINS` (classic 0, ginger 10, honey 25, snow 40, tuxedo 60, siamese 90, calico 130, ribbon 180). Buying spends the exact price, adds the skin to the owned list and puts it on at once; a bought skin can be worn again for free, a skin cannot be bought twice, a broken save falls back to the free skin. The window opens from the START and Game Over screens (never during a run); Esc or the close button shuts it; while it is open a tap or R / Space / Enter does not start a run.
+
+Prices come from the measured income (`scripts/phase1n-check.mjs`): the track offers on average 1.8 coins in the first 30 s of a run, 5.3 in 60 s, 10.8 in 90 s; a player picks up about 60%. So the first skin takes about 10 short runs (about 5 with the ×2 ad), the whole ladder (535 coins) about 170 minute-long runs; daily rewards and quests (next steps) add coins on top. The test fails if the track's coin income or the price ladder drifts out of these bounds.
+
+Cloud (`Shop.merge`, `Game.cloudSnapshot` / `applyCloudData`): the cloud holds `coinsEarned`, `coinsSpent`, `skinsOwned`, `skinSelected` (and `coins` = the balance, for older versions). Merge rules: each counter takes the bigger value, so spent coins never come back; owned skins are the union; the cloud choice is adopted only on a device where nothing was chosen yet and only if that skin is owned; `spent > earned` in the cloud is ignored as contradictory; an old client that sent only `coins` counts as `earned`. If two devices bought different skins, the player keeps both and pays by the bigger spent counter (generous, never punishing). A purchase is saved to the cloud at once.
+
+The ×2 coins ad (`YANDEX.DOUBLE_COINS_AD`) is on again: it adds this run's coins once more (`earned`).
+
 ## Rewarded advertising
 
 Rewarded advertising is not part of the current release. There is no continue, revive, score reward, or Coin reward for watching an ad.

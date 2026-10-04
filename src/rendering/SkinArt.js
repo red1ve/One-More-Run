@@ -273,3 +273,71 @@ export function skinSvg(svg, skinId) {
   const end = out.lastIndexOf('</svg>');
   return end < 0 ? out : out.slice(0, end) + tail + out.slice(end);
 }
+
+// ---- сидящий кот (экраны старта, паузы и проигрыша) и превью в магазине
+
+// Цвета частей сидящего кота (assets/characters/loaf-sit.svg, у частей есть data-part). Не указанные
+// части остаются как есть. body красит ещё голову, уши и лапы, если для них нет своего цвета.
+const SIT_PALETTE = {
+  ginger: { body: '#EBA45E', patch: '#C46A28', tail: '#C46A28', inner: '#C46A28', paw: '#F4E3C8', nose: '#C9806A' },
+  tuxedo: { body: '#7A5845', patch: '#684A3B', tail: '#F2DFC2', paw: '#F2DFC2', inner: '#684A3B', nose: '#C9806A' },
+  calico: { patch: '#E3A04F', earFolded: '#5E4235', tail: '#E3A04F', inner: '#E3A04F', nose: '#C9806A' },
+  siamese: { body: '#F2E4D6', patch: '#CDB7A3', earFolded: '#5A4036', earFull: '#5A4036', tail: '#5A4036', paw: '#5A4036', inner: '#4A3128', nose: '#8B5A4E' },
+  honey: { body: '#E9BE63', patch: '#BE8A32', tail: '#BE8A32', inner: '#BE8A32', nose: '#C9806A' },
+  snow: { body: '#F6F1EA', patch: '#CFC8C0', tail: '#CFC8C0', inner: '#CFC8C0', nose: '#D9A89C' }
+};
+const SIT_BODY_PARTS = ['body', 'head', 'earFolded', 'earFull', 'paw'];
+
+// Пятна Пёстрого на теле и лента на хвосте сидящего кота (координаты рисунка 300 × 360).
+const SIT_BODY_PATCHES = {
+  calico: [
+    { color: '#E3A04F', cx: 112, cy: 272, rx: 30, ry: 22, rot: -20 },
+    { color: '#5E4235', cx: 192, cy: 252, rx: 24, ry: 30, rot: 15 }
+  ]
+};
+const SIT_RIBBON = { ribbon: { x: 256, y: 284 } };
+// Светлая мордочка и «манишка» Смокинга: без них тёмное лицо с тёмными глазами сливается.
+const SIT_TUXEDO = { color: '#F2DFC2', muzzle: { cx: 150, cy: 172, rx: 34, ry: 22 }, bib: { cx: 150, cy: 262, rx: 32, ry: 48 } };
+
+// SVG сидящего кота в окраске скина. classic и неизвестные скины возвращают рисунок как есть.
+export function sitSvg(svg, skinId) {
+  const palette = SIT_PALETTE[skinId];
+  const patches = SIT_BODY_PATCHES[skinId];
+  const ribbon = SIT_RIBBON[skinId];
+  const tuxedo = skinId === 'tuxedo' ? SIT_TUXEDO : null;
+  if (!palette && !patches && !ribbon) return svg;
+  let out = svg;
+  if (palette) {
+    out = out.replace(/<(path|rect) data-part="(\w+)"([^>]*?)fill="#[0-9a-fA-F]{6}"/g, (whole, tag, part, middle) => {
+      const color = palette[part] || (SIT_BODY_PARTS.includes(part) ? palette.body : undefined);
+      return color ? `<${tag} data-part="${part}"${middle}fill="${color}"` : whole;
+    });
+  }
+  if (patches) {
+    const blobs = patches
+      .map((b) => `<ellipse cx="${b.cx}" cy="${b.cy}" rx="${b.rx}" ry="${b.ry}" transform="rotate(${b.rot || 0} ${b.cx} ${b.cy})" fill="${multiplier(b.color)}"/>`)
+      .join('');
+    const layer = `<g clip-path="url(#loaf-body)" style="mix-blend-mode:multiply">${blobs}</g>\n`;
+    out = out.replace(/(\s*)(<g stroke="#4A3428" stroke-width="9" stroke-linejoin="round">\s*<!-- лапки -->)/, `$1${layer}$2`);
+  }
+  if (tuxedo) {
+    const { color, muzzle, bib } = tuxedo;
+    const chest = `<g clip-path="url(#loaf-body)"><ellipse cx="${bib.cx}" cy="${bib.cy}" rx="${bib.rx}" ry="${bib.ry}" fill="${color}"/></g>\n`;
+    out = out.replace(/(\s*)(<g stroke="#4A3428" stroke-width="9" stroke-linejoin="round">\s*<!-- лапки -->)/, `$1${chest}$2`);
+    out = out.replace(/(\s*)(<!-- лицо)/, `$1<ellipse cx="${muzzle.cx}" cy="${muzzle.cy}" rx="${muzzle.rx}" ry="${muzzle.ry}" fill="${color}"/>$1$2`);
+  }
+  if (ribbon) {
+    const { x, y } = ribbon;
+    const bow = `<g stroke="#4A3428" stroke-width="5" stroke-linejoin="round"><path d="M${x} ${y} L${x - 22} ${y - 14} L${x - 19} ${y + 13} Z" fill="#E8B84A"/><path d="M${x} ${y} L${x + 22} ${y - 15} L${x + 18} ${y + 13} Z" fill="#E8B84A"/><circle cx="${x}" cy="${y}" r="7" fill="#E8B84A"/></g>\n`;
+    out = out.replace('</svg>', `${bow}</svg>`);
+  }
+  return out;
+}
+
+// Кадр бега, обрезанный по коту, для превью в магазине: у картинки свой размер (а не 1024 × 1024),
+// поэтому в рамку магазина она ложится ровно и остаётся чёткой.
+export function skinPreviewSvg(frameSvg, skinId) {
+  return skinSvg(frameSvg, skinId)
+    .replace(/viewBox="0 0 1024 1024"/, 'viewBox="340 96 360 850"')
+    .replace(/width="100%" height="auto"/, 'width="360" height="850"');
+}

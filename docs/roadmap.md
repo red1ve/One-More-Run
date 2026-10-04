@@ -41,7 +41,7 @@ Prepare the game for Yandex Games.
 - fullscreen ad lifecycle — DONE;
 - Developer Console setup and platform verification — NEXT;
 - explicit authorization UI — LATER, only if justified;
-- rewarded ads (revive, ×2 coins) — DONE (Phase 5); ×2 coins is switched off until the shop exists.
+- rewarded ads (revive, ×2 coins) — DONE (Phase 5); ×2 coins is on again since the shop appeared (2026-10-05).
 
 ## Version 0.4 — Polish
 
@@ -62,7 +62,7 @@ Make the game look and feel finished.
 
 ## Version 1.0 — Release
 
-Status (2026-10): Phases 0–6 done — reference look with the painted art pack, Russian/English, rewarded ads, final QA on phone/tablet/desktop sizes, dead code removed, honest catalogue screenshots in `docs/store/screenshots/`, build 3.7 MB (0.65 MB downloaded at start). Left: console setup, upload, moderation (Phase 7, owner; see `docs/yandex-integration.md`). The leaderboard screen, cloud save, rating request and shortcut prompt were added on 2026-10-01 (see `docs/yandex-integration.md`). Postponed to after release: skin shop (Phase 5b), performance pass (Phase 2).
+Status (2026-10): Phases 0–6 done — reference look with the painted art pack, Russian/English, rewarded ads, final QA on phone/tablet/desktop sizes, dead code removed, honest catalogue screenshots in `docs/store/screenshots/`, build 3.7 MB (0.65 MB downloaded at start). Left: console setup, upload, moderation (Phase 7, owner; see `docs/yandex-integration.md`). The leaderboard screen, cloud save, rating request and shortcut prompt were added on 2026-10-01 (see `docs/yandex-integration.md`). The skin shop (Phase 5b) was built on 2026-10-05, before release, by the owner decision (see GAME_SPEC §43). Postponed to after release: performance pass (Phase 2).
 
 Goal:
 

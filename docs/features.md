@@ -43,7 +43,7 @@ Current implementation notes:
 - Choices are SAFE/RISK (`TWO_PATHS`) and RISK/RISK (`DUAL_RISK` after 30s). No other Choice types.
 - Intentional RISK grows streak; SAFE on a Choice resets streak and multiplier to 1.0x. Breathing / non-choice does not change streak.
 - Multiplier starts at 1.0x, steps +0.5, caps at 5.0x. Path reward uses the multiplier **before** the step.
-- Coins are a separate meta counter (+1), not score/streak/multiplier. They persist through Game Over. There is no shop.
+- Coins are a separate meta counter (+1), not score/streak/multiplier. They persist through Game Over and are spent in the skin shop.
 - `VariationDirector` spaces Choices; reachability remains the source of truth, with fallback.
 - Track patterns use ordered gate rows compiled into the existing obstacle/path rectangles. OFFSET, FUNNEL, OFFSET_GATE, and DOUBLE_GATE vary steering geometry without adding controls or rewards.
 - All four patterns can vary NORMAL; SAFE/RISK supports OFFSET, FUNNEL, and OFFSET_GATE; DUAL_RISK supports OFFSET_GATE. DOUBLE_GATE unlocks after 60 seconds and remains NORMAL-only.
@@ -67,7 +67,8 @@ Current implementation notes:
 | Close call bonus (+10..30, `Track.checkGraze`) | P1 | DONE (2026-10-01) |
 | Time of day: day, golden hour, dusk, night (fireflies), dawn, with a milestone capsule | P1 | DONE (2026-10-01) |
 | Swaying planter: a moving obstacle after 90 s, always a free pocket of 90+ px (`CONFIG.SWAY`, `Track.createSway`) | P1 | DONE (2026-10-05) |
-| Cat skins engine: 8 colourways by recolouring the run frames (`SkinArt.js`); no shop yet, dev `?skin=` only | P1 | PROTOTYPE (2026-10-05) |
+| Cat skins engine: 8 colourways by recolouring the run frames and the sitting cat (`SkinArt.js`) | P1 | DONE (2026-10-05) |
+| Skin shop for coins (`Shop.js`, START and Game Over screens), coins as earned / spent counters, cloud merge | P1 | DONE (2026-10-05) |
 | Vibration on events (`HapticsService`, follows the sound switch) | P2 | DONE (2026-10-01) |
 | Streak and coin-chain pitch (pentatonic, in tune with the music) | P2 | DONE (2026-10-01) |
 
@@ -94,7 +95,7 @@ Current implementation notes:
 | Cloud save (record, coins, hints; merge, nothing is lost) | P1 | DONE (2026-10-01) |
 | Rating request after a new best | P1 | DONE (2026-10-01) |
 | Desktop/home shortcut prompt | P2 | DONE (2026-10-01) |
-| Rewarded advertising (continue; x2 coins is switched off until the shop exists) | P1 | DONE |
+| Rewarded advertising (continue; x2 coins, on since the shop appeared) | P1 | DONE |
 
 
 ---
