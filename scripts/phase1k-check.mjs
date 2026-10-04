@@ -163,7 +163,7 @@ check('toast: a long run shows the repeating stages again, and a new run starts 
   assert(names.join() === 'golden,dusk,night,dawn,day,golden,dusk', `names ${names}`);
   const source = readFileSync(new URL('../src/game/Game.js', import.meta.url), 'utf8');
   const start = source.slice(source.indexOf('  start() {'), source.indexOf('  loop(timestamp)'));
-  assert(/this\.stageKey = timeOfDay\(this\.todOffset \|\| 0\)\.key/.test(start) && /this\.stageToast = null/.test(start), 'start() must reset the stage');
+  assert(/this\.stageKey = timeOfDay\(this\.runTime \+ \(this\.todOffset \|\| 0\)\)\.key/.test(start) && /this\.stageToast = null/.test(start), 'start() must reset the stage');
   assert(/this\.updateStage\?\.\(deltaTime\)/.test(source), 'update() must age the toast and detect new stages');
 });
 

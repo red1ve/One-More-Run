@@ -23,7 +23,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const game = new Game(canvas, yandex);
   // Только для разработки (npm run dev), в сборку не попадает:
   // ?seed=42 — одна и та же трасса при каждом старте; ?assist=1 — полная помощь новичку;
-  // ?tod=200 — время суток со сдвигом (только вид);
+  // ?tod=200 — время суток со сдвигом (только вид); ?start=100 — забег начинается со 100-й секунды;
   // window.__omrGame — доступ из консоли.
   // В игре для игроков seed из адреса не работает, чтобы нельзя было выучить трассу для рекорда.
   if (import.meta.env?.DEV) {
@@ -35,6 +35,9 @@ window.addEventListener('DOMContentLoaded', () => {
     // ?tod=200 — время суток начинается с 200-й секунды цикла (ночь), чтобы посмотреть этап, не играя 3 минуты.
     const todParam = new URLSearchParams(window.location.search).get('tod');
     if (todParam !== null && Number.isFinite(Number(todParam))) game.todOffset = Number(todParam);
+    // ?start=100 — забег начинается со 100-й секунды: сразу высокая скорость и качающееся кашпо (от 90 с).
+    const startParam = new URLSearchParams(window.location.search).get('start');
+    if (startParam !== null && Number.isFinite(Number(startParam))) game.devStartTime = Math.max(0, Number(startParam));
     window.__omrGame = game;
   }
   const gameArea = canvas.closest('#game-container') || canvas;

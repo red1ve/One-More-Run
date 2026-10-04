@@ -30,6 +30,21 @@ Gap widths (px of track, 400 px wide; the cat is 36 px). Narrowed twice on 2026-
 
 Walls at the road edge: the playfield is 18 px wider than the visible sand on each side, so a wall up to `EDGE_WALL_HIDDEN` (20) is hidden under the curb (a passage flush with the edge) and any other wall shows `width − 18` px. A wall between 20 and `EDGE_WALL_MIN` (58) would be drawn as a speck of a bush, so `Track` never creates one (`edgeWallsOk`, `snapToEdgeRule`, `fitRowsToEdgeRule`): choice forks and gaps are placed at an allowed spot, pattern rows (offset, funnel, gates) are shifted as a whole, the funnel widening and the offset drift of a choice are reduced when there is no room. Reachability is still checked for every row (`scripts/phase1h-check.mjs`, `phase9-check.mjs`).
 
+### Swaying planter (2026-10-05)
+
+After 90 s of a run (`CONFIG.SWAY`, `Track.createSway`, `Track.placeSway`) some ordinary rows (never inside a fork, never right after a fork, never two in a row; `VariationDirector.choosePattern`) have a wooden planter that walks from one wall of the gap to the other. The chance of picking such a row is 12% / 20% / 28% at 90–150 / 150–240 / 240+ s; the period of the swing is 2.8 / 2.4 / 2.0 s (the later, the faster). Because a row that would be unfair is replaced by an ordinary one, the real share is lower (about 9% / 11% / 14% of ordinary rows in `scripts/phase1l-check.mjs`).
+
+Geometry: the gap between the walls is 264 px (planter 84 + a 90 px pocket on each side), the planter is a 84 × 40 obstacle in the row of the walls, the position is a sine wave of the run clock (`Track.swayClock`), so it is the same at any frame rate. The pockets always add up to 180 px, so a free pocket of at least 90 px exists at every moment (in the middle of the swing 90 + 90, at a wall 0 + 180); the cat is 36 px. The planter never goes faster than 203 / 236 / 283 px/s, the cat strafes at 420–500 px/s.
+
+Fairness rules (guarded by `scripts/phase1l-check.mjs`):
+
+- The row is placed only where the cat can reach the safe part of **both** pockets from **any** point of the previous exit (not only from the nearest one), even if it starts moving 0.25 s (`SWAY.REACTION`) after the previous row, at its real speed (`getPlayerSpeed`). The safe part of a pocket is the pocket minus `SWAY.WINDOW_SLACK` (20 px) on the planter's side: the planter moves while the cat is in the row. Where that is not possible (short free road after OFFSET / FUNNEL at high speed) an ordinary row is built instead. After the row the next one must be reachable from both pockets.
+- Walls at the road edge follow the edge-wall rule; the newcomer assist does not widen this row (only skilled players get here).
+- No coins in this row. One SAFE path covers the whole gap, so the reward (SAFE) and the close-call bonus (`checkGraze`) work as in an ordinary row; the planter counts as a normal obstacle (collision, revive clears the row).
+- The test replays every swing phase (24) × speeds (560–720 px/s) × periods × previous-exit places (plain gaps and rows after OFFSET, FUNNEL, DOUBLE_GATE, OFFSET_GATE) with a bot that reacts 0.3 s after the previous row: no collisions, the narrowest safe place is 26 px (cat 36). A cat that stands still in the gap does get hit, so the planter is a real obstacle.
+
+Dev only: `?start=100` starts the run at the 100th second (speed, time of day and the planter as in a long run); with `?seed=11` the first swaying row of that seed comes at ~136 s.
+
 ## Rewarded advertising
 
 Rewarded advertising is not part of the current release. There is no continue, revive, score reward, or Coin reward for watching an ad.

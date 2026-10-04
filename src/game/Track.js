@@ -1,5 +1,5 @@
 import { systemRandom, createSeededRandom } from './Random.js';
-import { CONFIG, getCoinChance, isIntentionalRiskType } from '../config.js';
+import { CONFIG, getCoinChance, getPlayerSpeed, getSwayPeriod, isIntentionalRiskType } from '../config.js';
 import { VariationDirector } from './VariationDirector.js';
 
 const VISUAL_OBSTACLE_TYPES = ['FLOWER_GATE', 'STANDING_PLANTER', 'GARDEN_FENCE'];
@@ -50,6 +50,7 @@ export class Track {
     this.lastCoinZone = null;
     this.lastCoinYSlot = null;
     this.assist = 0; // помощь новичку 0..1 (см. CONFIG.ASSIST), задаётся перед забегом
+    this.swayClock = 0; // секунды забега для качающихся кашпо (Track.placeSway)
     this.director = new VariationDirector();
     this.random = systemRandom;
     this.init();
@@ -80,6 +81,7 @@ export class Track {
     this.breathingSinceChoice = 0;
     this.choiceCount = 0;
     this.runTime = 0;
+    this.swayClock = 0;
     this.lastCoinZone = null;
     this.lastCoinYSlot = null;
     this.director.reset();
@@ -544,6 +546,7 @@ export class Track {
       obstacles: [],
       coins: [],
       gates: [],
+      sway: null, // качающееся кашпо ряда (препятствие со свойством sway) или null
       coinPath: null,
       initialTravel: null,
       visualObstacleType: chooseVisualObstacleType(
@@ -588,6 +591,7 @@ export class Track {
     segment.obstacles = geometry.obstacles;
     segment.paths = geometry.paths;
     segment.gates = geometry.gates || [];
+    segment.sway = geometry.sway || null;
     segment.coinPath = geometry.coinPath || segment.paths[0] || null;
     segment.initialTravel = geometry.initialTravel ?? null;
     segment.coins = [];
@@ -623,7 +627,102 @@ export class Track {
     }
   }
 
+  // Строже canReach: до промежутка `to` можно доехать из ЛЮБОЙ точки промежутка `from`, а не только
+  // из ближайшей к нему. Нужно там, где игрок не знает заранее, в какую сторону придётся ехать.
+  // lateral — на сколько px кот успевает сдвинуться (по умолчанию как у обычных рядов, с запасом).
+  canReachFromAnywhere(from, to, travelY, lateral = this.maxLateral(travelY)) {
+    const half = CONFIG.PLAYER_WIDTH / 2;
+    const fromMin = from.x + half;
+    const fromMax = from.x + from.width - half;
+    const toMin = to.x + half;
+    const toMax = to.x + to.width - half;
+    if (fromMax < fromMin || toMax < toMin) return false;
+    // Самая дальняя точка `from` от `to` — один из его концов.
+    const farthest = Math.max(toMin - fromMin, fromMax - toMax, 0);
+    return farthest <= lateral;
+  }
+
+  // Место левого края прохода ряда с качающимся кашпо: стены у краёв по правилу краёв, и из ЛЮБОЙ
+  // точки каждого выхода прошлого ряда можно доехать до безопасной части обоих «карманов» (по pocket
+  // px у каждой стены прохода, минус WINDOW_SLACK у кашпо): какой бы из них ни оказался открытым,
+  // к нему можно успеть, где бы кот ни был, даже если он начнёт ехать только через REACTION секунд.
+  // Ближайшее к preferredCenter место.
+  findSwayX(gapWidth, pocket, preferredCenter, travelY) {
+    const cfg = CONFIG.SWAY;
+    const minX = CONFIG.TRACK_LEFT;
+    const maxX = CONFIG.TRACK_RIGHT - gapWidth;
+    if (maxX < minX) return null;
+    const start = Math.max(minX, Math.min(maxX, preferredCenter - gapWidth / 2));
+    const safe = pocket - cfg.WINDOW_SLACK;
+    const lateral = getPlayerSpeed(this.speed) * Math.max(0, travelY / Math.max(this.speed, 1) - cfg.REACTION);
+    let bestX = null;
+    let bestScore = Infinity;
+    for (let x = minX; x <= maxX; x += 4) {
+      if (!this.edgeWallsOk(x, gapWidth)) continue;
+      const left = { x, width: safe };
+      const right = { x: x + gapWidth - safe, width: safe };
+      const reachable = this.lastExits.every((exit) => (
+        this.canReachFromAnywhere(exit, left, travelY, lateral) && this.canReachFromAnywhere(exit, right, travelY, lateral)
+      ));
+      if (!reachable) continue;
+      const score = Math.abs(x - start);
+      if (score < bestScore) {
+        bestScore = score;
+        bestX = x;
+      }
+    }
+    return bestX;
+  }
+
+  // Ряд с качающимся кашпо (CONFIG.SWAY): стены и проход шириной «кашпо + 2 кармана», в проходе
+  // кашпо ходит от стены до стены (положение задаёт placeSway по времени забега). Проход один,
+  // поэтому награда и «чуть не задел» работают как у обычного ряда. Выходов после ряда два (оба
+  // кармана): следующий ряд должен быть достижим из каждого.
+  createSway(segmentY) {
+    const cfg = CONFIG.SWAY;
+    const gateHeight = CONFIG.PATTERN_GATE_HEIGHT;
+    const pocket = cfg.POCKET;
+    const gapWidth = cfg.PLANTER_WIDTH + pocket * 2;
+    const gapY = segmentY + 300;
+    const initialTravel = this.getFreeTravelTo(gapY, gateHeight);
+    const preferred = this.lastGapX + (this.random() - 0.5) * 80;
+    const gapX = this.findSwayX(gapWidth, pocket, preferred, initialTravel);
+    if (gapX === null) return null;
+
+    const obstacles = [];
+    this.addWallsAroundGap(obstacles, gapX, gapWidth, gapY, gateHeight);
+    const planter = {
+      x: gapX,
+      y: gapY,
+      width: cfg.PLANTER_WIDTH,
+      height: gateHeight,
+      vx: 0,
+      sway: { minX: gapX, range: pocket * 2, period: getSwayPeriod(this.runTime), phase: this.random() * Math.PI * 2 }
+    };
+    obstacles.push(planter);
+    this.placeSway(planter);
+    const paths = [{ x: gapX, y: gapY, width: gapWidth, height: gateHeight, type: 'SAFE' }];
+    this.setExits([
+      { x: gapX, width: pocket },
+      { x: gapX + gapWidth - pocket, width: pocket }
+    ]);
+    return { obstacles, paths, sway: planter, initialTravel };
+  }
+
+  // Положение качающегося кашпо в этот момент забега: синусоида от левой стены прохода до правой
+  // (sway.range — размах левого края кашпо). vx — его скорость (px/s), по ней рисунок наклоняется.
+  placeSway(planter) {
+    const sway = planter.sway;
+    const omega = (Math.PI * 2) / sway.period;
+    const angle = omega * this.swayClock + sway.phase;
+    planter.x = sway.minX + (sway.range / 2) * (1 + Math.sin(angle));
+    planter.vx = (sway.range / 2) * omega * Math.cos(angle);
+  }
+
   createNormal(segmentY, pattern = 'STRAIGHT') {
+    if (pattern === 'SWAY') {
+      return this.createSway(segmentY);
+    }
     if (pattern !== 'STRAIGHT') {
       return this.createPatternedNormal(segmentY, pattern);
     }
@@ -915,6 +1014,7 @@ export class Track {
 
   maybePlaceCoin(segment) {
     if (segment.type !== 'NORMAL') return;
+    if (segment.sway) return; // кашпо качается по всему проходу: монету нечестно класть на его путь
     if (this.random() >= getCoinChance(this.runTime) * this.director.coinChanceScale()) return;
 
     const zones = ['LEFT', 'CENTER', 'RIGHT'];
@@ -1355,6 +1455,7 @@ export class Track {
     this.speed = currentSpeed;
     if (runTime !== undefined) this.runTime = runTime;
     const moveDist = this.speed * deltaTime;
+    this.swayClock += deltaTime;
 
     this.segments.forEach((segment) => {
       segment.y += moveDist;
@@ -1370,6 +1471,7 @@ export class Track {
       segment.gates?.forEach((gate) => {
         gate.y += moveDist;
       });
+      if (segment.sway) this.placeSway(segment.sway);
     });
 
     if (this.segments.length > 0 && this.segments[0].y > CONFIG.CANVAS_HEIGHT) {
@@ -1428,6 +1530,7 @@ export class Track {
       if (!near) continue;
       segment.obstacles = [];
       segment.paths = [];
+      segment.sway = null;
       segment.isPassed = true;
       segment.clearedForRevive = true;
       cleared += 1;
