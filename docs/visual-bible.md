@@ -465,6 +465,10 @@ Procedural geometry stays procedural: the track (rows, openings, OFFSET/FUNNEL/�
 
 During a run the garden changes with the run time (`CONFIG.TIME_OF_DAY`, `TimeOfDay.js`, `Renderer.drawTimeOfDay`): day (0–60 s) → golden hour (60) → dusk (120) → night (180) → dawn (260) → day (300), a 300 s cycle that repeats; each stage grows out of the previous one over 10 s. It is a presentation layer only: collisions, score and the track do not change, and the START screen is always plain day. No new pictures: a coloured veil (multiply) over the whole scene except the HUD, a light colour wash (so the yellow sand does not turn grey), a warm glow from the top, a soft darkening at the edges and, at night, up to 14 fireflies drifting on the lawn beside the road. Readability rule: every tint channel ≥ 140 and brightness ≥ 0.6 at every moment, so obstacles and gaps stay easy to see (guarded by `scripts/phase1k-check.mjs`). At every new stage a capsule with its name («ЗОЛОТОЙ ЧАС», «ВЕЧЕР», «НОЧЬ», «РАССВЕТ», «ДЕНЬ») appears under the HUD for 2.6 s with a short rising four-note figure (C E G C pentatonic) and a light vibration; it is a milestone for the player («reach the night»). Dev only: `?tod=200` shifts the clock so a run starts at that second of the cycle (to look at a stage without playing 3 minutes); the real run time and the difficulty are not touched.
 
+### Swaying planter (2026-10-05)
+
+A moving obstacle after 90 s of a run (rules in `docs/business-rules.md`). It is the same wooden planter picture as the walls of the row, no new art. It is drawn separately from the walls (`GardenArt.drawSwayPlanter`), so at a wall it never melts into one wide box, and its picture is chosen by the row, not by the position, so it does not change while moving. It leans around its base in the direction of motion by up to 0.1 rad (≈ 6°) at full speed and stands upright at the turning points; that lean and the movement are the only cues that it is not a wall. No extra marker, glow or arrow: the movement is the signal. It must stay wide enough to be drawn as a planter and not as a bush (`BUSH_MAX_WIDTH`): the 84 px planter is ≈ 1.2–1.3 × that limit at every depth (`scripts/phase1l-check.mjs`).
+
 ### Obstacles / gates
 
 Obstacle rows keep the exact collision spans. A span is split into equal slots (≈ height × 1.2 each); each slot gets the planter or gate picture with the closest proportions, stretched by at most ±15%, so the drawing stands exactly on the collision width. Very narrow spans (narrower than ≈ 0.9 of a planter box) become a single bush exactly as wide as the span (+2 px) — at the road edge it never extends past the road edge onto the curb or hedge (the earlier "bush growing out of the hedge" poked out of the road outline and was removed 2026-10-01); a narrow bush is stretched up at most 1.5× (not above a planter's height) so it reads as a shrub. The track avoids tiny edge walls and makes the SAFE/RISK divider 48 px wide (see `docs/business-rules.md`), so bushes stay a normal size. Segment family `FLOWER_GATE` draws gates, the other families planters; the family is stored on the segment at creation and never re-rolled. New rows fade in where the track creates them (`GARDEN_OBSTACLES.SPAWN_FADE`). If a picture fails to load, planters and gates are drawn in code (flat boxes and panels) so an obstacle is never invisible.
@@ -596,7 +600,7 @@ One morning, one sun, no drama.
 | Highlight | Optional 6 px top edge on crates/hedges. Flat. No gradient |
 | Second light | Forbidden |
 | Specular / bloom / AO / rim light | Forbidden |
-| Time of day | Always morning. No night mode in v1 |
+| Time of day | Changes with the run time (see «Time of day»); the light direction never changes, only a colour veil over the scene |
 | Flash | Full-screen tint from the flash tokens, ≤ 0.12 s, already in GameFeel |
 
 All future assets must look as if they were drawn in this light. A skin that needs a different shadow is rejected.

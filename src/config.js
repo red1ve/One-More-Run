@@ -114,6 +114,32 @@ export const CONFIG = {
   // У самой первой развилки прибавка к безопасному пути не больше TUTORIAL_SAFE_BONUS_MAX (иначе
   // на стены у краёв остаётся меньше EDGE_WALL_MIN): там 176 + 20 = 196 вместо прежних 200.
   ASSIST: { UNTIL_BEST: 800, BREATHING_BONUS: 32, SAFE_BONUS: 24, TUTORIAL_SAFE_BONUS_MAX: 20 },
+  // Качающееся кашпо (Track.createSway, Track.placeSway): после FROM секунд забега в части обычных
+  // рядов между стенами проход шириной PLANTER_WIDTH + 2 × POCKET, а в нём ходит из стороны в
+  // сторону кашпо шириной PLANTER_WIDTH — от стены до стены по синусоиде. Поэтому свободно всегда
+  // не меньше POCKET px (в середине качания по POCKET с каждой стороны, у стены 0 и 2 × POCKET),
+  // а сторона, где свободно, плавно переходит с одной на другую. Кашпо идёт медленнее кота:
+  // его самая большая скорость POCKET × 2π / период (203…283 px/s) против 420…500 у кота.
+  // CHANCE — шанс такого ряда вместо обычного: [до TIER_1 секунд, до TIER_2, дальше]; два таких
+  // ряда подряд и ряд сразу после развилки не ставятся. PERIOD — период качания, чем позже, тем быстрее.
+  // Монет в таком ряду нет. Помощь новичку (ASSIST) на него не действует: сюда доходят только
+  // умелые игроки, а при широком проходе стены у краёв нельзя было бы поставить по правилу краёв.
+  SWAY: {
+    FROM: 90,
+    TIER_1: 150,
+    TIER_2: 240,
+    CHANCE: [0.12, 0.2, 0.28],
+    PERIOD: [2.8, 2.4, 2.0],
+    PLANTER_WIDTH: 84,
+    POCKET: 90,
+    // Ряд ставится только там, где кот успевает в любой карман из ЛЮБОЙ точки прошлого прохода,
+    // если начнёт ехать через REACTION секунд после прошлого ряда (на его настоящей скорости, 420…500 px/s).
+    // WINDOW_SLACK — сколько px кармана у кашпо «съедает» его движение, пока кот в ряду: туда ехать
+    // надо не к краю кармана, а к его безопасной части. После узоров с короткой дорогой до кота
+    // (OFFSET, FUNNEL) на высокой скорости ряд не ставится, вместо него обычный.
+    REACTION: 0.25,
+    WINDOW_SLACK: 20
+  },
   // Подсказка «шире / уже» у первой развилки видна, пока до неё от кота от NEAR до FAR px.
   CHOICE_HINT_NEAR: 80,
   CHOICE_HINT_FAR: 1100,
@@ -486,6 +512,27 @@ export function getDualRiskChance(runTimeSeconds) {
   if (t < 60) return CONFIG.DUAL_RISK_CHANCE_EARLY;
   if (t < 120) return CONFIG.DUAL_RISK_CHANCE_MID;
   return CONFIG.DUAL_RISK_CHANCE_LATE;
+}
+
+// Номер ступени качающегося кашпо по времени забега: −1 — ещё рано, иначе 0, 1 или 2.
+export function getSwayTier(runTimeSeconds) {
+  const t = Math.max(0, Number(runTimeSeconds) || 0);
+  const sway = CONFIG.SWAY;
+  if (t < sway.FROM) return -1;
+  if (t < sway.TIER_1) return 0;
+  if (t < sway.TIER_2) return 1;
+  return 2;
+}
+
+// Шанс, что обычный ряд будет с качающимся кашпо (0, пока не наступило FROM).
+export function getSwayChance(runTimeSeconds) {
+  const tier = getSwayTier(runTimeSeconds);
+  return tier < 0 ? 0 : CONFIG.SWAY.CHANCE[tier];
+}
+
+// Период качания кашпо (секунды) для ряда, созданного в этот момент забега.
+export function getSwayPeriod(runTimeSeconds) {
+  return CONFIG.SWAY.PERIOD[Math.max(0, getSwayTier(runTimeSeconds))];
 }
 
 export function getCoinChance(runTimeSeconds) {

@@ -229,8 +229,10 @@ export class Game {
     this.pathReward = 0;
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
-    this.currentSpeed = CONFIG.TRACK_SPEED_START;
-    this.runTime = 0;
+    // Только для разработки (?start=100 в адресе): забег начинается с этой секунды, чтобы сразу
+    // увидеть то, что открывается поздно (скорость, время суток, качающееся кашпо).
+    this.runTime = this.devStartTime || 0;
+    this.currentSpeed = this.runTime > 0 ? getTrackSpeed(this.runTime) : CONFIG.TRACK_SPEED_START;
     this.floatingRewards = [];
     this.coins = this.storage.getCoins();
     this.feel?.reset();
@@ -240,7 +242,7 @@ export class Game {
     this.coinsDoubled = false;
     this.grazeCombo = 0;
     this.lastGrazeAt = -Infinity;
-    this.stageKey = timeOfDay(this.todOffset || 0).key;
+    this.stageKey = timeOfDay(this.runTime + (this.todOffset || 0)).key;
     this.stageToast = null;
     this.rewardPending = false;
     this.reviveUsed = false;

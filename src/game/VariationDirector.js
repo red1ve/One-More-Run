@@ -1,5 +1,5 @@
 import { systemRandom } from './Random.js';
-import { CONFIG, getChoiceIntervalRange, getDualRiskChance } from '../config.js';
+import { CONFIG, getChoiceIntervalRange, getDualRiskChance, getSwayChance } from '../config.js';
 
 export class VariationDirector {
   constructor() {
@@ -98,6 +98,18 @@ export class VariationDirector {
 
   choosePattern({ runTime, segmentType, lastType }) {
     if (this.forcedPattern) return this.forcedPattern;
+
+    // Качающееся кашпо: только в обычном ряду, не сразу после развилки (там передышка) и не два
+    // раза подряд. Пока шанс 0 (до CONFIG.SWAY.FROM), случайное число не тратится.
+    if (
+      segmentType === 'NORMAL'
+      && lastType !== 'TWO_PATHS'
+      && lastType !== 'DUAL_RISK'
+      && this.lastPattern !== 'SWAY'
+    ) {
+      const swayChance = getSwayChance(runTime);
+      if (swayChance > 0 && this.random() < swayChance) return 'SWAY';
+    }
 
     let weights;
     if (segmentType === 'DUAL_RISK') {

@@ -55,6 +55,7 @@ Make the game look and feel finished.
 - retention and clarity polish — DONE;
 - first-run onboarding without a tutorial mode — DONE;
 - procedural track variety (OFFSET, FUNNEL, OFFSET_GATE, DOUBLE_GATE) — DONE;
+- late-run content: time of day (day → dawn) — DONE (2026-10-01); swaying planter after 90 s — DONE (2026-10-05);
 - localization — DONE (Russian + English, Phase 4);
 - further UX improvements only when supported by playtest data;
 - performance optimization — frame time halved in Phase 1д (fewer far rows); deeper pass (Phase 2) after release.

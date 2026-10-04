@@ -70,6 +70,8 @@ const VIEW_CULL_MARGIN = 56;
 
 // Порядок рисования в одном ряду: ящики и ворота, затем монеты поверх.
 const ROLE_LAYER = { planter: 6, coin: 7 };
+// Качающееся кашпо кренится в сторону движения: на самой большой скорости на столько радиан.
+const SWAY_LEAN = 0.1;
 
 export class GardenArt {
   constructor(ctx, options = {}) {
@@ -608,6 +610,7 @@ export class GardenArt {
     prop.coin = null;
     prop.side = 0;
     prop.spans = null;
+    prop.sways = null;
     prop.openings = null;
     prop.choice = false;
     prop.worldY = null;
@@ -861,9 +864,12 @@ export class GardenArt {
       const lookSeed = Number(segment.visualObstacleSeed) || 1;
 
       rows.forEach((row) => {
-        const spans = this.mergeFenceSpans(row.obstacles);
-        if (!spans.length) return;
-        const sample = spans[0];
+        // Качающееся кашпо рисуется отдельно от стен ряда: у стены оно не должно сливаться с ней
+        // в один ящик, а потом «отлипать» от неё.
+        const sways = row.obstacles.filter((obs) => obs.sway);
+        const spans = this.mergeFenceSpans(sways.length ? row.obstacles.filter((obs) => !obs.sway) : row.obstacles);
+        if (!spans.length && !sways.length) return;
+        const sample = spans[0] || sways[0];
         const vis = this.projectTrackRect(sample.x, sample.y, sample.width, sample.height);
         if (!vis) return;
         const h = this.obstacleArt.height(look, this.catH(), vis.uniformScale);
@@ -881,6 +887,7 @@ export class GardenArt {
         prop.segmentY = segment.y;
         prop.role = 'planter';
         prop.spans = spans;
+        prop.sways = sways.length ? sways : null;
         prop.openings = (row.paths || []).slice();
         prop.choice = choice;
         prop.look = look;
@@ -902,7 +909,7 @@ export class GardenArt {
 
   // Ящики и ворота ряда (ObstacleArt.js): рисунок стоит ровно на ширине участка.
   drawFenceRow(prop) {
-    if (!prop || !prop.spans || !prop.spans.length) return;
+    if (!prop || !prop.spans || (!prop.spans.length && !prop.sways)) return;
     const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
     const h = this.obstacleArt.height(prop.look, this.catH(), scale);
     const groundY = prop.groundY;
@@ -925,8 +932,31 @@ export class GardenArt {
       this.obstacleArt.drawSpan(prop.look, x0, x1, groundY, this.catH(), scale, prop.lookSeed + span.x * 0.37,
         road.roadLeft, road.roadRight);
     });
+    if (prop.sways) prop.sways.forEach((planter) => this.drawSwayPlanter(prop, planter, road, worldY, groundY, scale, occ));
     this.ctx.restore();
     this.endHorizonReveal(occ);
+  }
+
+  // Качающееся кашпо (Track.createSway): тот же ящик, что и у стен, но он ходит по проходу и
+  // кренится в сторону движения (чем быстрее идёт, тем сильнее), чтобы было видно, что оно движется.
+  // Рисунок выбирается по номеру ряда, а не по положению, иначе он менялся бы на ходу.
+  drawSwayPlanter(prop, planter, road, worldY, groundY, scale, occ) {
+    const x0 = Math.max(road.roadLeft, this.projectGameplayX(planter.x, worldY));
+    const x1 = Math.min(road.roadRight, this.projectGameplayX(planter.x + planter.width, worldY));
+    if (!(x1 > x0)) return;
+    const ctx = this.ctx;
+    const mid = (x0 + x1) / 2;
+    const sway = planter.sway;
+    const peak = (sway.range / 2) * ((Math.PI * 2) / sway.period);
+    const lean = Math.max(-1, Math.min(1, (planter.vx || 0) / peak)) * SWAY_LEAN;
+    if (occ.state === 'VISIBLE') this.contactShadow(mid, groundY + 1, Math.max(16, x1 - x0), prop.screenY);
+    ctx.save();
+    ctx.translate(mid, groundY);
+    ctx.rotate(lean);
+    ctx.translate(-mid, -groundY);
+    this.obstacleArt.drawSpan('planter', x0, x1, groundY, this.catH(), scale, prop.lookSeed + 11.3,
+      road.roadLeft, road.roadRight);
+    ctx.restore();
   }
 
   // 0 → 1, пока новый участок трассы проезжает первые SPAWN_FADE px после появления.
