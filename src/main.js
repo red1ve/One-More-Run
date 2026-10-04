@@ -23,7 +23,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const game = new Game(canvas, yandex);
   // Только для разработки (npm run dev), в сборку не попадает:
   // ?seed=42 — одна и та же трасса при каждом старте; ?assist=1 — полная помощь новичку;
-  // ?tod=200 — время суток со сдвигом (только вид); ?start=100 — забег начинается со 100-й секунды;
+  // ?tod=200 — время суток со сдвигом (только вид); ?start=100 — забег начинается со 100-й секунды; ?skin=ginger — окраска кота;
   // window.__omrGame — доступ из консоли.
   // В игре для игроков seed из адреса не работает, чтобы нельзя было выучить трассу для рекорда.
   if (import.meta.env?.DEV) {
@@ -38,6 +38,9 @@ window.addEventListener('DOMContentLoaded', () => {
     // ?start=100 — забег начинается со 100-й секунды: сразу высокая скорость и качающееся кашпо (от 90 с).
     const startParam = new URLSearchParams(window.location.search).get('start');
     if (startParam !== null && Number.isFinite(Number(startParam))) game.devStartTime = Math.max(0, Number(startParam));
+    // ?skin=ginger — кот в окраске скина (SkinArt.js: classic, ginger, tuxedo, calico, siamese, honey, snow, ribbon).
+    const skinParam = new URLSearchParams(window.location.search).get('skin');
+    if (skinParam) game.renderer?.setSkin?.(skinParam);
     window.__omrGame = game;
   }
   const gameArea = canvas.closest('#game-container') || canvas;

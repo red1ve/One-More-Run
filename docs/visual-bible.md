@@ -347,6 +347,8 @@ AI image generation may be used only for early thumbnails. It is not needed for 
 
 No shop in this phase. These rules exist so later skins stay Loaf.
 
+Implementation (2026-10-05, prototype): skins are made in code by recolouring the four run frames (`src/rendering/SkinArt.js`, `Renderer.setSkin`, dev `?skin=ginger`), see `docs/reference/skins/README.md`. Only fills change; outline, shape, grid and animation never do. Patches (Calico) are multiply layers clipped to the body, so the outline, stripes and shading stay. The big fluffy-tail overlay from the concept did not hold on the run frames (the tail swings differently in each), so the accessory skin is the ribbon on the tail (`Festival Thread` below). Guarded by `scripts/phase1m-check.mjs` (natural hues only, no black/white, a dark coat stays ≥ 0.05 lighter or darker than the outline).
+
 ### What a skin may change
 
 | Allowed | How far |

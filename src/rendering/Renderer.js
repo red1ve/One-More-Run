@@ -1,6 +1,7 @@
 import { t } from '../localization/i18n.js';
 import { CONFIG, isRiskPathType } from '../config.js';
 import { GardenArt } from './GardenArt.js';
+import { skinSvg } from './SkinArt.js';
 
 // Fredoka — латиница и цифры; русские буквы браузер берёт из 'OMR Cyrillic'
 // (M PLUS Rounded 1c, см. src/localization/fonts.js).
@@ -75,7 +76,56 @@ export class Renderer {
       this.bindSpriteImage(createImage(), url, `run-${index}`)
     ));
     this.playerSprite = this.runFrames[0] || null;
+    this.baseRunFrames = this.runFrames;
     this.playerFrontSprite = this.bindSpriteImage(createImage(), LOAF_SIT_URL, 'front');
+  }
+
+  // Скин кота (SkinArt.js): кадры бега перекрашиваются и подменяют обычные. Пока новые кадры не
+  // загрузились, бежит прежний кот; при любой ошибке остаётся прежний. 'classic' — обычные кадры.
+  async setSkin(skinId) {
+    this.skinRequest = (this.skinRequest || 0) + 1;
+    const request = this.skinRequest;
+    if (!this.baseRunFrames) return false;
+    if (!skinId || skinId === 'classic') {
+      this.runFrames = this.baseRunFrames;
+      this.playerSprite = this.runFrames[0] || null;
+      this.releaseSkinUrls([]);
+      return true;
+    }
+    const urls = [];
+    try {
+      const frames = await Promise.all(LOAF_RUN_URLS.map(async (url) => {
+        const svg = await (await fetch(url)).text();
+        const image = new Image();
+        const ready = new Promise((resolve, reject) => {
+          image.onload = resolve;
+          image.onerror = reject;
+        });
+        const blobUrl = URL.createObjectURL(new Blob([skinSvg(svg, skinId)], { type: 'image/svg+xml' }));
+        urls.push(blobUrl);
+        image.src = blobUrl;
+        await ready;
+        return image;
+      }));
+      if (request !== this.skinRequest) {
+        urls.forEach((blobUrl) => URL.revokeObjectURL(blobUrl)); // за это время выбрали другой скин
+        return false;
+      }
+      this.runFrames = frames;
+      this.playerSprite = frames[0];
+      this.releaseSkinUrls(urls);
+      return true;
+    } catch (error) {
+      urls.forEach((blobUrl) => URL.revokeObjectURL(blobUrl));
+      console.error('Renderer: skin failed to load, the default cat stays', skinId, error);
+      return false;
+    }
+  }
+
+  // Освобождает временные адреса прежнего скина; keep — адреса, которые остаются в работе.
+  releaseSkinUrls(keep) {
+    (this.skinUrls || []).forEach((blobUrl) => URL.revokeObjectURL(blobUrl));
+    this.skinUrls = keep;
   }
 
   runFrameIndex(time) {
