@@ -101,7 +101,9 @@ The rule is taught where it matters: while the first Choice of a new player appr
 
 Choice rewards (`+10`, `+100`, `+150`, `+250`) must remain readable at speed. SAFE/RISK words are not shown on every Choice during play. DUAL_RISK distinguishes the narrower, higher-value branch with `+250` and a deeper clay gate, without changing geometry or rewards.
 
-Game Over shows either `NEW BEST` or the exact points needed to beat the stored best. Restart remains the only primary action; there is no revive, shop, or rewarded-ad CTA.
+Game Over shows either `NEW BEST` or the exact points needed to beat the stored best. Restart remains the only primary action. The rewarded offers (continue, ×2 coins) sit above it as optional capsules with a video icon. Under the sound controls there are two small buttons, «МАГАЗИН» and «ЛИДЕРЫ» (the START screen adds «ЯРЛЫК НА ЭКРАН» in a second row when the platform allows it); buttons sit two per row with finger-sized tap areas that never overlap each other or the sound row (guarded by `scripts/phase1n-check.mjs`).
+
+Shop window (2026-10-05): a cream plate with the title, the balance (coin icon + number), a hint line and a 2 × 4 grid. Each cell shows the skin on the running cat, its name and a status capsule: green «НАДЕТО» for the one worn, plain «КУПЛЕНО» for owned ones, the price with a coin for the rest (amber when affordable, plain when not). Tapping a cell buys-and-wears or just wears; if the coins are not enough, an apricot line «НЕ ХВАТАЕТ МОНЕТ: N» replaces the hint for under two seconds. No confirmation dialog: a purchase is cheap and the choice is always reversible.
 
 ## No emoji
 

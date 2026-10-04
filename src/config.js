@@ -140,6 +140,25 @@ export const CONFIG = {
     REACTION: 0.25,
     WINDOW_SLACK: 20
   },
+  // Магазин скинов (Shop.js, Game, Renderer.drawShop). Те же id, что у SKINS в SkinArt.js; порядок — по
+  // возрастанию цены, так они и стоят в окне магазина. Цена — в монетах. Монет за забег собирается мало: новичок за 25–40 секунд берёт 1–2, поэтому
+  // первый скин стоит 10, а самый дорогой — 180 (цены подбирались по scripts/phase1n-check.mjs,
+  // «сколько монет выпадает за минуту забега»). Бесплатный classic есть у всех с самого начала.
+  SHOP: {
+    DEFAULT_SKIN: 'classic',
+    SKINS: [
+      { id: 'classic', price: 0 },
+      { id: 'ginger', price: 10 },
+      { id: 'honey', price: 25 },
+      { id: 'snow', price: 40 },
+      { id: 'tuxedo', price: 60 },
+      { id: 'siamese', price: 90 },
+      { id: 'calico', price: 130 },
+      { id: 'ribbon', price: 180 }
+    ],
+    // Сколько секунд на экране магазина висит подсказка «не хватает N».
+    MESSAGE_SECONDS: 1.8
+  },
   // Подсказка «шире / уже» у первой развилки видна, пока до неё от кота от NEAR до FAR px.
   CHOICE_HINT_NEAR: 80,
   CHOICE_HINT_FAR: 1100,
@@ -192,10 +211,11 @@ export const CONFIG = {
     DEV_REWARDED_STUB: false,
     // Кнопка «×2 монеты за рекламу» на экране проигрыша. Выключена, пока монеты некуда тратить
     // (нет магазина): иначе игрок не получает ничего за просмотр рекламы. Включить вместе с магазином.
-    DOUBLE_COINS_AD: false,
+    DOUBLE_COINS_AD: true,
     // Облачное сохранение (player.getData / setData): что хранится и как часто пишем.
     // Лимит Яндекса — 100 запросов за 5 минут, поэтому запись не чаще раза в CLOUD_SAVE_MIN_INTERVAL_MS.
-    CLOUD_KEYS: ['bestScore', 'coins', 'choiceHintSeen', 'riskHintSeen'],
+    // coins — баланс для старых версий игры; coinsEarned / coinsSpent / skinsOwned / skinSelected — магазин.
+    CLOUD_KEYS: ['bestScore', 'coins', 'coinsEarned', 'coinsSpent', 'skinsOwned', 'skinSelected', 'choiceHintSeen', 'riskHintSeen'],
     CLOUD_SAVE_MIN_INTERVAL_MS: 4000,
     // Таблица лидеров: сколько верхних записей и сколько вокруг игрока, сколько хранить ответ.
     LEADERBOARD_TOP: 10,

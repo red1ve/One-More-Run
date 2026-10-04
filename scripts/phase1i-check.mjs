@@ -9,7 +9,9 @@
 import { readFileSync } from 'node:fs';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/game/Game.js';
+import { Shop } from '../src/game/Shop.js';
 import { Renderer } from '../src/rendering/Renderer.js';
+import { StorageService } from '../src/services/StorageService.js';
 import { YandexService } from '../src/services/YandexService.js';
 
 const results = [];
@@ -118,23 +120,34 @@ await check('cloud: a failing setData is swallowed', async () => {
   assert(service.saveCloudData(null) === false && service.saveCloudData('x') === false, 'garbage must be refused');
 });
 
+// Настоящее хранилище на подставной памяти: stored[ключ] читает записанное значение.
 function makeCloudGame(over = {}) {
-  const stored = {};
+  const memory = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => (memory.has(key) ? memory.get(key) : null),
+    setItem: (key, value) => { memory.set(key, String(value)); },
+    removeItem: (key) => { memory.delete(key); }
+  };
+  const storage = new StorageService();
+  storage.setCoinCounters(5, 0);
+  const stored = new Proxy({}, {
+    get: (_, key) => {
+      const raw = memory.get(`one_more_run_${String(key)}`);
+      return raw === undefined ? undefined : JSON.parse(raw);
+    }
+  });
   const game = Object.assign(Object.create(Game.prototype), {
     bestScore: 100,
     coins: 5,
     choiceHintSeen: false,
     riskHintSeen: false,
     isRunning: true,
-    storage: {
-      stored,
-      set(key, value) { stored[key] = value; },
-      getCoins() { return Number(stored.coins ?? 5); }
-    },
+    storage,
+    shop: new Shop(storage),
+    renderer: null,
     platform: null,
     ...over
   });
-  stored.coins = 5;
   return { game, stored };
 }
 
@@ -185,7 +198,8 @@ await check('cloud: the game saves a snapshot at Game Over with record, coins an
     const game = Object.assign(Object.create(Game.prototype), {
       state: 'PLAYING', distanceScore: 300, pathReward: 200, bestScore: 10, choiceHintSeen: true, riskHintSeen: false,
       reviveUsed: false, multiplier: 1, riskStreak: 0, player: { x: 1, y: 1 }, feel: null,
-      storage: { set() {}, getCoins: () => 9 },
+      storage: { set() {} },
+      shop: { snapshot: () => ({ coins: 9, coinsEarned: 12, coinsSpent: 3, skinsOwned: ['classic', 'ginger'], skinSelected: 'ginger' }) },
       platform: {
         completedRuns: 0,
         submitScore: async () => true,
@@ -198,6 +212,7 @@ await check('cloud: the game saves a snapshot at Game Over with record, coins an
     assert(game.state === 'GAMEOVER' && game.isNewBest === true);
     assert(saved.length === 1, 'exactly one cloud save at Game Over');
     assert(saved[0].bestScore === 500 && saved[0].coins === 9 && saved[0].choiceHintSeen === true && saved[0].riskHintSeen === false, `bad snapshot ${JSON.stringify(saved[0])}`);
+    assert(saved[0].coinsEarned === 12 && saved[0].coinsSpent === 3 && saved[0].skinsOwned.join() === 'classic,ginger' && saved[0].skinSelected === 'ginger', 'the snapshot must carry the shop data');
   } finally {
     console.log = log;
   }

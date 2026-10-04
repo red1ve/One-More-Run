@@ -30,6 +30,25 @@
   "shortcut": {
     "button": "ADD SHORTCUT"
   },
+  "shop": {
+    "button": "SHOP",
+    "title": "SHOP",
+    "hint": "TAP A CAT TO BUY OR WEAR IT",
+    "selected": "WEARING",
+    "owned": "OWNED",
+    "missing": "{n} MORE COINS NEEDED",
+    "close": "CLOSE"
+  },
+  "skin": {
+    "classic": "CLASSIC",
+    "ginger": "GINGER",
+    "honey": "HONEY",
+    "snow": "SNOW",
+    "tuxedo": "TUXEDO",
+    "siamese": "SIAMESE",
+    "calico": "CALICO",
+    "ribbon": "RIBBON"
+  },
   "stage": {
     "day": "DAY",
     "golden": "GOLDEN HOUR",

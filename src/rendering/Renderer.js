@@ -1,7 +1,7 @@
 import { t } from '../localization/i18n.js';
 import { CONFIG, isRiskPathType } from '../config.js';
 import { GardenArt } from './GardenArt.js';
-import { skinSvg } from './SkinArt.js';
+import { sitSvg, skinPreviewSvg, skinSvg } from './SkinArt.js';
 
 // Fredoka — латиница и цифры; русские буквы браузер берёт из 'OMR Cyrillic'
 // (M PLUS Rounded 1c, см. src/localization/fonts.js).
@@ -78,10 +78,11 @@ export class Renderer {
     this.playerSprite = this.runFrames[0] || null;
     this.baseRunFrames = this.runFrames;
     this.playerFrontSprite = this.bindSpriteImage(createImage(), LOAF_SIT_URL, 'front');
+    this.baseFrontSprite = this.playerFrontSprite;
   }
 
-  // Скин кота (SkinArt.js): кадры бега перекрашиваются и подменяют обычные. Пока новые кадры не
-  // загрузились, бежит прежний кот; при любой ошибке остаётся прежний. 'classic' — обычные кадры.
+  // Скин кота (SkinArt.js): кадры бега и сидящий кот перекрашиваются и подменяют обычные. Пока новые
+  // картинки не загрузились, остаётся прежний кот; при любой ошибке тоже. 'classic' — обычный кот.
   async setSkin(skinId) {
     this.skinRequest = (this.skinRequest || 0) + 1;
     const request = this.skinRequest;
@@ -89,36 +90,67 @@ export class Renderer {
     if (!skinId || skinId === 'classic') {
       this.runFrames = this.baseRunFrames;
       this.playerSprite = this.runFrames[0] || null;
+      if (this.baseFrontSprite) this.playerFrontSprite = this.baseFrontSprite;
       this.releaseSkinUrls([]);
       return true;
     }
     const urls = [];
+    const load = async (url, recolor) => {
+      const svg = await (await fetch(url)).text();
+      const image = new Image();
+      const ready = new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+      });
+      const blobUrl = URL.createObjectURL(new Blob([recolor(svg)], { type: 'image/svg+xml' }));
+      urls.push(blobUrl);
+      image.src = blobUrl;
+      await ready;
+      return image;
+    };
     try {
-      const frames = await Promise.all(LOAF_RUN_URLS.map(async (url) => {
-        const svg = await (await fetch(url)).text();
-        const image = new Image();
-        const ready = new Promise((resolve, reject) => {
-          image.onload = resolve;
-          image.onerror = reject;
-        });
-        const blobUrl = URL.createObjectURL(new Blob([skinSvg(svg, skinId)], { type: 'image/svg+xml' }));
-        urls.push(blobUrl);
-        image.src = blobUrl;
-        await ready;
-        return image;
-      }));
+      const [frames, front] = await Promise.all([
+        Promise.all(LOAF_RUN_URLS.map((url) => load(url, (svg) => skinSvg(svg, skinId)))),
+        load(LOAF_SIT_URL, (svg) => sitSvg(svg, skinId))
+      ]);
       if (request !== this.skinRequest) {
         urls.forEach((blobUrl) => URL.revokeObjectURL(blobUrl)); // за это время выбрали другой скин
         return false;
       }
       this.runFrames = frames;
       this.playerSprite = frames[0];
+      this.playerFrontSprite = front;
       this.releaseSkinUrls(urls);
       return true;
     } catch (error) {
       urls.forEach((blobUrl) => URL.revokeObjectURL(blobUrl));
       console.error('Renderer: skin failed to load, the default cat stays', skinId, error);
       return false;
+    }
+  }
+
+  // Превью скинов для магазина: кадр бега, обрезанный по коту, в окраске каждого скина. Грузятся при
+  // первом открытии магазина; onChange вызывается, когда очередная картинка готова.
+  async loadSkinPreviews(ids, onChange) {
+    this.skinPreviews = this.skinPreviews || new Map();
+    const missing = ids.filter((id) => !this.skinPreviews.has(id));
+    if (!missing.length || typeof fetch !== 'function' || typeof Image !== 'function') return;
+    missing.forEach((id) => this.skinPreviews.set(id, { image: null, ready: false }));
+    try {
+      const svg = await (await fetch(LOAF_RUN_URLS[0])).text();
+      for (const id of missing) {
+        const entry = this.skinPreviews.get(id);
+        const image = new Image();
+        image.onload = () => {
+          entry.ready = true;
+          if (typeof onChange === 'function') onChange();
+        };
+        image.src = URL.createObjectURL(new Blob([skinPreviewSvg(svg, id)], { type: 'image/svg+xml' }));
+        entry.image = image;
+      }
+    } catch (error) {
+      missing.forEach((id) => this.skinPreviews.delete(id));
+      console.error('Renderer: skin previews failed to load', error);
     }
   }
 
@@ -661,29 +693,39 @@ export class Renderer {
     this.drawPlatformButtons(cx, cardY + cardH + 106, platform);
   }
 
-  // Кнопки платформы под звуком: «таблица лидеров» и «ярлык». Рисуются только если платформа их
-  // разрешает. Области нажатия — для Game.handlePlatformTap (с запасом под палец).
+  // Кнопки под звуком: «магазин», «таблица лидеров» и «ярлык». «Лидеры» и «ярлык» рисуются, только если
+  // платформа их разрешает. По две в ряд. Области нажатия — для Game.handlePlatformTap (с запасом под палец).
   drawPlatformButtons(cx, cy, show = {}) {
     const items = [];
+    if (show.shop) items.push('shop');
     if (show.leaderboard) items.push('leaderboard');
     if (show.shortcut) items.push('shortcut');
     this.platformButtons = null;
     if (!items.length) return;
+    const rows = [];
+    for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
     const gap = 14;
-    const w = items.length === 1 ? 250 : 200;
     const h = 44;
-    const left = cx - (w * items.length + gap * (items.length - 1)) / 2;
+    const rowStep = 62;
     this.platformButtons = {};
-    items.forEach((name, index) => {
-      const x = left + index * (w + gap) + w / 2;
-      this.screenPill(x, cy, w, h, CONFIG.COLORS.SkyPaper);
-      if (name === 'leaderboard') {
-        this.garden.hudTrophyIcon(x - w / 2 + 28, cy, 14);
-        this.fitText(t('leaderboard.button'), x + 14, cy + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
-      } else {
-        this.fitText(t('shortcut.button'), x, cy + 7, 600, 19, w - 28, CONFIG.COLORS.UI_TEXT);
-      }
-      this.platformButtons[name] = { x: x - w / 2 - 4, y: cy - h / 2 - 8, w: w + 8, h: h + 16 };
+    rows.forEach((row, rowIndex) => {
+      const y = cy + rowIndex * rowStep;
+      const w = row.length === 1 ? 250 : 200;
+      const left = cx - (w * row.length + gap * (row.length - 1)) / 2;
+      row.forEach((name, index) => {
+        const x = left + index * (w + gap) + w / 2;
+        this.screenPill(x, y, w, h, CONFIG.COLORS.SkyPaper);
+        if (name === 'leaderboard') {
+          this.garden.hudTrophyIcon(x - w / 2 + 28, y, 14);
+          this.fitText(t('leaderboard.button'), x + 14, y + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
+        } else if (name === 'shop') {
+          this.garden.hudCoinIcon(x - w / 2 + 28, y, 14);
+          this.fitText(t('shop.button'), x + 14, y + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
+        } else {
+          this.fitText(t('shortcut.button'), x, y + 7, 600, 19, w - 28, CONFIG.COLORS.UI_TEXT);
+        }
+        this.platformButtons[name] = { x: x - w / 2 - 4, y: y - h / 2 - 8, w: w + 8, h: h + 16 };
+      });
     });
   }
 
@@ -758,6 +800,114 @@ export class Renderer {
     this.screenPill(cx, cardY + cardH - 52, 240, 56, CONFIG.COLORS.CoinAmber);
     this.fitText(t('leaderboard.close'), cx, cardY + cardH - 43, 700, 24, 210, CONFIG.COLORS.UI_TEXT);
     this.leaderboardButtons.close = { x: cx - 124, y: cardY + cardH - 84, w: 248, h: 64 };
+  }
+
+  // Окно магазина поверх экрана. shop: { skins: [{ id, price, owned, selected }], balance, message }.
+  // Сетка 2 × 4: превью кота в окраске, название и «надето» / «куплено» / цена. Области нажатия — hitShopButton.
+  drawShop(shop) {
+    const ctx = this.ctx;
+    const cx = this.width / 2;
+    const cardX = 36;
+    const cardW = this.width - cardX * 2;
+    const cardY = 40;
+    const cardH = 880;
+    this.shopButtons = { close: null, skins: [] };
+
+    this.dimScreen(0.45);
+    this.garden.plate(cardX, cardY, cardW, cardH, 26);
+    this.fitText(t('shop.title'), cx, cardY + 58, 700, 40, cardW - 56, CONFIG.COLORS.UI_TEXT);
+
+    // Баланс: монетка и число.
+    const balanceY = cardY + 104;
+    this.screenPill(cx, balanceY, 170, 42, CONFIG.COLORS.FloorSand);
+    this.garden.hudCoinIcon(cx - 85 + 26, balanceY, 14);
+    this.fitText(`${shop.balance}`, cx + 14, balanceY + 8, 700, 24, 100, CONFIG.COLORS.UI_TEXT);
+
+    // Подсказка; когда монет не хватило — на её месте надпись «не хватает N».
+    if (shop.message) {
+      this.screenPill(cx, cardY + 150, cardW - 60, 36, CONFIG.COLORS.RiskApricot);
+      this.fitText(shop.message, cx, cardY + 157, 700, 18, cardW - 90, CONFIG.COLORS.UI_TEXT);
+    } else {
+      this.fitText(t('shop.hint'), cx, cardY + 157, 600, 17, cardW - 56, CONFIG.COLORS.UI_HUD);
+    }
+
+    const cols = 2;
+    const gap = 14;
+    const cellW = (cardW - 28 - gap) / cols;
+    const cellH = 142;
+    const rowStep = 152;
+    const left = cardX + 14;
+    const top = cardY + 184;
+    shop.skins.forEach((skin, index) => {
+      const x = left + (index % cols) * (cellW + gap);
+      const y = top + Math.floor(index / cols) * rowStep;
+      ctx.fillStyle = CONFIG.COLORS.ShadowDust;
+      this.garden.roundedRectPath(x + 3, y + 4, cellW, cellH, 18);
+      ctx.fill();
+      ctx.fillStyle = CONFIG.COLORS.FloorSand;
+      this.garden.roundedRectPath(x, y, cellW, cellH, 18);
+      ctx.fill();
+      if (skin.selected) {
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = CONFIG.COLORS.CoinAmber;
+        this.garden.roundedRectPath(x, y, cellW, cellH, 18);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.strokeStyle = CONFIG.COLORS.InkBrown;
+      ctx.lineWidth = skin.selected ? 4.5 : 3;
+      ctx.lineJoin = 'round';
+      this.garden.roundedRectPath(x, y, cellW, cellH, 18);
+      ctx.stroke();
+
+      // Кот в окраске скина (пока картинка грузится — тёплое пятно на её месте).
+      const previewW = 52;
+      const previewH = 122;
+      const previewX = x + 12;
+      const previewY = y + 10;
+      const preview = this.skinPreviews?.get(skin.id);
+      if (preview?.ready) {
+        ctx.drawImage(preview.image, previewX, previewY, previewW, previewH);
+      } else {
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = CONFIG.COLORS.ShadowDust;
+        ctx.beginPath();
+        ctx.ellipse(previewX + previewW / 2, previewY + previewH / 2, previewW / 2, previewH / 2.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      const textW = cellW - 80;
+      const textX = x + 70 + textW / 2;
+      this.fitText(t(`skin.${skin.id}`), textX, y + 46, 700, 21, textW, CONFIG.COLORS.UI_TEXT);
+      const statusY = y + 98;
+      if (skin.selected) {
+        this.screenPill(textX, statusY, textW, 38, CONFIG.COLORS.SafeLawn);
+        this.fitText(t('shop.selected'), textX, statusY + 6, 700, 17, textW - 16, CONFIG.COLORS.UI_TEXT);
+      } else if (skin.owned) {
+        this.screenPill(textX, statusY, textW, 38, CONFIG.COLORS.SkyPaper);
+        this.fitText(t('shop.owned'), textX, statusY + 6, 700, 17, textW - 16, CONFIG.COLORS.UI_TEXT);
+      } else {
+        const affordable = shop.balance >= skin.price;
+        this.screenPill(textX, statusY, textW, 38, affordable ? CONFIG.COLORS.CoinAmber : CONFIG.COLORS.SkyPaper);
+        this.garden.hudCoinIcon(textX - textW / 2 + 22, statusY, 12);
+        this.fitText(`${skin.price}`, textX + 12, statusY + 8, 700, 22, textW - 56, CONFIG.COLORS.UI_TEXT);
+      }
+      this.shopButtons.skins.push({ id: skin.id, x, y, w: cellW, h: cellH });
+    });
+
+    this.screenPill(cx, cardY + cardH - 48, 240, 56, CONFIG.COLORS.CoinAmber);
+    this.fitText(t('shop.close'), cx, cardY + cardH - 39, 700, 24, 210, CONFIG.COLORS.UI_TEXT);
+    this.shopButtons.close = { x: cx - 124, y: cardY + cardH - 80, w: 248, h: 64 };
+  }
+
+  // Что нажато в окне магазина: { type: 'close' }, { type: 'skin', id } или null.
+  hitShopButton(x, y) {
+    const buttons = this.shopButtons;
+    if (!buttons) return null;
+    if (Renderer.inRect(buttons.close, x, y)) return { type: 'close' };
+    const cell = buttons.skins.find((r) => Renderer.inRect(r, x, y));
+    return cell ? { type: 'skin', id: cell.id } : null;
   }
 
   // Строка, обрезанная до ширины maxWidth (px) с многоточием.
@@ -921,7 +1071,8 @@ export class Renderer {
     const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
     const offerStep = 66;
     const cardH = 466 + offers * offerStep;
-    const cardY = 320 - offers * 30;
+    // С двумя предложениями за рекламу карточка выше, чтобы под ней остались звук и кнопки магазина и лидеров.
+    const cardY = 320 - offers * 48;
     this.gameOverButtons = {};
 
     this.dimScreen((cfg.DIM_GAME_OVER ?? 0.28) * fade);
@@ -980,7 +1131,7 @@ export class Renderer {
     this.fitText(t('over.restart'), cx, rowY + 17, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
 
     this.drawSoundControls(cx, cardY + cardH + 44, extras.muted, extras.volume);
-    this.drawPlatformButtons(cx, cardY + cardH + 100, { leaderboard: extras.leaderboard });
+    this.drawPlatformButtons(cx, cardY + cardH + 104, { shop: true, leaderboard: extras.leaderboard });
     this.ctx.globalAlpha = 1;
   }
 }

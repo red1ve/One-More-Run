@@ -209,8 +209,10 @@ function stubBrowser() {
   globalThis.fetch = async (url) => {
     log.fetches.push(String(url));
     if (log.failFetch) throw new Error('offline');
-    const name = String(url).match(/loaf-run-0\d\.svg/)[0];
-    return { text: async () => readFileSync(new URL(`../assets/characters/run/${name}`, import.meta.url), 'utf8') };
+    const sit = String(url).includes('loaf-sit.svg');
+    const name = sit ? 'loaf-sit.svg' : String(url).match(/loaf-run-0\d\.svg/)[0];
+    const folder = sit ? '' : 'run/';
+    return { text: async () => readFileSync(new URL(`../assets/characters/${folder}${name}`, import.meta.url), 'utf8') };
   };
   const create = URL.createObjectURL.bind(URL);
   URL.createObjectURL = (blob) => { const url = create(blob); log.created.push(url); return url; };
@@ -233,12 +235,14 @@ await check('setSkin: swaps the four run frames, returns to the default, drops s
     assert(await renderer.setSkin('ginger') === true, 'ginger did not load');
     assert(renderer.runFrames.length === 4 && renderer.runFrames.every((f, i) => f !== base[i]), 'the frames were not replaced');
     assert(renderer.playerSprite === renderer.runFrames[0], 'the sprite must follow the first frame');
-    assert(env.log.created.length === 4, `${env.log.created.length} blob URLs for 4 frames`);
+    assert(env.log.created.length === 5, `${env.log.created.length} blob URLs for 4 run frames and the sitting cat`);
+    assert(renderer.playerFrontSprite !== renderer.baseFrontSprite, 'the sitting cat must be recoloured too');
     assert(await renderer.setSkin('calico') === true, 'calico did not load');
-    assert(env.log.revoked.length === 4 && env.log.revoked.every((u) => env.log.created.slice(0, 4).includes(u)), 'the ginger URLs must be released when calico is ready');
+    assert(env.log.revoked.length === 5 && env.log.revoked.every((u) => env.log.created.slice(0, 5).includes(u)), 'the ginger URLs must be released when calico is ready');
     assert(await renderer.setSkin('classic') === true, 'classic did not restore');
     assert(renderer.runFrames.length === 4 && renderer.runFrames.every((f, i) => f === base[i]), 'classic must bring back the default frames');
-    assert(env.log.revoked.length === 8, 'the calico URLs must be released too');
+    assert(renderer.playerFrontSprite === renderer.baseFrontSprite, 'classic must bring back the default sitting cat');
+    assert(env.log.revoked.length === 10, 'the calico URLs must be released too');
   } finally {
     env.restore();
   }
@@ -252,7 +256,7 @@ await check('setSkin: the last request wins, a failed load keeps the current cat
     const second = renderer.setSkin('snow');
     const [a, b] = await Promise.all([first, second]);
     assert(a === false && b === true, `results ${a}, ${b}: the older request must be dropped`);
-    assert(env.log.revoked.length === 4, 'the dropped request must release its URLs');
+    assert(env.log.revoked.length === 5, 'the dropped request must release its URLs');
     const current = renderer.runFrames.slice();
     env.log.failFetch = true;
     const quiet = console.error;
