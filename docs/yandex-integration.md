@@ -168,20 +168,30 @@ The console accepts a zip archive whose root contains `index.html` (not a folder
 1. Get the latest `main` and install: `git checkout main`, `git pull`, `npm install`.
    - Only if you replaced or added pictures in `assets/art-pack/`: run `node scripts/art-pack-game.mjs` (needs Playwright, see the script header) and commit `assets/art-pack/game/`. Otherwise skip this — the game copies are already in the repository.
 2. Run the checks: `npm run check` (everything must say "passed").
-3. Build: `npm run build`. This creates the `dist` folder.
-4. Verify the build: `npm run verify:dist`. It must print «Сборка готова к упаковке в zip для Яндекса.»
-5. Make the zip **from the contents of `dist`**, not from the folder itself:
-   - **Windows (Explorer):** open the `dist` folder, press Ctrl+A to select `index.html` and `assets`, right-click → «Отправить» → «Сжатая ZIP-папка». Rename it, e.g. `one-more-run.zip`.
-   - **Windows (PowerShell, in the project folder):** `Compress-Archive -Path dist\* -DestinationPath one-more-run.zip -Force`
-   - **macOS / Linux (terminal, in the project folder):** `cd dist && zip -r ../one-more-run.zip . && cd ..`
-6. Check the zip: open it — you must see `index.html` and the `assets` folder right away, without an extra `dist` folder.
-7. Upload the zip in the Developer Console (draft → «Загрузить архив»), then open the draft with the debug panel (`&debug-mode=16`) and go through «Debug testing» above.
+3. Build, verify and pack in one command: `npm run pack`. It builds `dist`, runs `verify:dist` (must say «Сборка готова к упаковке в zip для Яндекса.») and writes `release/one-more-run.zip` (`scripts/pack-zip.mjs`, own small ZIP writer in `scripts/zip-lib.mjs`: `index.html` first and at the root, forward slashes in names, fixed date, so the same build gives the same archive). It reads the archive back and refuses it if `index.html` is not at the root, a name has a space, Cyrillic or a backslash, or the size is over 100 MB. The folder `release/` and `*.zip` are ignored by git.
+4. Check the materials of the card: `npm run store:check` (texts, pictures, videos; see «Store card materials» below).
+5. Upload `release/one-more-run.zip` in the Developer Console (draft → «Загрузить архив»), then open the draft with the debug panel (`&debug-mode=16`) and go through «Debug testing» above.
+
+Making the zip by hand is possible (Explorer: select the contents of `dist` → «Отправить» → «Сжатая ZIP-папка»), but the PowerShell 5.1 command `Compress-Archive` writes backslashes in names, which can break the upload: use `npm run pack`.
 
 `/sdk.js` gives a 404 locally — that is expected; on Yandex hosting it is served by the platform.
+
+## Store card materials (2026-10-05)
+
+Everything for the draft lives in `docs/store/` and `release/` and is checked by `npm run store:check` and `scripts/phase1q-check.mjs` against the Yandex rules of 2026-10-05 (source: Yandex Games docs «Filling out the draft» and «Game requirements»):
+
+- **Texts** (`docs/store/listing.md`, RU and EN): name ≤ 50 characters, no «free / top / best» and not in capitals, short description ≤ 70, description 100–1000, how to play 100–1000, SEO description 50–160, developer comment ≤ 2048, tags ≤ 20; the names equal the in-game names (RU «Ещё забег», EN «One More Run»). The same file lists the other draft fields (version, languages, platforms, portrait orientation, categories, age rating, cloud saves, monetization, leaderboard).
+- **Icon 512×512 PNG** (`docs/store/icon-512.png`): Loaf's head on hedge green and sand, no text. **Cover 800×470 PNG** (`docs/store/cover-800x470-ru.png`, `-en.png`): a hedge wall with two gaps «+10» and «+100», Loaf and the title in the game font. Both are built from the project's own pictures (the cat vector, the art pack) by `scripts/store-capture/art.js`, not generated and not screenshots (Yandex 5.6 forbids screenshots as icon or cover; the visual bible §14 forbids a new «same vibe» cat). The optional hero image 1560×520 and maskable icon are not made.
+- **Screenshots** (`docs/store/screenshots/`, 20 files): phone `<lang>-phone-1..5` 1080×1920 (fork with the hint, golden hour with a risk streak and ×1.5, night with fireflies, the swaying planter, dusk), desktop `<lang>-desktop-1..2` 1920×1080 (three real frames side by side, so real gameplay fills the picture), and `<lang>-extra-*` (start screen, quests, shop; not gameplay, optional). Frames are taken from the game itself at double canvas size (not stretched) while a simple autopilot plays: nothing is drawn over them. Yandex needs real gameplay on at least 70% of a screenshot, 9:16 or 16:9, long side 1280–2560, at least 2 per platform.
+- **Video**: the horizontal 16:9 video is **mandatory** in the draft (MP4, from 400 px high, up to 28 s, up to 100 MB). `release/video/ru-video-horizontal.mp4` and `en-...` are 27 s, 1280×720, H.264, the game in the middle (start screen, then a run through a dusk) with the rule «Wider = safer, narrower = more points» at the sides. They are 15 MB each and kept out of git. The browser records fragmented MP4 with an unknown duration, so `scripts/store-capture/remux-mp4.mjs` rewrites it into a regular MP4 (no re-encoding). No sound track.
+- **How it was made and how to repeat it**: `scripts/store-capture/README.md` (a local server `server.mjs`, helpers `cap.js` / `recipe.js` / `art.js` run in the dev game's page; no Playwright or ffmpeg needed). The seeds, skins and times of day of every frame are in `recipe.js`, so the set can be shot again after the art or the screens change.
 
 ## Yandex Games Console
 
 - [ ] Create the game.
+- [ ] Fill the draft from `docs/store/listing.md` (texts RU/EN, version 1.0.0, languages RU and EN, platforms desktop and mobile, portrait orientation, categories, age rating) and upload the icon, the covers, the screenshots and the horizontal videos from `docs/store/` and `release/video/`.
+- [ ] Turn on «Cloud saves» in the draft (Yandex requirement 1.11: the game uses `player.setData`).
+- [ ] Check the game name per language: RU «Ещё забег», EN «One More Run» and that the catalogue accepts it as unique.
 - [ ] Upload the production `dist/` archive and verify `/sdk.js`.
 - [ ] Open the draft with the official debug panel.
 - [ ] Confirm SDK initialization and `LoadingAPI.ready()`.

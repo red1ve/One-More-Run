@@ -55,7 +55,7 @@ Make the game look and feel finished.
 - retention and clarity polish — DONE;
 - first-run onboarding without a tutorial mode — DONE;
 - procedural track variety (OFFSET, FUNNEL, OFFSET_GATE, DOUBLE_GATE) — DONE;
-- retention layer: skin shop with coins — DONE (2026-10-05); daily run with a day streak — DONE (2026-10-05); daily quests — DONE (2026-10-05); NEXT: store card and publication (step 7);
+- retention layer: skin shop with coins — DONE (2026-10-05); daily run with a day streak — DONE (2026-10-05); daily quests — DONE (2026-10-05); store card and publication preparation — DONE (2026-10-05: texts, screenshots, videos, icon, covers, `npm run pack`; the console steps are the owner's);
 - late-run content: time of day (day → dawn) — DONE (2026-10-01); swaying planter after 90 s — DONE (2026-10-05);
 - localization — DONE (Russian + English, Phase 4);
 - further UX improvements only when supported by playtest data;
@@ -63,7 +63,7 @@ Make the game look and feel finished.
 
 ## Version 1.0 — Release
 
-Status (2026-10): Phases 0–6 done — reference look with the painted art pack, Russian/English, rewarded ads, final QA on phone/tablet/desktop sizes, dead code removed, honest catalogue screenshots in `docs/store/screenshots/`, build 3.7 MB (0.65 MB downloaded at start). Left: console setup, upload, moderation (Phase 7, owner; see `docs/yandex-integration.md`). The leaderboard screen, cloud save, rating request and shortcut prompt were added on 2026-10-01 (see `docs/yandex-integration.md`). The skin shop (Phase 5b) was built on 2026-10-05, before release, by the owner decision (see GAME_SPEC §43). Postponed to after release: performance pass (Phase 2).
+Status (2026-10): Phases 0–6 done — reference look with the painted art pack, Russian/English, rewarded ads, final QA on phone/tablet/desktop sizes, dead code removed, honest catalogue screenshots in `docs/store/screenshots/`, build 3.7 MB (0.65 MB downloaded at start). Left: console setup, upload, moderation (Phase 7, owner; see `docs/yandex-integration.md`, «Store card materials» and `docs/store/listing.md`). The leaderboard screen, cloud save, rating request and shortcut prompt were added on 2026-10-01 (see `docs/yandex-integration.md`). The skin shop (Phase 5b) was built on 2026-10-05, before release, by the owner decision (see GAME_SPEC §43). Postponed to after release: performance pass (Phase 2).
 
 Goal:
 
