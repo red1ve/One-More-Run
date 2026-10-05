@@ -39,6 +39,15 @@
     "missing": "{n} MORE COINS NEEDED",
     "close": "CLOSE"
   },
+  "daily": {
+    "button": "DAILY RUN",
+    "title": "DAILY RUN",
+    "subFresh": "+{n} COINS",
+    "subStreak": "+{n} COINS  •  STREAK {s}",
+    "subDone": "TODAY {n}  •  STREAK {s}",
+    "reward": "+{n} COINS  •  STREAK {s}",
+    "todayBest": "TODAY'S BEST {n}"
+  },
   "skin": {
     "classic": "CLASSIC",
     "ginger": "GINGER",

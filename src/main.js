@@ -38,6 +38,9 @@ window.addEventListener('DOMContentLoaded', () => {
     // ?start=100 — забег начинается со 100-й секунды: сразу высокая скорость и качающееся кашпо (от 90 с).
     const startParam = new URLSearchParams(window.location.search).get('start');
     if (startParam !== null && Number.isFinite(Number(startParam))) game.devStartTime = Math.max(0, Number(startParam));
+    // ?day=2026-10-06 — «сегодня» для забега дня (чтобы проверить смену дней и серию, не ждав полуночи).
+    const dayParam = new URLSearchParams(window.location.search).get('day');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dayParam || '')) game.devDay = dayParam;
     // ?skin=ginger — кот в окраске скина (SkinArt.js: classic, ginger, tuxedo, calico, siamese, honey, snow, ribbon).
     const skinParam = new URLSearchParams(window.location.search).get('skin');
     if (skinParam) game.renderer?.setSkin?.(skinParam);

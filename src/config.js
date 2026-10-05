@@ -159,6 +159,19 @@ export const CONFIG = {
     // Сколько секунд на экране магазина висит подсказка «не хватает N».
     MESSAGE_SECONDS: 1.8
   },
+  // Забег дня (Daily.js, Game.startDaily): у всех в один день одна трасса (зерно из даты). День меняется
+  // в полночь по UTC+UTC_OFFSET_HOURS (Москва). ASSIST — помощь новичку в забеге дня: она одна для
+  // всех (обычная зависит от рекорда игрока, и трассы разошлись бы), 0,4 — чуть легче обычной. Награда за
+  // первый забег дня: REWARD_BASE, за каждый следующий день серии на REWARD_STEP больше, но не больше
+  // REWARD_MAX (5, 7, 9, 11, 13, 15, 15...). Серия обрывается, если пропущен день.
+  DAILY: {
+    UTC_OFFSET_HOURS: 3,
+    SEED_SALT: 'omr-daily-',
+    ASSIST: 0.4,
+    REWARD_BASE: 5,
+    REWARD_STEP: 2,
+    REWARD_MAX: 15
+  },
   // Подсказка «шире / уже» у первой развилки видна, пока до неё от кота от NEAR до FAR px.
   CHOICE_HINT_NEAR: 80,
   CHOICE_HINT_FAR: 1100,
@@ -215,7 +228,7 @@ export const CONFIG = {
     // Облачное сохранение (player.getData / setData): что хранится и как часто пишем.
     // Лимит Яндекса — 100 запросов за 5 минут, поэтому запись не чаще раза в CLOUD_SAVE_MIN_INTERVAL_MS.
     // coins — баланс для старых версий игры; coinsEarned / coinsSpent / skinsOwned / skinSelected — магазин.
-    CLOUD_KEYS: ['bestScore', 'coins', 'coinsEarned', 'coinsSpent', 'skinsOwned', 'skinSelected', 'choiceHintSeen', 'riskHintSeen'],
+    CLOUD_KEYS: ['bestScore', 'coins', 'coinsEarned', 'coinsSpent', 'skinsOwned', 'skinSelected', 'dailyDay', 'dailyStreak', 'dailyBest', 'choiceHintSeen', 'riskHintSeen'],
     CLOUD_SAVE_MIN_INTERVAL_MS: 4000,
     // Таблица лидеров: сколько верхних записей и сколько вокруг игрока, сколько хранить ответ.
     LEADERBOARD_TOP: 10,
@@ -579,6 +592,32 @@ export function getTrackSpeed(runTimeSeconds) {
   const max = CONFIG.TRACK_SPEED_MAX;
   const tau = CONFIG.TRACK_SPEED_TAU;
   return max - (max - start) * Math.exp(-t / tau);
+}
+
+// Путь трассы (px) за t секунд забега: интеграл getTrackSpeed.
+export function getTrackDistance(runTimeSeconds) {
+  const t = Math.max(0, Number(runTimeSeconds) || 0);
+  const start = CONFIG.TRACK_SPEED_START;
+  const max = CONFIG.TRACK_SPEED_MAX;
+  const tau = CONFIG.TRACK_SPEED_TAU;
+  return max * t - (max - start) * tau * (1 - Math.exp(-t / tau));
+}
+
+// Обратная к getTrackDistance: за сколько секунд забега трасса проходит distance px. Путь растёт
+// всё время (скорость положительна), поэтому подходит деление пополам; число шагов фиксировано,
+// чтобы результат был одним и тем же у всех (Track.canonical, забег дня).
+export function getTimeAtDistance(distance) {
+  const target = Math.max(0, Number(distance) || 0);
+  if (target === 0) return 0;
+  let low = 0;
+  let high = 1;
+  while (getTrackDistance(high) < target && high < 1e7) high *= 2;
+  for (let step = 0; step < 64; step += 1) {
+    const mid = (low + high) / 2;
+    if (getTrackDistance(mid) < target) low = mid;
+    else high = mid;
+  }
+  return (low + high) / 2;
 }
 
 // Скорость стрейфа кота для текущей скорости трассы: 420 на старте, 500 на максимуме.

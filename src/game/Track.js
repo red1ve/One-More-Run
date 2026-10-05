@@ -1,5 +1,7 @@
 import { systemRandom, createSeededRandom } from './Random.js';
-import { CONFIG, getCoinChance, getPlayerSpeed, getSwayPeriod, isIntentionalRiskType } from '../config.js';
+import {
+  CONFIG, getCoinChance, getPlayerSpeed, getSwayPeriod, getTimeAtDistance, getTrackSpeed, isIntentionalRiskType
+} from '../config.js';
 import { VariationDirector } from './VariationDirector.js';
 
 const VISUAL_OBSTACLE_TYPES = ['FLOWER_GATE', 'STANDING_PLANTER', 'GARDEN_FENCE'];
@@ -51,6 +53,9 @@ export class Track {
     this.lastCoinYSlot = null;
     this.assist = 0; // помощь новичку 0..1 (см. CONFIG.ASSIST), задаётся перед забегом
     this.swayClock = 0; // секунды забега для качающихся кашпо (Track.placeSway)
+    this.canonical = false; // забег дня: ряды создаются в идеальный момент (Track.addSegmentAt)
+    this.createdByUpdate = 0; // сколько рядов создано движением трассы (не при старте)
+    this.firstTriggerDistance = 0; // путь трассы до создания первого такого ряда
     this.director = new VariationDirector();
     this.random = systemRandom;
     this.init();
@@ -88,6 +93,9 @@ export class Track {
     this.addSegment(CONFIG.CANVAS_HEIGHT - this.segmentHeight, 'EMPTY');
     this.addSegment(CONFIG.CANVAS_HEIGHT - this.segmentHeight * 2, 'EMPTY');
     this.addSegment(CONFIG.CANVAS_HEIGHT - this.segmentHeight * 3, 'NORMAL');
+    // Сколько трассе ехать, пока верхний ряд не пересечёт границу и не появится следующий (Track.addSegmentAt).
+    this.firstTriggerDistance = -this.segmentHeight - this.segments[this.segments.length - 1].y;
+    this.createdByUpdate = 0;
   }
 
   // lastGapX — центр прохода. Если проходов несколько, это среднее центров.
@@ -1480,8 +1488,36 @@ export class Track {
 
     const topSegment = this.segments[this.segments.length - 1];
     if (topSegment.y > -this.segmentHeight) {
-      this.addSegment(topSegment.y - this.segmentHeight);
+      this.addSegmentAt(topSegment.y - this.segmentHeight);
     }
+  }
+
+  // Забег дня (setCanonicalClock): тип ряда, узор и ширина прохода зависят от времени и скорости забега,
+  // а новый ряд создаётся в первом кадре после того, как верх трассы пересёк границу, то есть чуть позже
+  // «идеального» момента, и на разной частоте кадров — на разное расстояние (до нескольких px). Чтобы
+  // трасса дня была ОДНОЙ у всех, такой ряд считается так, будто создан ровно тогда, когда трасса прошла
+  // нужный путь: n-й ряд — после firstTriggerDistance + (n − 1) × SEGMENT_HEIGHT px. Обычные забеги не
+  // затронуты: решения принимаются по настоящему времени, как раньше.
+  addSegmentAt(y) {
+    if (!this.canonical) {
+      this.addSegment(y);
+      return;
+    }
+    this.createdByUpdate += 1;
+    const real = { runTime: this.runTime, speed: this.speed };
+    this.runTime = getTimeAtDistance(this.firstTriggerDistance + this.segmentHeight * (this.createdByUpdate - 1));
+    this.speed = getTrackSpeed(this.runTime);
+    try {
+      this.addSegment(y);
+    } finally {
+      this.runTime = real.runTime;
+      this.speed = real.speed;
+    }
+  }
+
+  // Включает идеальные моменты создания рядов (см. addSegmentAt) со следующего reset().
+  setCanonicalClock(enabled) {
+    this.canonical = !!enabled;
   }
 
   sampleChosenPath(segment, player) {

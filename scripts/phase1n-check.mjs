@@ -8,6 +8,7 @@
 // Запуск: node scripts/phase1n-check.mjs (входит в npm run check).
 import { readFileSync } from 'node:fs';
 import { CONFIG, getTrackSpeed } from '../src/config.js';
+import { Daily } from '../src/game/Daily.js';
 import { Game } from '../src/game/Game.js';
 import { Shop } from '../src/game/Shop.js';
 import { Track } from '../src/game/Track.js';
@@ -230,6 +231,8 @@ function makeShopGame({ coins = 0, state = 'START' } = {}) {
     hidden: false,
     storage: env.storage,
     shop: new Shop(env.storage),
+    daily: new Daily(env.storage),
+    clockOffset: 0,
     shopWindow: null,
     leaderboard: null,
     coins: env.storage.getCoins(),

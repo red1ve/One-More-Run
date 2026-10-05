@@ -277,7 +277,8 @@ check('drawing: the stage toast shows the text, fades out, and Game.render draws
   const make = (state, extra = {}) => Object.assign(Object.create(Game.prototype), {
     state, renderer: stub, camera: null, feel: { time: 4, particles: { particles: [] } }, track: { segments: [] }, player: { y: 840 }, floatingRewards: [],
     score: 0, multiplier: 1, bestScore: 0, riskStreak: 0, coins: 0, userPaused: false, platform: null, choiceHintSeen: true,
-    distanceScore: 0, pathReward: 0, audio: null, leaderboard: null, runTime: 200, stageToast: null, ...extra
+    distanceScore: 0, pathReward: 0, audio: null, leaderboard: null, runTime: 200, stageToast: null,
+    daily: { playedToday: () => false, nextReward: () => 5, streakAt: () => 0, bestToday: () => 0 }, clockOffset: 0, dailyRun: false, dailyResult: null, ...extra
   });
   make('START').render();
   assert(drawn.length === 0, 'the start screen is always plain day');
