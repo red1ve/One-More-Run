@@ -73,9 +73,13 @@ The START and Game Over screens show a «ЛИДЕРЫ / LEADERBOARD» button whe
 
 A player who is not signed in sees the table and a green «ВОЙТИ / SIGN IN» button with the line «войдите, чтобы ваш результат попал в таблицу». It calls `ysdk.auth.openAuthDialog()`; after a successful sign-in the service forgets the old player, the table cache and the last submitted score, the game sends the best score, merges the cloud data and reloads the table. Nothing else in the game asks for a login.
 
+### Server time and the daily run (2026-10-05)
+
+`ysdk.serverTime()` (milliseconds, UNIX; see the SDK page «Server time») is read once when the SDK is ready (`YandexService.getServerTime`, a number or a promise; anything that is not a positive number gives `null`). `Game.clockOffset` = server time − device time, so the daily run's «today» (Moscow calendar day) does not depend on the device clock. Without the SDK the device clock is used. The daily run's rules are in `docs/business-rules.md`.
+
 ### Cloud save (2026-10-01)
 
-`ysdk.getPlayer({ scopes: false })` then `player.getData(keys)` / `player.setData(data, true)` (limits: 200 KB, 100 requests per 5 minutes). Stored keys (`CONFIG.YANDEX.CLOUD_KEYS`): `bestScore`, `coins` (the balance, for older versions), `coinsEarned`, `coinsSpent`, `skinsOwned`, `skinSelected`, `choiceHintSeen`, `riskHintSeen`. When the SDK is ready the game loads the cloud data and merges it with the local data: the bigger number wins, owned skins are united, hints count as seen if seen anywhere, so nothing is ever lost on either side and spent coins never come back (rules in `docs/business-rules.md`); the merged state is written back. A purchase in the shop is saved at once. At every Game Over the current state is queued for saving; writes are glued so there is at most one per `CLOUD_SAVE_MIN_INTERVAL_MS` (4 s) and the latest state wins. Sound settings stay local. localStorage stays the source of truth for instant saves; the cloud only restores progress on another device or after the site data was cleared.
+`ysdk.getPlayer({ scopes: false })` then `player.getData(keys)` / `player.setData(data, true)` (limits: 200 KB, 100 requests per 5 minutes). Stored keys (`CONFIG.YANDEX.CLOUD_KEYS`): `bestScore`, `coins` (the balance, for older versions), `coinsEarned`, `coinsSpent`, `skinsOwned`, `skinSelected`, `dailyDay`, `dailyStreak`, `dailyBest`, `choiceHintSeen`, `riskHintSeen`. When the SDK is ready the game loads the cloud data and merges it with the local data: the bigger number wins, owned skins are united, hints count as seen if seen anywhere, so nothing is ever lost on either side and spent coins never come back (rules in `docs/business-rules.md`); the merged state is written back. A purchase in the shop is saved at once. At every Game Over the current state is queued for saving; writes are glued so there is at most one per `CLOUD_SAVE_MIN_INTERVAL_MS` (4 s) and the latest state wins. Sound settings stay local. localStorage stays the source of truth for instant saves; the cloud only restores progress on another device or after the site data was cleared.
 
 ### Rating request (2026-10-01)
 
@@ -194,6 +198,9 @@ The console accepts a zip archive whose root contains `index.html` (not a folder
 - [ ] Draft, cloud save: play a run, clear the site data (or open on another device) and reload while signed in: the best score and coins come back.
 - [ ] Draft, shop: with some coins press «МАГАЗИН» on the start screen, buy a skin: the coins drop by the price, the running cat and the sitting cat wear it; reload: the skin and the balance stay; open the game on another device (or clear the site data) while signed in: the skin and the balance come back, the spent coins do not.
 - [ ] Draft, shop: play on two devices, buy different skins on each, sync both: both devices keep both skins and the balance is not negative.
+- [ ] Draft, daily run: press «ЗАБЕГ ДНЯ»: after the run Game Over shows «+5 МОНЕТ • СЕРИЯ 1» and the coins grow by 5; the record and the leaderboard do not change; the button now shows «СЕГОДНЯ …»; a second daily run pays nothing. Next game day (after midnight Moscow time) the button offers 7 coins and keeps the streak.
+- [ ] Draft, daily run: set the device clock a day ahead and start the game while signed in with the SDK: the day does not change (it follows the Yandex server clock).
+- [ ] Draft, daily run: play it on one device, open the game on another: the streak and the best of the day come from the cloud.
 - [ ] Draft, rating request: signed in, beat your record on the 3rd run of a session: the Yandex rating window appears once on the Game Over card (not for guests, not twice in a session).
 - [ ] Draft, shortcut: the «ЯРЛЫК НА ЭКРАН» button appears only where the platform allows it and disappears after accepting.
 - [ ] Enable monetization if required.

@@ -105,6 +105,8 @@ Game Over shows either `NEW BEST` or the exact points needed to beat the stored 
 
 Shop window (2026-10-05): a cream plate with the title, the balance (coin icon + number), a hint line and a 2 × 4 grid. Each cell shows the skin on the running cat, its name and a status capsule: green «НАДЕТО» for the one worn, plain «КУПЛЕНО» for owned ones, the price with a coin for the rest (amber when affordable, plain when not). Tapping a cell buys-and-wears or just wears; if the coins are not enough, an apricot line «НЕ ХВАТАЕТ МОНЕТ: N» replaces the hint for under two seconds. No confirmation dialog: a purchase is cheap and the choice is always reversible.
 
+Daily run (2026-10-05): on the START screen a green capsule «ЗАБЕГ ДНЯ» sits right under the amber «ИГРАТЬ» (the card grows by 72 px and moves up). Its second line says what waits: «+5 МОНЕТ» (a new streak), «+11 МОНЕТ • СЕРИЯ 4» (a streak that can continue) or, once played today, «СЕГОДНЯ 1234 • СЕРИЯ 4». A tap on the capsule starts the daily run, a tap anywhere else an ordinary run; with a window open (shop, leaderboard) the capsule is out of reach. The daily button exists only on START (a session ritual); the Game Over screen of a daily run replaces the record lines with the reward capsule (or the title «ЗАБЕГ ДНЯ») and «ЛУЧШИЙ ЗА СЕГОДНЯ». Its buttons below keep their places.
+
 ## No emoji
 
 Do not use emoji anywhere in the game UI.

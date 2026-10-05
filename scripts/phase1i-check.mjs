@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/game/Game.js';
+import { Daily } from '../src/game/Daily.js';
 import { Shop } from '../src/game/Shop.js';
 import { Renderer } from '../src/rendering/Renderer.js';
 import { StorageService } from '../src/services/StorageService.js';
@@ -144,6 +145,8 @@ function makeCloudGame(over = {}) {
     isRunning: true,
     storage,
     shop: new Shop(storage),
+    daily: new Daily(storage),
+    clockOffset: 0,
     renderer: null,
     platform: null,
     ...over
@@ -200,6 +203,8 @@ await check('cloud: the game saves a snapshot at Game Over with record, coins an
       reviveUsed: false, multiplier: 1, riskStreak: 0, player: { x: 1, y: 1 }, feel: null,
       storage: { set() {} },
       shop: { snapshot: () => ({ coins: 9, coinsEarned: 12, coinsSpent: 3, skinsOwned: ['classic', 'ginger'], skinSelected: 'ginger' }) },
+      daily: { snapshot: () => ({ dailyDay: '2026-10-05', dailyStreak: 3, dailyBest: 777 }) },
+      dailyRun: false,
       platform: {
         completedRuns: 0,
         submitScore: async () => true,
@@ -213,6 +218,7 @@ await check('cloud: the game saves a snapshot at Game Over with record, coins an
     assert(saved.length === 1, 'exactly one cloud save at Game Over');
     assert(saved[0].bestScore === 500 && saved[0].coins === 9 && saved[0].choiceHintSeen === true && saved[0].riskHintSeen === false, `bad snapshot ${JSON.stringify(saved[0])}`);
     assert(saved[0].coinsEarned === 12 && saved[0].coinsSpent === 3 && saved[0].skinsOwned.join() === 'classic,ginger' && saved[0].skinSelected === 'ginger', 'the snapshot must carry the shop data');
+    assert(saved[0].dailyDay === '2026-10-05' && saved[0].dailyStreak === 3 && saved[0].dailyBest === 777, 'the snapshot must carry the daily run data');
   } finally {
     console.log = log;
   }
@@ -395,7 +401,8 @@ await check('leaderboard window: Game.render draws it over START and Game Over, 
   const make = (state, leaderboard) => Object.assign(Object.create(Game.prototype), {
     state, leaderboard, renderer, camera: null, feel: null, track: { segments: [] }, player: { y: 840 }, floatingRewards: [],
     score: 0, multiplier: 1, bestScore: 0, riskStreak: 0, coins: 0, userPaused: false, platform: null, choiceHintSeen: true,
-    distanceScore: 0, pathReward: 0, audio: null
+    distanceScore: 0, pathReward: 0, audio: null,
+    daily: { playedToday: () => false, nextReward: () => 5, streakAt: () => 0, bestToday: () => 0 }, clockOffset: 0, dailyRun: false, dailyResult: null
   });
   make('START', null).render();
   assert(drawn.join() === 'start', `closed window drew ${drawn}`);

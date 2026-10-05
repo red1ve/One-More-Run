@@ -417,6 +417,21 @@ export class YandexService {
     }
   }
 
+  // --- Время сервера (забег дня): защищено от перевода часов на устройстве ---
+
+  // Серверное время Яндекса в миллисекундах (UNIX) или null, если SDK нет или ответ не похож на время:
+  // тогда игра берёт время устройства. Ответ ysdk.serverTime() ждём и как число, и как обещание.
+  async getServerTime() {
+    if (!this.isReady() || typeof this.ysdk.serverTime !== 'function') return null;
+    try {
+      const value = Number(await Promise.resolve(this.ysdk.serverTime()));
+      return Number.isFinite(value) && value > 0 ? value : null;
+    } catch (error) {
+      this.log('Yandex server time skipped.', error);
+      return null;
+    }
+  }
+
   recordRunCompleted() {
     this.completedRuns += 1;
   }

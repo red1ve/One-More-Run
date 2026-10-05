@@ -497,6 +497,7 @@ export class Renderer {
     this.soundButtons = null;
     this.platformButtons = null;
     this.leaderboardButtons = null;
+    this.dailyButton = null;
     const measure = (text, font) => {
       ctx.font = font;
       return ctx.measureText ? ctx.measureText(text).width : String(text).length * 8;
@@ -675,8 +676,11 @@ export class Renderer {
     const cardX = cfg.CARD_X ?? 36;
     const cardW = cfg.CARD_W ?? this.width - cardX * 2;
     const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
-    const cardH = 262;
-    const cardY = 380;
+    // С кнопкой «забег дня» карточка выше: под «играть» появляется ещё одна капсула.
+    this.dailyButton = null;
+    const withDaily = !!platform.daily;
+    const cardH = withDaily ? 334 : 262;
+    const cardY = withDaily ? 346 : 380;
 
     this.dimScreen(cfg.DIM_START ?? 0.12);
     this.garden.plate(cardX, cardY, cardW, cardH, 26);
@@ -687,10 +691,31 @@ export class Renderer {
     this.screenPill(cx, cardY + 136, 320, 64, CONFIG.COLORS.CoinAmber);
     this.fitText(t('start.play'), cx, cardY + 146, 700, 28, 280, CONFIG.COLORS.UI_TEXT);
 
-    this.fitText(t('start.controls'), cx, cardY + 208, 600, 20, textW, CONFIG.COLORS.UI_HUD);
+    if (withDaily) this.drawDailyButton(cx, cardY + 214, platform.daily);
+    this.fitText(t('start.controls'), cx, cardY + (withDaily ? 296 : 208), 600, 20, textW, CONFIG.COLORS.UI_HUD);
 
     this.drawSoundControls(cx, cardY + cardH + 44, muted, volume);
     this.drawPlatformButtons(cx, cardY + cardH + 106, platform);
+  }
+
+  // Кнопка «забег дня»: зелёная капсула с названием и строкой под ним — награда за ближайший забег и
+  // серия, а если сегодня уже играли, лучший счёт дня и серия. daily: { played, reward, streak, best }.
+  drawDailyButton(cx, cy, daily) {
+    const w = 320;
+    const h = 64;
+    this.screenPill(cx, cy, w, h, CONFIG.COLORS.SafeLawn);
+    this.fitText(t('daily.button'), cx, cy - 4, 700, 22, w - 40, CONFIG.COLORS.UI_TEXT);
+    let sub;
+    if (daily.played) sub = t('daily.subDone', { n: daily.best, s: daily.streak });
+    else if (daily.streak > 0) sub = t('daily.subStreak', { n: daily.reward, s: daily.streak });
+    else sub = t('daily.subFresh', { n: daily.reward });
+    this.fitText(sub, cx, cy + 18, 600, 15, w - 40, CONFIG.COLORS.UI_TEXT);
+    this.dailyButton = { x: cx - w / 2 - 4, y: cy - h / 2 - 6, w: w + 8, h: h + 12 };
+  }
+
+  // Нажатие на «забег дня»?
+  hitDailyButton(x, y) {
+    return Renderer.inRect(this.dailyButton, x, y);
   }
 
   // Кнопки под звуком: «магазин», «таблица лидеров» и «ярлык». «Лидеры» и «ярлык» рисуются, только если
@@ -1083,7 +1108,21 @@ export class Renderer {
 
     this.fitText(t('over.title'), cx, cardY + 74, 700, 48, textW, CONFIG.COLORS.UI_TEXT);
 
-    if (isNewBest) {
+    if (extras.daily) {
+      // Забег дня: награда за первый забег дня (с серией) или просто название режима.
+      if (extras.daily.reward > 0) {
+        const pulse = 1 + 0.06 * Math.sin(age * 10);
+        this.ctx.save();
+        this.ctx.translate(cx, cardY + 116);
+        this.ctx.scale(pulse, pulse);
+        this.screenPill(0, 0, 340, 42, CONFIG.COLORS.CoinAmber);
+        this.fitText(t('daily.reward', { n: extras.daily.reward, s: extras.daily.streak }), 0, 7, 700, 20, 310, CONFIG.COLORS.UI_TEXT);
+        this.ctx.restore();
+        this.ctx.globalAlpha = fade;
+      } else {
+        this.fitText(t('daily.title'), cx, cardY + 124, 700, 22, textW, CONFIG.COLORS.UI_HUD);
+      }
+    } else if (isNewBest) {
       const pulse = 1 + 0.06 * Math.sin(age * 10);
       this.ctx.save();
       this.ctx.translate(cx, cardY + 116);
@@ -1105,7 +1144,7 @@ export class Renderer {
     const pillW = 360;
     const pillX = cx - pillW / 2;
     const rows = [
-      [cardY + 276, t('over.best', { n: bestScore }), 'paw'],
+      [cardY + 276, extras.daily ? t('daily.todayBest', { n: extras.daily.best }) : t('over.best', { n: bestScore }), 'paw'],
       [cardY + 334, t('over.coins', { n: coins }), 'coin']
     ];
     for (const [pillY, label, icon] of rows) {

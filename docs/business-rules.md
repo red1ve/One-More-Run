@@ -57,6 +57,20 @@ Cloud (`Shop.merge`, `Game.cloudSnapshot` / `applyCloudData`): the cloud holds `
 
 The ×2 coins ad (`YANDEX.DOUBLE_COINS_AD`) is on again: it adds this run's coins once more (`earned`).
 
+## Daily run and the day streak (2026-10-05)
+
+A «ЗАБЕГ ДНЯ» button on the START screen (`Daily.js`, `CONFIG.DAILY`, `Game.startDaily`). In one game day every player gets the **same track**: the seed is a hash of the date (`dailySeed`), and the help for newcomers is fixed to `DAILY.ASSIST` (0.4, a bit easier than normal) for everyone, because the normal help depends on the player's record and would make the tracks differ. The generator is deterministic whatever the frame rate or the player does (`scripts/phase1o-check.mjs` replays it at 10 / 30 / 60 / 120 FPS); another day or another help gives another track.
+
+The game day is the **Moscow** calendar day (UTC+3, midnight Moscow = 21:00 UTC): most of the audience is in Russia and the CIS, and everybody needs the same moment of change. «Now» comes from the Yandex server clock (`ysdk.serverTime()`, read once when the SDK is ready; `Game.clockOffset`), so setting the device clock does not help; without the SDK the device clock is used. Dev only: `?day=2026-10-06` fixes «today».
+
+Reward and streak (`Daily.complete`): the **first** daily run of a day pays `REWARD_BASE` (5) coins; if the previous game day was also played the streak grows by one and the reward by `REWARD_STEP` (2) up to `REWARD_MAX` (15): 5, 7, 9, 11, 13, 15, 15… A missed day starts the streak over from 5. The coins are normal earned coins (`StorageService.addCoins`). A week of streak pays 75; two daily runs already pay for the first skin. The button shows the next reward and the streak, or, once played today, the best score of the day and the streak.
+
+Replays are unlimited: the track is known, like a daily puzzle. They pay nothing but raise the best of the day. A revive in a daily run does not pay twice.
+
+A daily run **never touches the record**: no `bestScore`, no leaderboard submission, no «NEW BEST», no rating request; otherwise the known track could be learned for a leaderboard record. Its Game Over shows «+N МОНЕТ • СЕРИЯ k» (first run of the day) or «ЗАБЕГ ДНЯ», and «ЛУЧШИЙ ЗА СЕГОДНЯ». There is no daily leaderboard: Yandex has no periodic reset and no creation of tables from the game.
+
+Cloud keys: `dailyDay`, `dailyStreak`, `dailyBest`. Merge (`Daily.merge`): the later day wins; the same day takes the bigger streak and best; an older day and a day from the future (garbage or a wrong clock) are ignored. If the saved day is later than «today» (the device clock was set back) nothing is paid until the real date catches up.
+
 ## Rewarded advertising
 
 Rewarded advertising is not part of the current release. There is no continue, revive, score reward, or Coin reward for watching an ad.

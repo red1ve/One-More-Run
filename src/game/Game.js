@@ -14,6 +14,7 @@ import { AudioService } from '../services/AudioService.js';
 import { HapticsService } from '../services/HapticsService.js';
 import { timeOfDay } from './TimeOfDay.js';
 import { Shop } from './Shop.js';
+import { Daily, dailySeed, gameDay } from './Daily.js';
 
 export class Game {
   constructor(canvas, platformService = null) {
@@ -51,6 +52,11 @@ export class Game {
     this.coins = this.storage.getCoins();
     this.shop = new Shop(this.storage);
     this.shopWindow = null; // null — закрыт; иначе { message } (подсказка «не хватает монет»)
+    this.daily = new Daily(this.storage);
+    this.dailyRun = false; // идущий (или только что закончившийся) забег — забег дня
+    this.dailyPending = false; // игрок нажал «забег дня»: следующий start() запустит его
+    this.dailyResult = null; // итог забега дня для экрана проигрыша: { reward, streak, best, first }
+    this.clockOffset = 0; // серверное время минус время устройства (миллисекунды), см. syncClock
 
     this.currentSpeed = CONFIG.TRACK_SPEED_START;
     this.runTime = 0;
@@ -252,10 +258,16 @@ export class Game {
     this.reviveUsed = false;
     this.invulnerableTime = 0;
     this.player.invulnerable = 0;
+    // Забег дня: зерно из сегодняшней даты и одна для всех помощь, поэтому у всех одна и та же трасса.
+    this.dailyRun = this.dailyPending;
+    this.dailyPending = false;
+    this.dailyResult = null;
     // runSeed задан (например ?seed=42 в адресе) — трасса каждый раз одинаковая.
-    this.track.setSeed?.(this.runSeed ?? null);
+    this.track.setSeed?.(this.dailyRun ? dailySeed(this.todayKey()) : (this.runSeed ?? null));
+    // В забеге дня ряды создаются в идеальный момент: трасса одна у всех на любой частоте кадров.
+    this.track.setCanonicalClock?.(this.dailyRun);
     // Новичку (малый лучший счёт) проходы шире; опытному игроку — как есть. См. CONFIG.ASSIST.
-    this.track.setAssist?.(this.assistOverride ?? getAssist(this.bestScore));
+    this.track.setAssist?.(this.dailyRun ? CONFIG.DAILY.ASSIST : (this.assistOverride ?? getAssist(this.bestScore)));
     this.track.reset();
     this.camera?.reset?.();
     this.keyboardInput?.reset?.();
@@ -411,6 +423,7 @@ export class Game {
     return {
       bestScore: this.bestScore || 0,
       ...this.shop.snapshot(), // монеты (заработано / потрачено), купленные скины и выбранный
+      ...this.daily.snapshot(), // день последнего забега дня, серия и лучший счёт дня
       choiceHintSeen: !!this.choiceHintSeen,
       riskHintSeen: !!this.riskHintSeen
     };
@@ -438,6 +451,7 @@ export class Game {
       if (this.shop.selected() !== skinBefore) this.applySelectedSkin();
       changed = true;
     }
+    if (this.daily.merge(data, this.todayKey())) changed = true;
     for (const key of ['choiceHintSeen', 'riskHintSeen']) {
       if (data[key] === true && !this[key]) {
         this[key] = true;
@@ -461,6 +475,8 @@ export class Game {
   // Платформа готова (SDK загружен): облако и доступность ярлыка.
   async onPlatformReady() {
     const shortcut = Promise.resolve(this.platform?.canShowShortcut?.()).catch(() => false);
+    // Сначала часы (по ним считается «сегодня» при слиянии забега дня), потом облако.
+    await this.syncClock();
     await this.syncCloud();
     this.shortcutAvailable = !!(await shortcut);
     this.requestRender();
@@ -538,6 +554,61 @@ export class Game {
     else if (hit === 'shop') this.openShop();
     else if (hit === 'shortcut') this.addShortcut();
     return true;
+  }
+
+  // --- Забег дня (Daily.js): кнопка на стартовом экране ---
+
+  // Время сейчас: время устройства, исправленное по часам сервера Яндекса (clockOffset).
+  nowMs() {
+    return Date.now() + this.clockOffset;
+  }
+
+  // Сегодняшний игровой день 'ГГГГ-ММ-ДД' (по Москве). В npm run dev можно задать ?day=2026-10-06.
+  todayKey() {
+    return this.devDay || gameDay(this.nowMs());
+  }
+
+  // Забирает серверное время у платформы: «сегодня» тогда не зависит от часов на устройстве.
+  // Нет SDK или ответ неверный — остаётся время устройства.
+  async syncClock() {
+    const server = await Promise.resolve(this.platform?.getServerTime?.()).catch(() => null);
+    if (!Number.isFinite(server) || server <= 0) return false;
+    this.clockOffset = server - Date.now();
+    return true;
+  }
+
+  // Что показать на кнопке: награда за ближайший забег дня, серия, сыгран ли сегодня и лучший счёт дня.
+  dailyView() {
+    const today = this.todayKey();
+    return {
+      played: this.daily.playedToday(today),
+      reward: this.daily.nextReward(today),
+      streak: this.daily.streakAt(today),
+      best: this.daily.bestToday(today)
+    };
+  }
+
+  // Запуск забега дня. Только со стартового экрана и не поверх окон. Флаг гаснет, если запуск не удался.
+  startDaily() {
+    if (this.state !== 'START' || this.shopWindow || this.leaderboard) return false;
+    this.dailyPending = true;
+    const started = this.tryLaunch();
+    if (!started) this.dailyPending = false;
+    return started;
+  }
+
+  // Итог забега дня: серия, награда за первый забег дня, лучший счёт дня. После возрождения тот же
+  // забег заканчивается второй раз: награда не дублируется, а надпись о ней остаётся.
+  finishDailyRun(score) {
+    const result = this.daily.complete(score, this.todayKey());
+    if (!result) return;
+    const earlier = this.dailyResult;
+    this.dailyResult = { ...result, reward: result.reward + (earlier?.reward || 0), first: result.first || !!earlier?.first };
+    if (result.reward > 0) {
+      this.coins = this.storage.addCoins(result.reward);
+      this.audio?.play?.('buy');
+      this.haptics?.pulse?.('best');
+    }
   }
 
   // --- Магазин скинов (Shop.js): открывается с экранов START и Game Over ---
@@ -669,6 +740,8 @@ export class Game {
     // Кнопки звука, таблицы лидеров и ярлыка не запускают забег.
     if (this.handleSoundTap?.(x, y)) return false;
     if (this.handlePlatformTap?.(x, y)) return false;
+    // «Забег дня» на стартовом экране запускает забег дня, любое другое нажатие — обычный.
+    if (this.state === 'START' && this.renderer?.hitDailyButton?.(x, y)) return this.startDaily();
     // Во время забега нажатие по значку паузы ставит паузу, на паузе — кнопка «продолжить».
     if (this.state === 'PLAYING') {
       if (this.userPaused) {
@@ -903,13 +976,16 @@ export class Game {
     this.state = 'GAMEOVER';
     const totalScore = Math.floor(this.distanceScore + this.pathReward);
     const previousBest = this.bestScore || 0;
-    this.isNewBest = totalScore > previousBest;
+    // Забег дня не меняет рекорд, не идёт в таблицу лидеров и не просит оценку: трасса знакомая,
+    // иначе её можно было бы выучить ради рекорда. Его итог — лучший счёт дня и награда.
+    this.isNewBest = !this.dailyRun && totalScore > previousBest;
     if (this.isNewBest) {
       this.bestScore = totalScore;
       this.storage.set('bestScore', this.bestScore);
       const submission = this.platform?.submitScore?.(totalScore);
       Promise.resolve(submission).catch(() => {});
     }
+    if (this.dailyRun) this.finishDailyRun(totalScore);
     // После возрождения это тот же забег: для частоты рекламы не считаем дважды.
     if (!this.reviveUsed) this.platform?.recordRunCompleted?.();
     // Рекорд, монеты и подсказки уходят в облако Яндекса (платформа сама ограничивает частоту).
@@ -994,12 +1070,14 @@ export class Game {
           offerDouble: this.canOfferDoubleCoins(),
           runCoins: this.runCoins || 0,
           coinsDoubled: !!this.coinsDoubled,
+          daily: this.dailyRun ? this.dailyResult : null,
           leaderboard: this.canShowLeaderboard()
         }
       );
     } else if (this.state === 'START') {
       this.renderer.drawStartScreen(this.audio?.muted, this.audio?.volume, {
         shop: true,
+        daily: this.dailyView(),
         leaderboard: this.canShowLeaderboard(),
         shortcut: this.shortcutAvailable
       });
