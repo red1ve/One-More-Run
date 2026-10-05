@@ -378,6 +378,22 @@ export class GardenArt {
     ctx.globalAlpha = 1;
   }
 
+  // Галочка для кнопки «задания» и выполненных заданий: зелёный диск (газон) и коричневая галочка.
+  hudCheckIcon(cx, cy, r) {
+    const ctx = this.ctx;
+    this.hudIconDisc(cx, cy, r, this.c.SafeLawn);
+    ctx.strokeStyle = this.c.InkBrown;
+    ctx.lineWidth = Math.max(2, r * 0.26);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.46, cy + r * 0.04);
+    ctx.lineTo(cx - r * 0.1, cy + r * 0.4);
+    ctx.lineTo(cx + r * 0.5, cy - r * 0.36);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
+
   hudStreakIcon(cx, cy, r, active) {
     const ctx = this.ctx;
     const bg = active ? this.c.CatGinger : mixHex(this.c.FloorSand, this.c.SkyPaper, 0.3);

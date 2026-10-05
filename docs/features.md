@@ -70,6 +70,8 @@ Current implementation notes:
 | Cat skins engine: 8 colourways by recolouring the run frames and the sitting cat (`SkinArt.js`) | P1 | DONE (2026-10-05) |
 | Skin shop for coins (`Shop.js`, START and Game Over screens), coins as earned / spent counters, cloud merge | P1 | DONE (2026-10-05) |
 | Daily run: the same track for everybody each Moscow day, coins for the first run and a day streak (`Daily.js`) | P1 | DONE (2026-10-05) |
+| «В МЕНЮ» on Game Over: back to the START screen (daily run, quests, shortcut), the first start after loading has no ad but a later start through the menu does (`Game.openMenu`) | P1 | DONE (2026-10-05) |
+| Daily quests: three a day (3 / 5 / 8 coins) drawn from 8 kinds by the date, progress and payment at the moment of completion, a window on START (`Quests.js`) | P1 | DONE (2026-10-05) |
 | Vibration on events (`HapticsService`, follows the sound switch) | P2 | DONE (2026-10-01) |
 | Streak and coin-chain pitch (pentatonic, in tune with the music) | P2 | DONE (2026-10-01) |
 

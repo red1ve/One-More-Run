@@ -11,6 +11,7 @@
 import { CONFIG, getAssist, getTimeAtDistance, getTrackDistance } from '../src/config.js';
 import { Daily, dailyReward, dailySeed, gameDay, isDay, previousDay } from '../src/game/Daily.js';
 import { Game } from '../src/game/Game.js';
+import { Quests } from '../src/game/Quests.js';
 import { Shop } from '../src/game/Shop.js';
 import { Track } from '../src/game/Track.js';
 import { DICTIONARIES, getLanguage, setLanguage } from '../src/localization/i18n.js';
@@ -266,6 +267,7 @@ function makeGame({ state = 'START', best = 10, coins = 0, extra = {} } = {}) {
     storage: env.storage,
     shop: new Shop(env.storage),
     daily: new Daily(env.storage),
+    quests: new Quests(env.storage),
     clockOffset: 0,
     shopWindow: null,
     leaderboard: null,

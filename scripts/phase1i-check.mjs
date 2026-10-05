@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/game/Game.js';
 import { Daily } from '../src/game/Daily.js';
+import { Quests } from '../src/game/Quests.js';
 import { Shop } from '../src/game/Shop.js';
 import { Renderer } from '../src/rendering/Renderer.js';
 import { StorageService } from '../src/services/StorageService.js';
@@ -146,6 +147,7 @@ function makeCloudGame(over = {}) {
     storage,
     shop: new Shop(storage),
     daily: new Daily(storage),
+    quests: new Quests(storage),
     clockOffset: 0,
     renderer: null,
     platform: null,
@@ -204,6 +206,9 @@ await check('cloud: the game saves a snapshot at Game Over with record, coins an
       storage: { set() {} },
       shop: { snapshot: () => ({ coins: 9, coinsEarned: 12, coinsSpent: 3, skinsOwned: ['classic', 'ginger'], skinSelected: 'ginger' }) },
       daily: { snapshot: () => ({ dailyDay: '2026-10-05', dailyStreak: 3, dailyBest: 777 }) },
+      quests: { snapshot: () => ({ questDay: '2026-10-05', questProgress: { coins: 2 }, questClaimed: ['runs'] }), record: () => [] },
+      todayKey: () => '2026-10-05',
+      runTime: 20,
       dailyRun: false,
       platform: {
         completedRuns: 0,
@@ -219,6 +224,7 @@ await check('cloud: the game saves a snapshot at Game Over with record, coins an
     assert(saved[0].bestScore === 500 && saved[0].coins === 9 && saved[0].choiceHintSeen === true && saved[0].riskHintSeen === false, `bad snapshot ${JSON.stringify(saved[0])}`);
     assert(saved[0].coinsEarned === 12 && saved[0].coinsSpent === 3 && saved[0].skinsOwned.join() === 'classic,ginger' && saved[0].skinSelected === 'ginger', 'the snapshot must carry the shop data');
     assert(saved[0].dailyDay === '2026-10-05' && saved[0].dailyStreak === 3 && saved[0].dailyBest === 777, 'the snapshot must carry the daily run data');
+    assert(saved[0].questDay === '2026-10-05' && saved[0].questProgress.coins === 2 && saved[0].questClaimed.join() === 'runs', 'the snapshot must carry the quests');
   } finally {
     console.log = log;
   }

@@ -30,6 +30,9 @@
   "shortcut": {
     "button": "ADD SHORTCUT"
   },
+  "menu": {
+    "button": "MENU"
+  },
   "shop": {
     "button": "SHOP",
     "title": "SHOP",
@@ -47,6 +50,30 @@
     "subDone": "TODAY {n}  •  STREAK {s}",
     "reward": "+{n} COINS  •  STREAK {s}",
     "todayBest": "TODAY'S BEST {n}"
+  },
+  "quest": {
+    "button": "QUESTS {done}/{total}",
+    "title": "QUESTS",
+    "reset": "NEW QUESTS IN {h} H {m} MIN",
+    "resetMin": "NEW QUESTS IN {m} MIN",
+    "scopeDay": "OVER THE DAY",
+    "scopeRun": "IN ONE RUN",
+    "done": "DONE",
+    "close": "CLOSE",
+    "toast": "QUEST DONE  +{n}",
+    "progress": "{p} / {n}",
+    "progressSeconds": "{p} / {n} S",
+    "progressMultiplier": "x{p} / x{n}",
+    "kind": {
+      "coins": "COLLECT COINS",
+      "risk": "TAKE THE NARROW PATH",
+      "graze": "GET CLOSE CALLS",
+      "runs": "PLAY RUNS",
+      "daily": "PLAY THE DAILY RUN",
+      "survive": "SURVIVE LONGER",
+      "score": "SCORE POINTS",
+      "multiplier": "REACH A MULTIPLIER"
+    }
   },
   "skin": {
     "classic": "CLASSIC",
