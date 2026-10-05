@@ -14,7 +14,8 @@ import { AudioService } from '../services/AudioService.js';
 import { HapticsService } from '../services/HapticsService.js';
 import { timeOfDay } from './TimeOfDay.js';
 import { Shop } from './Shop.js';
-import { Daily, dailySeed, gameDay } from './Daily.js';
+import { Daily, dailySeed, gameDay, msUntilNextDay } from './Daily.js';
+import { Quests } from './Quests.js';
 
 export class Game {
   constructor(canvas, platformService = null) {
@@ -57,6 +58,13 @@ export class Game {
     this.dailyPending = false; // игрок нажал «забег дня»: следующий start() запустит его
     this.dailyResult = null; // итог забега дня для экрана проигрыша: { reward, streak, best, first }
     this.clockOffset = 0; // серверное время минус время устройства (миллисекунды), см. syncClock
+    this.quests = new Quests(this.storage);
+    this.questsWindow = null; // null — закрыто; иначе {} (окно заданий дня на стартовом экране)
+    this.questToasts = []; // плашки «задание выполнено» по очереди: [{ reward, age }]
+    this.questWatch = []; // задания «за один забег», за которыми следим в забеге: [{ kind, target }]
+    this.runMaxMultiplier = CONFIG.MULTIPLIER_START; // наибольший множитель забега (для задания про множитель)
+    this.questRunCounted = false; // этот забег уже посчитан для «сыграй забеги» (возрождение не считается дважды)
+    this.fromMenu = false; // стартовый экран открыт кнопкой «в меню» после проигрыша: запуск идёт как перезапуск (с рекламой, если пора)
 
     this.currentSpeed = CONFIG.TRACK_SPEED_START;
     this.runTime = 0;
@@ -95,6 +103,7 @@ export class Game {
     if (!this.hidden) this.lastTime = performance.now();
     if (this.hidden && this.launchPending && this.adFinished) {
       this.launchPending = false;
+      this.dailyPending = false;
     }
     this.syncGameplayLifecycle?.();
   }
@@ -194,11 +203,13 @@ export class Game {
   }
 
   tryLaunch() {
-    if (this.state === 'PLAYING' || this.launchPending || this.rewardPending || this.leaderboard || this.shopWindow) return false;
+    if (this.state === 'PLAYING' || this.launchPending || this.rewardPending || this.leaderboard || this.shopWindow || this.questsWindow) return false;
     // Первые мгновения после проигрыша нажатия не перезапускают игру:
     // игрок успевает увидеть экран и кнопки «за рекламу».
     if (this.state === 'GAMEOVER' && this.gameOverInputLocked?.()) return false;
-    if (this.state === 'START' || !this.platform?.shouldShowInterstitial?.()) {
+    // Самый первый запуск после загрузки идёт без рекламы. Путь «проигрыш — меню — играть» от рекламы не спасает:
+    // межстраничная считается по сыгранным забегам и показывается и тут, если пора.
+    if ((this.state === 'START' && !this.fromMenu) || !this.platform?.shouldShowInterstitial?.()) {
       this.start();
       return true;
     }
@@ -213,6 +224,7 @@ export class Game {
         this.setAdPaused(false);
         if (this.hidden) {
           this.launchPending = false;
+          this.dailyPending = false;
         } else if (!this.platformPaused) {
           this.completePendingLaunch();
         }
@@ -221,7 +233,7 @@ export class Game {
   }
 
   completePendingLaunch() {
-    if (!this.launchPending || this.state !== 'GAMEOVER') return false;
+    if (!this.launchPending || (this.state !== 'GAMEOVER' && !(this.state === 'START' && this.fromMenu))) return false;
     this.launchPending = false;
     this.adFinished = false;
     this.start();
@@ -232,6 +244,7 @@ export class Game {
     if (this.isRunning && this.state === 'PLAYING') return;
     this.unlockAudio?.();
     this.state = 'PLAYING';
+    this.fromMenu = false;
     this.userPaused = false;
     this.isNewBest = false;
     this.score = 0;
@@ -254,6 +267,11 @@ export class Game {
     this.lastGrazeAt = -Infinity;
     this.stageKey = timeOfDay(this.runTime + (this.todOffset || 0)).key;
     this.stageToast = null;
+    // Задания дня: плашки прошлого забега гаснут, за заданиями «за один забег» следим с нуля.
+    this.questToasts = [];
+    this.questWatch = this.quests ? this.quests.watch(this.todayKey()) : [];
+    this.runMaxMultiplier = CONFIG.MULTIPLIER_START;
+    this.questRunCounted = false;
     this.rewardPending = false;
     this.reviveUsed = false;
     this.invulnerableTime = 0;
@@ -301,6 +319,7 @@ export class Game {
     if (this.state === 'GAMEOVER') {
       this.feel.update(deltaTime, this.currentSpeed);
       this.updateFloating(deltaTime);
+      this.updateQuestToast?.(deltaTime);
       return;
     }
 
@@ -343,6 +362,8 @@ export class Game {
 
     this.updateFloating(deltaTime);
     this.updateStage?.(deltaTime);
+    this.updateQuests?.();
+    this.updateQuestToast?.(deltaTime);
     this.feel.update(deltaTime, this.currentSpeed);
     const speedRange = Math.max(1, CONFIG.TRACK_SPEED_MAX - CONFIG.TRACK_SPEED_START);
     this.audio?.setMusicIntensity?.((this.currentSpeed - CONFIG.TRACK_SPEED_START) / speedRange);
@@ -424,6 +445,7 @@ export class Game {
       bestScore: this.bestScore || 0,
       ...this.shop.snapshot(), // монеты (заработано / потрачено), купленные скины и выбранный
       ...this.daily.snapshot(), // день последнего забега дня, серия и лучший счёт дня
+      ...this.quests.snapshot(), // задания: день, прогресс по видам, полученные награды
       choiceHintSeen: !!this.choiceHintSeen,
       riskHintSeen: !!this.riskHintSeen
     };
@@ -452,6 +474,7 @@ export class Game {
       changed = true;
     }
     if (this.daily.merge(data, this.todayKey())) changed = true;
+    if (this.quests.merge(data, this.todayKey())) changed = true;
     for (const key of ['choiceHintSeen', 'riskHintSeen']) {
       if (data[key] === true && !this[key]) {
         this[key] = true;
@@ -552,7 +575,42 @@ export class Game {
     if (this.state === 'GAMEOVER' && (this.gameOverInputLocked() || this.rewardPending || this.launchPending)) return true;
     if (hit === 'leaderboard') this.openLeaderboard();
     else if (hit === 'shop') this.openShop();
+    else if (hit === 'quests') this.openQuests();
+    else if (hit === 'menu') this.openMenu();
     else if (hit === 'shortcut') this.addShortcut();
+    return true;
+  }
+
+  // Кнопка «в меню» на экране проигрыша: возврат на стартовый экран, где забег дня, задания, магазин, таблица
+  // лидеров и ярлык (после первого забега сюда иначе не попасть). Мир за карточкой становится таким же, как при
+  // загрузке: новая дорожка, кот на месте, очки обнулены. Нельзя во время рекламы и поверх окон. Возрождение
+  // при этом теряется: забег закончен.
+  openMenu() {
+    if (this.state !== 'GAMEOVER' || this.launchPending || this.rewardPending) return false;
+    if (this.shopWindow || this.questsWindow || this.leaderboard) return false;
+    this.state = 'START';
+    this.fromMenu = true;
+    this.isNewBest = false;
+    this.score = 0;
+    this.distanceScore = 0;
+    this.pathReward = 0;
+    this.multiplier = CONFIG.MULTIPLIER_START;
+    this.riskStreak = 0;
+    this.runTime = 0;
+    this.currentSpeed = CONFIG.TRACK_SPEED_START;
+    this.floatingRewards = [];
+    this.questToasts = [];
+    this.stageToast = null;
+    this.dailyRun = false;
+    this.dailyResult = null;
+    this.feel?.reset?.();
+    this.player.reset();
+    this.track.setSeed?.(null);
+    this.track.setCanonicalClock?.(false);
+    this.track.reset();
+    this.camera?.reset?.();
+    this.syncGameplayLifecycle?.();
+    this.requestRender();
     return true;
   }
 
@@ -590,7 +648,7 @@ export class Game {
 
   // Запуск забега дня. Только со стартового экрана и не поверх окон. Флаг гаснет, если запуск не удался.
   startDaily() {
-    if (this.state !== 'START' || this.shopWindow || this.leaderboard) return false;
+    if (this.state !== 'START' || this.shopWindow || this.questsWindow || this.leaderboard) return false;
     this.dailyPending = true;
     const started = this.tryLaunch();
     if (!started) this.dailyPending = false;
@@ -692,6 +750,92 @@ export class Game {
     timer.unref?.();
   }
 
+  // --- Задания на день (Quests.js): кнопка и окно на стартовом экране, плашка в забеге ---
+
+  // Событие для заданий: монета, рискованный проход, «впритирку», конец забега... Если это выполняет
+  // сегодняшнее задание, монеты выдаются сразу (Quests.record), а игрок видит плашку.
+  recordQuest(kind, value = 1) {
+    if (!this.quests) return [];
+    const completed = this.quests.record(kind, value, this.todayKey());
+    for (const quest of completed) this.onQuestDone(quest);
+    return completed;
+  }
+
+  onQuestDone(quest) {
+    this.coins = this.storage.getCoins();
+    if (!this.questToasts) this.questToasts = [];
+    this.questToasts.push({ reward: quest.reward, age: 0 });
+    this.audio?.play?.('buy');
+    this.haptics?.pulse?.('best');
+  }
+
+  // Что сейчас набрано в забеге по заданиям «за один забег».
+  questRunValue(kind) {
+    if (kind === 'survive') return Math.floor(this.runTime - (this.devStartTime || 0));
+    if (kind === 'score') return Math.floor(this.distanceScore + this.pathReward);
+    if (kind === 'multiplier') return Math.floor(this.runMaxMultiplier || CONFIG.MULTIPLIER_START);
+    return 0;
+  }
+
+  // Следим за заданиями «за один забег» (секунды, очки, множитель): цель достигнута — сообщаем сразу,
+  // не дожидаясь конца забега. Проверка — несколько сравнений чисел за кадр; в хранилище пишем один раз.
+  updateQuests() {
+    if (!this.questWatch?.length) return;
+    const reached = this.questWatch.filter(({ kind, target }) => this.questRunValue(kind) >= target);
+    if (!reached.length) return;
+    this.questWatch = this.questWatch.filter((item) => !reached.includes(item));
+    for (const { kind } of reached) this.recordQuest(kind, this.questRunValue(kind));
+  }
+
+  // Плашка «задание выполнено» живёт TOAST_SECONDS секунд игрового времени; несколько идут по очереди.
+  updateQuestToast(deltaTime) {
+    const toast = this.questToasts?.[0];
+    if (!toast) return;
+    toast.age += deltaTime;
+    if (toast.age >= CONFIG.QUESTS.TOAST_SECONDS) this.questToasts.shift();
+  }
+
+  // Конец забега для заданий: лучшие результаты забега (секунды, очки, множитель), «сыграй забеги» и
+  // «забег дня». Мгновенный проигрыш (короче MIN_RUN_SECONDS) за забег не считается, а после
+  // возрождения тот же забег не считается дважды.
+  finishQuestRun(totalScore) {
+    if (!this.quests) return;
+    const seconds = Math.floor(this.runTime - (this.devStartTime || 0));
+    this.recordQuest('survive', seconds);
+    this.recordQuest('score', totalScore);
+    this.recordQuest('multiplier', this.questRunValue('multiplier'));
+    if (seconds < CONFIG.QUESTS.MIN_RUN_SECONDS || this.questRunCounted) return;
+    this.questRunCounted = true;
+    this.recordQuest('runs', 1);
+    if (this.dailyRun) this.recordQuest('daily', 1);
+  }
+
+  openQuests() {
+    if (this.questsWindow || this.state !== 'START' || this.shopWindow || this.leaderboard) return false;
+    this.questsWindow = {};
+    this.requestRender();
+    return true;
+  }
+
+  closeQuests() {
+    if (!this.questsWindow) return false;
+    this.questsWindow = null;
+    this.requestRender();
+    return true;
+  }
+
+  // Что нарисовать в окне заданий: задания с прогрессом и сколько минут до новых (полночь по Москве).
+  questsView() {
+    return {
+      quests: this.quests.list(this.todayKey()),
+      resetMinutes: Math.max(1, Math.ceil(msUntilNextDay(this.nowMs()) / 60000))
+    };
+  }
+
+  handleQuestsTap(x, y) {
+    return this.renderer?.hitQuestsButton?.(x, y) ? this.closeQuests() : false;
+  }
+
   async addShortcut() {
     const result = await Promise.resolve(this.platform?.showShortcut?.()).catch(() => ({ accepted: false }));
     if (result?.accepted) {
@@ -731,6 +875,10 @@ export class Game {
     // Пока открыт магазин или таблица лидеров, нажатия достаются только им.
     if (this.shopWindow) {
       this.handleShopTap(x, y);
+      return false;
+    }
+    if (this.questsWindow) {
+      this.handleQuestsTap(x, y);
       return false;
     }
     if (this.leaderboard) {
@@ -872,6 +1020,9 @@ export class Game {
 
     this.pathReward += finalReward;
     this.score = Math.floor(this.distanceScore + this.pathReward);
+    // Для заданий: узкий путь пройден, а множитель мог вырасти.
+    this.runMaxMultiplier = Math.max(this.runMaxMultiplier || CONFIG.MULTIPLIER_START, this.multiplier);
+    if (isIntentional) this.recordQuest?.('risk', 1);
 
     let subtitle = null;
     if (isIntentional && this.multiplier > prevMultiplier) {
@@ -950,6 +1101,7 @@ export class Game {
     if (typeof this.pushFloat === 'function') this.pushFloat(float);
     else this.floatingRewards.push(float);
     this.feel?.onGraze?.({ x, y, side, combo: this.grazeCombo });
+    this.recordQuest?.('graze', 1);
     return bonus;
   }
 
@@ -970,6 +1122,7 @@ export class Game {
     if (typeof this.pushFloat === 'function') this.pushFloat(float);
     else this.floatingRewards.push(float);
     this.feel?.onCoin(this.player.x, this.player.y);
+    this.recordQuest?.('coins', gained);
   }
 
   gameOver() {
@@ -986,6 +1139,7 @@ export class Game {
       Promise.resolve(submission).catch(() => {});
     }
     if (this.dailyRun) this.finishDailyRun(totalScore);
+    this.finishQuestRun?.(totalScore);
     // После возрождения это тот же забег: для частоты рекламы не считаем дважды.
     if (!this.reviveUsed) this.platform?.recordRunCompleted?.();
     // Рекорд, монеты и подсказки уходят в облако Яндекса (платформа сама ограничивает частоту).
@@ -1071,20 +1225,31 @@ export class Game {
           runCoins: this.runCoins || 0,
           coinsDoubled: !!this.coinsDoubled,
           daily: this.dailyRun ? this.dailyResult : null,
-          leaderboard: this.canShowLeaderboard()
+          leaderboard: this.canShowLeaderboard(),
+          menu: true
         }
       );
     } else if (this.state === 'START') {
       this.renderer.drawStartScreen(this.audio?.muted, this.audio?.volume, {
         shop: true,
+        quests: this.quests?.summary(this.todayKey()),
         daily: this.dailyView(),
         leaderboard: this.canShowLeaderboard(),
         shortcut: this.shortcutAvailable
       });
     }
 
-    // Окна магазина и таблицы лидеров лежат поверх любого экрана.
+    // Плашка «задание выполнено»: в забеге под плашкой времени суток, на экране проигрыша выше карточки.
+    const questToast = this.questToasts?.[0];
+    if (questToast && (this.state === 'GAMEOVER' || (this.state === 'PLAYING' && !this.userPaused))) {
+      const life = CONFIG.QUESTS.TOAST_SECONDS;
+      const alpha = Math.min(1, questToast.age / 0.25, (life - questToast.age) / 0.5);
+      this.renderer.drawStageToast(t('quest.toast', { n: questToast.reward }), alpha, this.state === 'PLAYING' ? 176 : 124);
+    }
+
+    // Окна магазина, заданий и таблицы лидеров лежат поверх любого экрана.
     if (this.shopWindow) this.renderer.drawShop(this.shopView());
+    if (this.questsWindow) this.renderer.drawQuests(this.questsView());
 
     // Окно таблицы лидеров лежит поверх любого экрана.
     if (this.leaderboard) this.renderer.drawLeaderboard(this.leaderboard);

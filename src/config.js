@@ -172,6 +172,29 @@ export const CONFIG = {
     REWARD_STEP: 2,
     REWARD_MAX: 15
   },
+  // Задания на день (Quests.js, Game, Renderer.drawQuests): три в день — лёгкое, среднее и трудное,
+  // за них REWARDS монет (по порядку). Набор выбирается по дате (SEED_SALT), у всех игроков он один. POOL:
+  // вид задания → цель для лёгкого, среднего и трудного (null — в этой сложности такого задания нет); виды
+  // в одном наборе не повторяются. Цели подбирались по обычному забегу новичка: 30–40 секунд, 400–800 очков,
+  // примерно монета за забег (scripts/phase1p-check.mjs держит их в этих рамках). Забег короче MIN_RUN_SECONDS
+  // не считается за «сыграй забеги» и «забег дня» (иначе их выполняют мгновенным проигрышем). TOAST_SECONDS —
+  // сколько висит плашка «задание выполнено».
+  QUESTS: {
+    SEED_SALT: 'omr-quests-',
+    REWARDS: [3, 5, 8],
+    MIN_RUN_SECONDS: 10,
+    TOAST_SECONDS: 3,
+    POOL: {
+      coins: [3, 6, 10], // собрать монеты (за день)
+      risk: [3, 6, 10], // пройти узким (рискованным) путём (за день)
+      graze: [5, 10, 16], // пройти «впритирку» (за день)
+      runs: [3, 5, null], // сыграть забеги (за день)
+      daily: [1, 1, null], // сыграть забег дня
+      survive: [30, 50, 75], // продержаться секунд в одном забеге
+      score: [400, 900, 1800], // набрать очков в одном забеге
+      multiplier: [null, 2, 3] // дойти до множителя ×N в одном забеге
+    }
+  },
   // Подсказка «шире / уже» у первой развилки видна, пока до неё от кота от NEAR до FAR px.
   CHOICE_HINT_NEAR: 80,
   CHOICE_HINT_FAR: 1100,
@@ -228,7 +251,7 @@ export const CONFIG = {
     // Облачное сохранение (player.getData / setData): что хранится и как часто пишем.
     // Лимит Яндекса — 100 запросов за 5 минут, поэтому запись не чаще раза в CLOUD_SAVE_MIN_INTERVAL_MS.
     // coins — баланс для старых версий игры; coinsEarned / coinsSpent / skinsOwned / skinSelected — магазин.
-    CLOUD_KEYS: ['bestScore', 'coins', 'coinsEarned', 'coinsSpent', 'skinsOwned', 'skinSelected', 'dailyDay', 'dailyStreak', 'dailyBest', 'choiceHintSeen', 'riskHintSeen'],
+    CLOUD_KEYS: ['bestScore', 'coins', 'coinsEarned', 'coinsSpent', 'skinsOwned', 'skinSelected', 'dailyDay', 'dailyStreak', 'dailyBest', 'questDay', 'questProgress', 'questClaimed', 'choiceHintSeen', 'riskHintSeen'],
     CLOUD_SAVE_MIN_INTERVAL_MS: 4000,
     // Таблица лидеров: сколько верхних записей и сколько вокруг игрока, сколько хранить ответ.
     LEADERBOARD_TOP: 10,

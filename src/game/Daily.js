@@ -37,15 +37,27 @@ export function previousDay(day) {
   return gameDay(Date.parse(`${day}T00:00:00Z`) - MS_PER_DAY, 0);
 }
 
-// Зерно трассы дня: хеш FNV-1a от соли и даты, целое от 1 до 2^32 − 1. Один день — одно зерно, у всех.
-export function dailySeed(day) {
-  const text = `${CONFIG.DAILY.SEED_SALT}${day}`;
+// Хеш FNV-1a строки: целое от 1 до 2^32 − 1. Из него получаются зёрна «одинаково у всех»: трасса дня и набор заданий.
+export function fnv1a(text) {
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i += 1) {
     hash ^= text.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash || 1;
+}
+
+// Зерно трассы дня: хеш от соли и даты. Один день — одно зерно, у всех.
+export function dailySeed(day) {
+  return fnv1a(`${CONFIG.DAILY.SEED_SALT}${day}`);
+}
+
+// Сколько миллисекунд осталось до следующей смены игрового дня (полночь по Москве). Всегда от 1 до 24 часов.
+export function msUntilNextDay(ms, offsetHours = CONFIG.DAILY.UTC_OFFSET_HOURS) {
+  const time = Number(ms);
+  if (!Number.isFinite(time)) return 0;
+  const intoDay = (((time + offsetHours * 3600000) % MS_PER_DAY) + MS_PER_DAY) % MS_PER_DAY;
+  return MS_PER_DAY - intoDay;
 }
 
 // Награда за забег дня при серии из streak дней (считая этот): BASE, BASE + STEP, ... до MAX.

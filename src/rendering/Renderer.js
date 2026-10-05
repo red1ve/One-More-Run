@@ -430,14 +430,14 @@ export class Renderer {
     }
   }
 
-  // Плашка нового этапа суток («ВЕЧЕР», «НОЧЬ»...) под HUD; alpha — плавное появление и уход.
-  drawStageToast(text, alpha = 1) {
+  // Плашка под HUD: новый этап суток («ВЕЧЕР», «НОЧЬ»...) или «задание выполнено»; alpha — плавное
+  // появление и уход, top — верхний край (две плашки одновременно стоят одна под другой).
+  drawStageToast(text, alpha = 1, top = 124) {
     if (!text || alpha <= 0) return;
     const ctx = this.ctx;
     ctx.font = `700 22px ${FONT_FAMILY}`;
     const measured = typeof ctx.measureText === 'function' ? ctx.measureText(text).width : 160;
     const width = Math.min(this.width - 48, measured + 48);
-    const top = 124;
     ctx.save();
     ctx.globalAlpha = Math.min(1, alpha);
     this.garden.hudPill((this.width - width) / 2, top, width, 44);
@@ -624,8 +624,9 @@ export class Renderer {
     this.ctx.globalAlpha = 1;
   }
 
-  // Строка по центру; если не влезает в maxWidth, шрифт уменьшается (запас под русский).
-  fitText(text, x, y, weight, size, maxWidth, color) {
+  // Строка по центру (или от x вправо при align 'left'); если не влезает в maxWidth, шрифт уменьшается
+  // (запас под русский).
+  fitText(text, x, y, weight, size, maxWidth, color, align = 'center') {
     const ctx = this.ctx;
     const minFont = this.screenCfg().MIN_FONT ?? 16;
     let font = size;
@@ -636,7 +637,7 @@ export class Renderer {
       ctx.font = `${weight} ${font}px ${FONT_FAMILY}`;
     }
     ctx.fillStyle = color;
-    ctx.textAlign = 'center';
+    ctx.textAlign = align;
     ctx.fillText(text, x, y);
   }
 
@@ -718,36 +719,52 @@ export class Renderer {
     return Renderer.inRect(this.dailyButton, x, y);
   }
 
-  // Кнопки под звуком: «магазин», «таблица лидеров» и «ярлык». «Лидеры» и «ярлык» рисуются, только если
-  // платформа их разрешает. По две в ряд. Области нажатия — для Game.handlePlatformTap (с запасом под палец).
+  // Кнопки под звуком: «магазин», «задания», «таблица лидеров», «ярлык» и «в меню». «Лидеры» и «ярлык» рисуются,
+  // только если платформа их разрешает; «задания» — когда передан show.quests ({ done, total }), а когда выполнены
+  // все, кнопка зелёная; «в меню» — на экране проигрыша (show.menu). По две в ряд, а при show.perRow = 3 по три:
+  // тогда ряд из трёх кнопок уже, без значков (экран проигрыша тесный, второго ряда на нём нет).
+  // Области нажатия — для Game.handlePlatformTap (с запасом под палец).
   drawPlatformButtons(cx, cy, show = {}) {
     const items = [];
     if (show.shop) items.push('shop');
+    if (show.quests) items.push('quests');
     if (show.leaderboard) items.push('leaderboard');
     if (show.shortcut) items.push('shortcut');
+    if (show.menu) items.push('menu');
     this.platformButtons = null;
     if (!items.length) return;
+    const perRow = show.perRow || 2;
     const rows = [];
-    for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
-    const gap = 14;
+    for (let i = 0; i < items.length; i += perRow) rows.push(items.slice(i, i + perRow));
     const h = 44;
     const rowStep = 62;
     this.platformButtons = {};
     rows.forEach((row, rowIndex) => {
       const y = cy + rowIndex * rowStep;
-      const w = row.length === 1 ? 250 : 200;
+      const compact = row.length >= 3;
+      const gap = compact ? 10 : 14;
+      const w = compact ? 156 : (row.length === 1 ? 250 : 200);
       const left = cx - (w * row.length + gap * (row.length - 1)) / 2;
       row.forEach((name, index) => {
         const x = left + index * (w + gap) + w / 2;
-        this.screenPill(x, y, w, h, CONFIG.COLORS.SkyPaper);
-        if (name === 'leaderboard') {
+        const allDone = name === 'quests' && show.quests.done >= show.quests.total;
+        this.screenPill(x, y, w, h, allDone ? CONFIG.COLORS.SafeLawn : CONFIG.COLORS.SkyPaper);
+        if (compact) {
+          const label = name === 'quests'
+            ? t('quest.button', { done: show.quests.done, total: show.quests.total })
+            : t(`${name}.button`);
+          this.fitText(label, x, y + 7, 600, 18, w - 20, CONFIG.COLORS.UI_TEXT);
+        } else if (name === 'leaderboard') {
           this.garden.hudTrophyIcon(x - w / 2 + 28, y, 14);
           this.fitText(t('leaderboard.button'), x + 14, y + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
+        } else if (name === 'quests') {
+          this.garden.hudCheckIcon(x - w / 2 + 28, y, 14);
+          this.fitText(t('quest.button', { done: show.quests.done, total: show.quests.total }), x + 14, y + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
         } else if (name === 'shop') {
           this.garden.hudCoinIcon(x - w / 2 + 28, y, 14);
           this.fitText(t('shop.button'), x + 14, y + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
         } else {
-          this.fitText(t('shortcut.button'), x, y + 7, 600, 19, w - 28, CONFIG.COLORS.UI_TEXT);
+          this.fitText(t(`${name}.button`), x, y + 7, 600, 19, w - 28, CONFIG.COLORS.UI_TEXT);
         }
         this.platformButtons[name] = { x: x - w / 2 - 4, y: y - h / 2 - 8, w: w + 8, h: h + 16 };
       });
@@ -933,6 +950,102 @@ export class Renderer {
     if (Renderer.inRect(buttons.close, x, y)) return { type: 'close' };
     const cell = buttons.skins.find((r) => Renderer.inRect(r, x, y));
     return cell ? { type: 'skin', id: cell.id } : null;
+  }
+
+  // Окно заданий дня поверх стартового экрана. view: { quests: [{ kind, mode, target, reward, progress, done }],
+  // resetMinutes }. Три строки: название, «за день / за один забег», награда (или «готово») и полоска прогресса.
+  drawQuests(view) {
+    const ctx = this.ctx;
+    const cx = this.width / 2;
+    const cardX = 36;
+    const cardW = this.width - cardX * 2;
+    const cardY = 80;
+    const cardH = 800;
+    this.questsButtons = { close: null };
+
+    this.dimScreen(0.45);
+    this.garden.plate(cardX, cardY, cardW, cardH, 26);
+    this.fitText(t('quest.title'), cx, cardY + 62, 700, 40, cardW - 56, CONFIG.COLORS.UI_TEXT);
+    const hours = Math.floor(view.resetMinutes / 60);
+    const minutes = view.resetMinutes % 60;
+    const reset = hours > 0 ? t('quest.reset', { h: hours, m: minutes }) : t('quest.resetMin', { m: minutes });
+    this.fitText(reset, cx, cardY + 110, 600, 17, cardW - 56, CONFIG.COLORS.UI_HUD);
+
+    const cellX = cardX + 14;
+    const cellW = cardW - 28;
+    const cellH = 148;
+    const rowStep = 186;
+    const top = cardY + 152;
+    const inner = 20;
+    view.quests.forEach((quest, index) => {
+      const y = top + index * rowStep;
+      ctx.fillStyle = CONFIG.COLORS.ShadowDust;
+      this.garden.roundedRectPath(cellX + 3, y + 4, cellW, cellH, 18);
+      ctx.fill();
+      ctx.fillStyle = CONFIG.COLORS.FloorSand;
+      this.garden.roundedRectPath(cellX, y, cellW, cellH, 18);
+      ctx.fill();
+      if (quest.done) {
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = CONFIG.COLORS.SafeLawn;
+        this.garden.roundedRectPath(cellX, y, cellW, cellH, 18);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.strokeStyle = CONFIG.COLORS.InkBrown;
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      this.garden.roundedRectPath(cellX, y, cellW, cellH, 18);
+      ctx.stroke();
+
+      // Название и «за день / за один забег» слева, награда или «готово» справа.
+      const pillW = 116;
+      const textW = cellW - inner * 2 - pillW - 12;
+      this.fitText(t(`quest.kind.${quest.kind}`), cellX + inner, y + 44, 700, 23, textW, CONFIG.COLORS.UI_TEXT, 'left');
+      this.fitText(t(quest.mode === 'best' ? 'quest.scopeRun' : 'quest.scopeDay'), cellX + inner, y + 70, 600, 15, textW, CONFIG.COLORS.UI_HUD, 'left');
+      const pillX = cellX + cellW - inner - pillW / 2;
+      if (quest.done) {
+        this.screenPill(pillX, y + 44, pillW, 40, CONFIG.COLORS.SafeLawn);
+        this.fitText(t('quest.done'), pillX, y + 51, 700, 17, pillW - 20, CONFIG.COLORS.UI_TEXT);
+      } else {
+        this.screenPill(pillX, y + 44, pillW, 40, CONFIG.COLORS.CoinAmber);
+        this.garden.hudCoinIcon(pillX - pillW / 2 + 24, y + 44, 12);
+        this.fitText(`+${quest.reward}`, pillX + 12, y + 52, 700, 22, pillW - 56, CONFIG.COLORS.UI_TEXT);
+      }
+
+      // Полоска прогресса и числа под ней.
+      const barX = cellX + inner;
+      const barW = cellW - inner * 2;
+      const barY = y + 94;
+      const barH = 20;
+      ctx.fillStyle = CONFIG.COLORS.SkyPaper;
+      this.garden.roundedRectPath(barX, barY, barW, barH, barH / 2);
+      ctx.fill();
+      const ratio = Math.max(0, Math.min(1, quest.progress / quest.target));
+      if (ratio > 0) {
+        ctx.fillStyle = quest.done ? CONFIG.COLORS.SafeLawn : CONFIG.COLORS.CoinAmber;
+        this.garden.roundedRectPath(barX, barY, Math.max(barH, barW * ratio), barH, barH / 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = CONFIG.COLORS.InkBrown;
+      ctx.lineWidth = 2.5;
+      this.garden.roundedRectPath(barX, barY, barW, barH, barH / 2);
+      ctx.stroke();
+      let progress;
+      if (quest.kind === 'survive') progress = t('quest.progressSeconds', { p: quest.progress, n: quest.target });
+      else if (quest.kind === 'multiplier') progress = t('quest.progressMultiplier', { p: Math.max(1, quest.progress), n: quest.target });
+      else progress = t('quest.progress', { p: quest.progress, n: quest.target });
+      this.fitText(progress, cx, y + 136, 700, 17, cellW - inner * 2, CONFIG.COLORS.UI_TEXT);
+    });
+
+    this.screenPill(cx, cardY + cardH - 48, 240, 56, CONFIG.COLORS.CoinAmber);
+    this.fitText(t('quest.close'), cx, cardY + cardH - 39, 700, 24, 210, CONFIG.COLORS.UI_TEXT);
+    this.questsButtons.close = { x: cx - 124, y: cardY + cardH - 80, w: 248, h: 64 };
+  }
+
+  // Нажата кнопка «закрыть» в окне заданий?
+  hitQuestsButton(x, y) {
+    return Renderer.inRect(this.questsButtons?.close, x, y);
   }
 
   // Строка, обрезанная до ширины maxWidth (px) с многоточием.
@@ -1170,7 +1283,7 @@ export class Renderer {
     this.fitText(t('over.restart'), cx, rowY + 17, 700, 26, 300, CONFIG.COLORS.UI_TEXT);
 
     this.drawSoundControls(cx, cardY + cardH + 44, extras.muted, extras.volume);
-    this.drawPlatformButtons(cx, cardY + cardH + 104, { shop: true, leaderboard: extras.leaderboard });
+    this.drawPlatformButtons(cx, cardY + cardH + 104, { shop: true, leaderboard: extras.leaderboard, menu: extras.menu, perRow: 3 });
     this.ctx.globalAlpha = 1;
   }
 }
