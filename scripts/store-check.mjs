@@ -2,7 +2,8 @@
 //  - тексты в docs/store/listing.md: длины полей, заглавная буква, запрещённые слова, число тегов;
 //  - картинки: иконка 512×512 PNG, обложка 800×470 PNG, заглавная 1560×520, скриншоты 9:16 или 16:9 длинной
 //    стороной 1280–2560, JPEG или 24-битный PNG;
-//  - видео release/video/*.mp4: 16:9, высота от 400, до 28 секунд, до 100 МБ, длительность записана в файле.
+//  - видео release/video/*.mp4: 16:9, высота от 400, до 28 секунд, до 100 МБ, длительность записана в файле,
+//    не меньше 24 кадров в секунду (предосторожность, см. checkVideo).
 // Чего нет (иконки, обложки, видео), печатается как «осталось сделать» и ошибкой не считается; то, что есть,
 // должно подходить. Запуск: node scripts/store-check.mjs (входит в npm run check) или npm run store:check.
 import fs from 'node:fs';
@@ -137,12 +138,14 @@ export function checkVideo(name, buf) {
   const problems = [];
   if (!info.hasMoov) return [`${name}: не похоже на MP4 (нет moov)`];
   if (info.codec !== 'avc1') problems.push(`${name}: нужен H.264 (avc1), а тут ${info.codec}`);
-  if (!(info.duration > 0)) problems.push(`${name}: длительность в файле не записана (перепакуйте remux-mp4.mjs)`);
+  if (!(info.duration > 0)) problems.push(`${name}: длительность в файле не записана (соберите MP4 скриптом mux-mp4.mjs)`);
   if (info.duration > 28) problems.push(`${name}: ${info.duration.toFixed(1)} с, а можно до 28`);
   if (info.height < 400) problems.push(`${name}: высота ${info.height}, нужно от 400`);
   if (!near(info.width / info.height, 16 / 9)) problems.push(`${name}: нужны пропорции 16:9, а тут ${info.width}×${info.height}`);
   if (buf.length > 100 * 1024 * 1024) problems.push(`${name}: ${(buf.length / 1048576).toFixed(0)} МБ, а можно до 100`);
-  if (info.fragmented) problems.push(`${name}: фрагментный MP4 (перепакуйте remux-mp4.mjs в обычный)`);
+  if (info.fragmented) problems.push(`${name}: фрагментный MP4 (соберите обычный: recordVideo и mux-mp4.mjs)`);
+  // Предосторожность: Яндекс отклонил ролик в 23,9 кадра/с («Невалидное видео», 2026-10-06; причина не подтверждена).
+  if (info.fps < 24) problems.push(`${name}: ${info.fps.toFixed(1)} кадров/с, держите не меньше 24 (ровно 30 даёт recordVideo с mux-mp4.mjs)`);
   return problems;
 }
 

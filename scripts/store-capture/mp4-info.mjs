@@ -22,7 +22,7 @@ function boxes(buf, start, end, depth = 0, out = []) {
 // Что внутри MP4: { top: ['ftyp', 'moov', ...], hasMoov, duration (секунды, 0 если неизвестна), width, height, codec, fragmented }.
 export function mp4Info(buf) {
   const list = boxes(buf, 0, buf.length);
-  const info = { top: list.filter((b) => b.depth === 0).map((b) => b.type), hasMoov: false, duration: 0, width: 0, height: 0, codec: null, fragmented: false };
+  const info = { top: list.filter((b) => b.depth === 0).map((b) => b.type), hasMoov: false, duration: 0, width: 0, height: 0, codec: null, fragmented: false, fps: 0, hasAudio: false };
   const moov = list.find((b) => b.type === 'moov');
   if (!moov) return info;
   info.hasMoov = true;
@@ -44,11 +44,29 @@ export function mp4Info(buf) {
   const stsd = list.find((b) => b.type === 'stsd');
   if (stsd) info.codec = buf.toString('latin1', stsd.pos + 20, stsd.pos + 24);
   info.fragmented = list.some((b) => b.type === 'mvex' || b.type === 'moof');
+  // Звуковая дорожка: у какой-то дорожки тип обработчика 'soun'.
+  info.hasAudio = list.some((b) => b.type === 'hdlr' && buf.toString('latin1', b.pos + b.header + 8, b.pos + b.header + 12) === 'soun');
+  // Средняя частота кадров видео: число кадров из первой таблицы stts (это видеодорожка) на её длительность.
+  const mdhd = list.find((b) => b.type === 'mdhd');
+  const stts = list.find((b) => b.type === 'stts');
+  if (mdhd && stts) {
+    const q = mdhd.pos + mdhd.header;
+    const timescale = buf.readUInt32BE(q + (buf[q] === 1 ? 20 : 12));
+    const entries = buf.readUInt32BE(stts.pos + stts.header + 4);
+    let frames = 0;
+    let units = 0;
+    for (let i = 0; i < entries; i += 1) {
+      const count = buf.readUInt32BE(stts.pos + stts.header + 8 + i * 8);
+      frames += count;
+      units += count * buf.readUInt32BE(stts.pos + stts.header + 12 + i * 8);
+    }
+    info.fps = timescale && units ? (frames * timescale) / units : 0;
+  }
   return info;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const info = mp4Info(fs.readFileSync(process.argv[2]));
   console.log('top level:', info.top.join(' '));
-  console.log(`duration ${info.duration.toFixed(2)} s, ${info.width}x${info.height}, codec ${info.codec}, fragmented: ${info.fragmented}`);
+  console.log(`duration ${info.duration.toFixed(2)} s, ${info.width}x${info.height}, codec ${info.codec}, ${info.fps.toFixed(2)} fps, audio: ${info.hasAudio}, fragmented: ${info.fragmented}`);
 }

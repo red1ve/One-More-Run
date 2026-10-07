@@ -241,7 +241,7 @@ export const CONFIG = {
     SUPPORTED_LANGUAGES: ['en', 'ru'],
     // Языки, для которых показываем русский интерфейс (так советует Яндекс для СНГ).
     RUSSIAN_UI_LANGUAGES: ['ru', 'be', 'kk', 'uk', 'uz'],
-    LEADERBOARD_NAME: 'one_more_run_score',
+    LEADERBOARD_NAME: 'OneMoreRunScore',
     ADS_ENABLED: true,
     // Имитация рекламы за награду без SDK. Включается только в npm run dev (main.js).
     DEV_REWARDED_STUB: false,

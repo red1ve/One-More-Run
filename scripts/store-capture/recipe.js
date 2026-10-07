@@ -78,10 +78,11 @@ export async function extraShots(cap, lang) {
   return log;
 }
 
-// Видео 16:9, 27 с: 2,4 с стартовый экран, потом забег (зерно 93: монета и серия рисков). Идёт в реальном времени;
-// ждите около 30 с и смотрите window.__rec.done. Результат — фрагментный MP4, его надо перепаковать remux-mp4.mjs.
+// Видео 16:9, 27 с, ровно 30 кадров в секунду: 2,4 с стартовый экран, потом забег (зерно 93: монета и серия рисков).
+// Кадры кодируются по одному, ждите 1–2 минуты и смотрите window.__rec.done. Результат — файл OMRV в release/store-out/,
+// из него MP4 собирает mux-mp4.mjs.
 export function recordVideo(cap, lang) {
   prepare(cap);
   const text = VIDEO_TEXT[lang];
-  return cap.record({ name: `${lang}-video-fmp4.mp4`, seed: 93, tod: 112, skin: 'classic', risk: true, intro: 2.4, seconds: 27, left: text.left, right: text.right });
+  return cap.record({ name: `${lang}-video.omrbin`, seed: 93, tod: 112, skin: 'classic', risk: true, intro: 2.4, seconds: 27, left: text.left, right: text.right });
 }
