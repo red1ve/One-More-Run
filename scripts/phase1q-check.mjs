@@ -10,6 +10,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { CONFIG } from '../src/config.js';
 import { checkImage, checkListing, checkRepository, checkVideo, imageInfo, parseListing } from './store-check.mjs';
 import { mp4Info } from './store-capture/mp4-info.mjs';
 import { crc32, readZip, writeZip, zipNameProblems } from './zip-lib.mjs';
@@ -235,14 +237,19 @@ const box = (type, ...parts) => {
   head.write(type, 4, 'latin1');
   return Buffer.concat([head, body]);
 };
-function makeMp4({ seconds = 27, width = 1280, height = 720, codec = 'avc1', fragmented = false, bytes = 1000, timescale = 1000 } = {}) {
+function makeMp4({ seconds = 27, width = 1280, height = 720, codec = 'avc1', fragmented = false, bytes = 1000, timescale = 1000, fps = 30, audio = false, runs = null } = {}) {
   const mvhd = Buffer.alloc(100); mvhd.writeUInt32BE(timescale, 12); mvhd.writeUInt32BE(Math.round(seconds * timescale), 16);
   const tkhd = Buffer.alloc(84); tkhd.writeUInt32BE(width * 65536, 76); tkhd.writeUInt32BE(height * 65536, 80);
   const entry = Buffer.alloc(16); entry.writeUInt32BE(16, 0); entry.write(codec, 4, 'latin1');
   const stsd = Buffer.concat([Buffer.alloc(4), Buffer.from([0, 0, 0, 1]), entry]);
-  const stbl = box('stbl', box('stsd', stsd));
-  const trak = box('trak', box('tkhd', tkhd), box('mdia', box('minf', stbl)));
-  const moov = box('moov', box('mvhd', mvhd), trak, ...(fragmented ? [box('mvex', box('trex', Buffer.alloc(24)))] : []));
+  const mdhd = Buffer.alloc(24); mdhd.writeUInt32BE(30000, 12); mdhd.writeUInt32BE(Math.round(seconds * 30000), 16);
+  const hdlr = (type) => Buffer.concat([Buffer.alloc(8), Buffer.from(type, 'latin1'), Buffer.alloc(13)]);
+  const sttsRuns = runs || [[Math.round(seconds * fps), Math.round(30000 / fps)]];
+  const stts = Buffer.alloc(8 + sttsRuns.length * 8); stts.writeUInt32BE(sttsRuns.length, 4);
+  sttsRuns.forEach(([count, delta], i) => { stts.writeUInt32BE(count, 8 + i * 8); stts.writeUInt32BE(delta, 12 + i * 8); });
+  const videoTrak = box('trak', box('tkhd', tkhd), box('mdia', box('mdhd', mdhd), box('hdlr', hdlr('vide')), box('minf', box('stbl', box('stsd', stsd), box('stts', stts)))));
+  const audioTrak = box('trak', box('tkhd', Buffer.alloc(84)), box('mdia', box('hdlr', hdlr('soun')), box('minf', box('stbl', box('stsd', stsd)))));
+  const moov = box('moov', box('mvhd', mvhd), videoTrak, ...(audio ? [audioTrak] : []), ...(fragmented ? [box('mvex', box('trex', Buffer.alloc(24)))] : []));
   return Buffer.concat([box('ftyp', Buffer.from([0x69, 0x73, 0x6f, 0x6d, 0, 0, 2, 0, 0x69, 0x73, 0x6f, 0x6d])), moov, box('mdat', Buffer.alloc(bytes))]);
 }
 
@@ -254,15 +261,96 @@ check('video: 16:9, from 400 px high, up to 28 s, H.264, a real duration, not fr
   assert(has(checkVideo('v', makeMp4({ width: 1280, height: 960 })), '16:9') && has(checkVideo('v', makeMp4({ width: 720, height: 1280 })), '16:9'), 'only 16:9');
   assert(has(checkVideo('v', makeMp4({ codec: 'hev1' })), 'H.264'), 'another codec');
   assert(has(checkVideo('v', makeMp4({ fragmented: true })), 'фрагментный'), 'fragmented MP4');
+  assert(has(checkVideo('v', makeMp4({ fps: 23.9 })), 'кадров/с') && has(checkVideo('v', makeMp4({ fps: 15 })), 'кадров/с'), 'under 24 frames per second is refused (the old recording was 23.9)');
+  assert(checkVideo('v', makeMp4({ fps: 24 })).length === 0 && checkVideo('v', makeMp4({ fps: 30 })).length === 0 && checkVideo('v', makeMp4({ fps: 60 })).length === 0, '24, 30 and 60 frames per second are fine');
   assert(has(checkVideo('v', Buffer.from('this is not an mp4 file')), 'не похоже на MP4'), 'not an MP4');
   const info = mp4Info(makeMp4({ seconds: 12.5, width: 1920, height: 1080 }));
   assert(info.duration === 12.5 && info.width === 1920 && info.height === 1080 && info.codec === 'avc1' && info.fragmented === false, JSON.stringify(info));
+  assert(Math.abs(mp4Info(makeMp4({ runs: [[300, 1000], [300, 1500]] })).fps - 24) < 0.01, 'a variable frame rate (several stts entries) is averaged over all of them');
+  const rate = mp4Info(makeMp4({ seconds: 10, fps: 30 }));
+  assert(Math.abs(rate.fps - 30) < 0.01 && rate.hasAudio === false, `fps ${rate.fps}, audio ${rate.hasAudio}`);
+  assert(Math.abs(mp4Info(makeMp4({ seconds: 10, fps: 24 })).fps - 24) < 0.01 && mp4Info(makeMp4({ audio: true })).hasAudio === true, 'frame rate and the sound track are read from the tables');
   assert(mp4Info(makeMp4({ seconds: 15, timescale: 600 })).duration === 15 && mp4Info(makeMp4({ seconds: 27, timescale: 90000 })).duration === 27, 'the duration follows the time scale of the file');
   assert(checkVideo('v', makeMp4({ seconds: 27, timescale: 90000 })).length === 0 && has(checkVideo('v', makeMp4({ seconds: 29, timescale: 90000 })), 'до 28'), 'a 90000 time scale is understood');
   const limit = 100 * 1024 * 1024;
   const base = makeMp4({ bytes: 0 }).length;
   assert(checkVideo('v', makeMp4({ bytes: limit - base })).length === 0, 'exactly 100 MB is allowed');
   assert(has(checkVideo('v', makeMp4({ bytes: limit - base + 1 })), 'до 100'), 'one byte more is too much');
+});
+
+// ---- сборщик MP4 из кадров браузера (mux-mp4.mjs): что в файле лежит ровно то, что туда положили
+
+function boxesIn(buf, start, end) {
+  const out = [];
+  for (let pos = start; pos + 8 <= end;) {
+    const size = buf.readUInt32BE(pos);
+    out.push({ type: buf.toString('latin1', pos + 4, pos + 8), pos, size, body: pos + 8, end: pos + size });
+    pos += size;
+  }
+  return out;
+}
+const sub = (buf, parent, type) => boxesIn(buf, parent.body, parent.end).find((b) => b.type === type);
+
+// Выборки дорожки так, как их найдёт плеер: stsc + stco + stsz.
+function samplesOfTrack(buf, trak) {
+  const stbl = sub(buf, sub(buf, sub(buf, trak, 'mdia'), 'minf'), 'stbl');
+  const stsc = sub(buf, stbl, 'stsc'); const stco = sub(buf, stbl, 'stco'); const stsz = sub(buf, stbl, 'stsz'); const stss = sub(buf, stbl, 'stss');
+  const runs = [];
+  for (let i = 0; i < buf.readUInt32BE(stsc.body + 4); i += 1) runs.push([buf.readUInt32BE(stsc.body + 8 + i * 12), buf.readUInt32BE(stsc.body + 12 + i * 12)]);
+  const offsets = [];
+  for (let i = 0; i < buf.readUInt32BE(stco.body + 4); i += 1) offsets.push(buf.readUInt32BE(stco.body + 8 + i * 4));
+  const sizes = [];
+  for (let i = 0; i < buf.readUInt32BE(stsz.body + 8); i += 1) sizes.push(buf.readUInt32BE(stsz.body + 12 + i * 4));
+  const keys = stss ? Array.from({ length: buf.readUInt32BE(stss.body + 4) }, (_, i) => buf.readUInt32BE(stss.body + 8 + i * 4)) : null;
+  const samples = [];
+  let index = 0;
+  offsets.forEach((offset, chunk) => {
+    const run = [...runs].reverse().find(([first]) => first <= chunk + 1);
+    let at = offset;
+    for (let n = 0; n < run[1]; n += 1) { samples.push(buf.subarray(at, at + sizes[index])); at += sizes[index]; index += 1; }
+  });
+  return { samples, keys, sizes, chunks: offsets.length };
+}
+
+check('mux: video and audio samples come back byte for byte in the right chunks, with key frames, durations and codec boxes', () => {
+  const videoFrames = Array.from({ length: 65 }, (_, i) => Buffer.from(`V${i}-`.padEnd(12 + (i % 7), 'x')));
+  const audioFrames = Array.from({ length: 100 }, (_, i) => Buffer.from(`A${i}-`.padEnd(9 + (i % 5), 'y')));
+  const header = {
+    video: { width: 1280, height: 720, timescale: 30000, description: Buffer.from([1, 0x64, 0, 0x1f]).toString('base64'), samples: videoFrames.map((b, i) => [b.length, 1000, i % 60 === 0 ? 1 : 0]) },
+    audio: { sampleRate: 48000, channels: 2, timescale: 48000, description: Buffer.from([0x11, 0x90]).toString('base64'), samples: audioFrames.map((b) => [b.length, 1024]) }
+  };
+  const headerBytes = Buffer.from(JSON.stringify(header));
+  const lengthBytes = Buffer.alloc(4); lengthBytes.writeUInt32BE(headerBytes.length);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omr-mux-'));
+  try {
+    const input = path.join(dir, 'in.omrbin');
+    const output = path.join(dir, 'out.mp4');
+    fs.writeFileSync(input, Buffer.concat([Buffer.from('OMRV'), lengthBytes, headerBytes, ...videoFrames, ...audioFrames]));
+    const run = spawnSync(process.execPath, [fileURLToPath(new URL('./store-capture/mux-mp4.mjs', import.meta.url)), input, output], { encoding: 'utf8' });
+    assert(run.status === 0, `the muxer failed: ${run.stderr}`);
+    const mp4 = fs.readFileSync(output);
+    const top = boxesIn(mp4, 0, mp4.length).map((b) => b.type);
+    assert(top.join() === 'ftyp,moov,mdat', `order of the boxes: ${top}`);
+    const moov = boxesIn(mp4, 0, mp4.length).find((b) => b.type === 'moov');
+    const traks = boxesIn(mp4, moov.body, moov.end).filter((b) => b.type === 'trak');
+    assert(traks.length === 2, 'two tracks');
+    const video = samplesOfTrack(mp4, traks[0]);
+    const audio = samplesOfTrack(mp4, traks[1]);
+    assert(video.samples.length === 65 && video.samples.every((b, i) => b.equals(videoFrames[i])), 'video samples are identical and in order');
+    assert(audio.samples.length === 100 && audio.samples.every((b, i) => b.equals(audioFrames[i])), 'audio samples are identical and in order');
+    assert(video.keys.join() === '1,61', `key frames ${video.keys}`);
+    assert(video.chunks === 3 && audio.chunks === 3, `one chunk per second of media (65 frames at 30 fps = 3 chunks): video ${video.chunks}, audio ${audio.chunks}`);
+    const info = mp4Info(mp4);
+    assert(info.hasMoov && info.codec === 'avc1' && info.width === 1280 && info.height === 720 && info.hasAudio && !info.fragmented, JSON.stringify(info));
+    assert(Math.abs(info.fps - 30) < 0.001 && Math.abs(info.duration - 65 / 30) < 0.002, `fps ${info.fps}, duration ${info.duration}`);
+    const text = mp4.toString('latin1');
+    for (const name of ['avcC', 'mp4a', 'esds', 'vmhd', 'smhd', 'stss']) assert(text.includes(name), `the ${name} box is missing`);
+    const asc = mp4.indexOf(Buffer.from([0x05, 0x02, 0x11, 0x90]));
+    assert(asc > 0, 'the audio decoder config (AudioSpecificConfig) sits in esds');
+    assert(mp4.indexOf(Buffer.from([1, 0x64, 0, 0x1f])) > 0, 'the video decoder config sits in avcC');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ---- (д) настоящие материалы
@@ -310,6 +398,16 @@ check('repository check: it finds missing and wrong materials in a folder, and p
   assert(has(run(shots({ 'docs/store/listing.md': realListing, 'docs/store/icon-512.png': png(500, 500) })).problems, 'иконка'), 'a bad icon');
   assert(has(run(shots({ 'docs/store/listing.md': realListing, 'docs/store/cover-800x470-en.png': png(800, 400) })).problems, 'обложка'), 'a bad cover');
   assert(has(run(shots({ 'docs/store/listing.md': realListing, 'release/video/ru-video-horizontal.mp4': makeMp4({ seconds: 40 }) })).problems, 'до 28'), 'a bad video');
+});
+
+check('leaderboard: the technical name fits the console mask (Latin letters and digits only, up to 100) and the docs name the same table', () => {
+  const name = CONFIG.YANDEX.LEADERBOARD_NAME;
+  assert(/^[a-zA-Z0-9]{1,100}$/.test(name), `"${name}" is refused by the console: only [a-zA-Z0-9] is allowed (no underscores)`);
+  for (const file of ['../docs/store/listing.md', '../docs/yandex-integration.md', '../GAME_SPEC.md']) {
+    const text = fs.readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert(text.includes(name), `${file} must name the table ${name}`);
+    assert(!text.includes('one_more_run_score'), `${file} still has the old name with underscores`);
+  }
 });
 
 check('repository: the card texts agree with the names inside the game', () => {

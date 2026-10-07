@@ -505,7 +505,7 @@ LOGIN TO SAVE YOUR RECORD
 
 Техническое имя:
 
-one_more_run_score
+OneMoreRunScore
 
 После окончания игры:
 
@@ -1029,7 +1029,7 @@ SDK загружается асинхронно через `/sdk.js`; `YaGames.i
 
 localStorage остаётся source of truth для немедленного локального сохранения best score, Coins и mute. SDK не является обязательной зависимостью игрового цикла.
 
-Leaderboard получает только новый локальный best через technical name `one_more_run_score`. Ошибки SDK, отсутствие leaderboard и отсутствие авторизации не отменяют локальный NEW BEST.
+Leaderboard получает только новый локальный best через technical name `OneMoreRunScore`. Ошибки SDK, отсутствие leaderboard и отсутствие авторизации не отменяют локальный NEW BEST.
 
 Fullscreen ad может быть запрошена только перед новым забегом после Game Over, с локальным cooldown в три завершённых run. Во время рекламы gameplay и audio остановлены. Rewarded ad в текущем gameplay не используется.
 

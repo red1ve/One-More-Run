@@ -26,6 +26,33 @@ async function saveCanvas(canvas, name) {
   return `${name} ${await res.text()} bytes`;
 }
 
+// Надпись по центру точки (cx, cy) по реальной высоте букв: у разных шрифтов базовая линия лежит по-разному, и
+// обычный fillText(…, y + const) «уезжает» вверх или вниз.
+function fillCentered(x, text, cx, cy) {
+  const m = x.measureText(text);
+  x.textAlign = 'center';
+  x.textBaseline = 'alphabetic';
+  x.fillText(text, cx, cy + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+}
+
+// Название на плашке сверху. Русский — округлым шрифтом игры (M PLUS Rounded 1c, он подключается в игре под именем
+// «OMR Cyrillic»: в Fredoka русских букв нет), английский — Fredoka. Страница должна быть открыта с ?lang= этого языка.
+const TITLES = { ru: 'ЕЩЁ ЗАБЕГ', en: 'ONE MORE RUN' };
+const titleFont = (lang, size) => (lang === 'ru' ? `700 ${size}px "OMR Cyrillic", Fredoka, sans-serif` : `700 ${size}px Fredoka, sans-serif`);
+async function drawTitle(x, lang, width) {
+  const title = TITLES[lang];
+  await document.fonts.load(titleFont(lang, 60), title);
+  let size = 64;
+  x.font = titleFont(lang, size);
+  while (x.measureText(title).width > 420 && size > 30) { size -= 2; x.font = titleFont(lang, size); }
+  const tw = x.measureText(title).width + 64;
+  const top = 22;
+  const height = 86;
+  pill(x, width / 2 - tw / 2, top, tw, height, CREAM);
+  x.fillStyle = INK;
+  fillCentered(x, title, width / 2, top + height / 2);
+}
+
 function pill(x, left, top, width, height, fill) {
   x.fillStyle = SHADOW;
   x.beginPath(); x.roundRect(left + 3, top + 4, width, height, height / 2); x.fill();
@@ -54,16 +81,14 @@ export async function icon(name = 'icon-512.png') {
   return saveCanvas(c, name);
 }
 
-// Обложка 800x470: стена изгороди с двумя проходами (широкий «+10» и узкий «+100», как в игре), посередине Loaf,
+// Обложка 800x470 (третий параметр false — без названия): стена изгороди с двумя проходами (широкий «+10» и узкий «+100», как в игре), посередине Loaf,
 // сверху плашка с названием шрифтом игры.
-export async function cover(lang, name = `cover-800x470-${lang}.png`) {
+export async function cover(lang, name = `cover-800x470-${lang}.png`, withTitle = true) {
   const [cat, sky, ...hedges] = await Promise.all([
     load('/assets/characters/loaf-sit.svg'),
     load(`${ART}sky/sky-strip.jpg`),
     ...[9, 13, 10, 11, 12, 14, 15, 16, 8].map((n) => load(`${ART}hedge/hedge-${String(n).padStart(2, '0')}.png`))
   ]);
-  const title = { ru: 'ЕЩЁ ЗАБЕГ', en: 'ONE MORE RUN' }[lang];
-  await document.fonts.load('700 60px Fredoka', title);
   const W = 800;
   const H = 470;
   const c = document.createElement('canvas');
@@ -114,21 +139,82 @@ export async function cover(lang, name = `cover-800x470-${lang}.png`) {
     const w = x.measureText(g.plate).width + 36;
     const cx = (g.from + g.to) / 2;
     pill(x, cx - w / 2, 366, w, 44, CREAM);
-    x.fillStyle = INK; x.textAlign = 'center';
-    x.fillText(g.plate, cx, 398);
+    x.fillStyle = INK;
+    fillCentered(x, g.plate, cx, 366 + 22);
   }
   // кот: по центру, сидит перед стеной
   const k = 0.92;
   x.fillStyle = 'rgba(0,0,0,0.10)';
   x.beginPath(); x.ellipse(405, 452, 130, 14, 0, 0, Math.PI * 2); x.fill();
   x.drawImage(cat, 405 - 150 * k, 462 - 340 * k, 300 * k, 360 * k);
+  // название (withTitle = false даёт макет без надписи: его показывают Gemini как образец композиции)
+  if (!withTitle) return saveCanvas(c, name);
+  await drawTitle(x, lang, W);
+  return saveCanvas(c, name);
+}
+
+// ---- Варианты на фонах из Gemini (release/gemini/, отдаёт server.mjs): фон рисует Gemini, кота Loaf, название
+// и плашки очков ставим мы, поэтому кот точно тот же. Картинка подгоняется обрезкой по центру, без растяжения.
+const loadCors = (src) => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.onload = () => resolve(image);
+  image.onerror = () => reject(new Error(`не загрузилась картинка ${src}`));
+  image.src = src;
+});
+const GEMINI = 'http://127.0.0.1:3999/gemini/';
+
+// Фон на весь холст так, чтобы он закрывал его целиком (обрезка по центру).
+function drawCover(x, image, width, height) {
+  const scale = Math.max(width / image.width, height / image.height);
+  const w = image.width * scale;
+  const h = image.height * scale;
+  x.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
+  return { scale, offsetX: (width - w) / 2, offsetY: (height - h) / 2 };
+}
+
+// Иконка 512x512: фон из Gemini и голова Loaf (тот же кадр, что у собранной иконки).
+export async function iconFromGemini(src = 'icon-bg-raw.png', name = 'icon-512.png') {
+  const [bg, cat] = await Promise.all([loadCors(GEMINI + src), load('/assets/characters/loaf-sit.svg')]);
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  const x = c.getContext('2d');
+  x.imageSmoothingQuality = 'high';
+  drawCover(x, bg, 512, 512);
+  const crop = { x: 6, y: -4, size: 288 };
+  const k = 512 / crop.size;
+  x.drawImage(cat, -crop.x * k, -crop.y * k, 300 * k, 360 * k);
+  return saveCanvas(c, name);
+}
+
+// Обложка 800x470: фон из Gemini (двое ворот), Loaf между ними, плашки «+10» и «+100», название шрифтом игры.
+// catX — где стоит кот (между воротами, чтобы уши не касались столбиков); gates — где на картинке Gemini центры ворот и их нижний край (в её пикселях, ширина 1024, высота 572).
+export async function coverFromGemini(lang, src = 'cover-bg-raw.webp', name = `cover-800x470-${lang}-gemini.png`, gates = [{ cx: 290, y: 368 }, { cx: 736, y: 368 }], catScale = 0.78, catX = 416) {
+  const [bg, cat] = await Promise.all([loadCors(GEMINI + src), load('/assets/characters/loaf-sit.svg')]);
+  const W = 800;
+  const H = 470;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.imageSmoothingQuality = 'high';
+  const fit = drawCover(x, bg, W, H);
+  // плашки очков под воротами
+  const plates = ['+10', '+100'];
+  gates.forEach((gate, i) => {
+    const cx = gate.cx * fit.scale + fit.offsetX;
+    const top = gate.y * fit.scale + fit.offsetY + 14;
+    x.font = '700 30px Fredoka, sans-serif';
+    const w = x.measureText(plates[i]).width + 36;
+    pill(x, cx - w / 2, top, w, 44, CREAM);
+    x.fillStyle = INK;
+    fillCentered(x, plates[i], cx, top + 22);
+  });
+  // кот: по центру, сидит на песке перед стеной
+  const bottom = H - 8;
+  x.fillStyle = 'rgba(0,0,0,0.10)';
+  x.beginPath(); x.ellipse(catX, bottom - 4, 125 * catScale / 0.8, 13, 0, 0, Math.PI * 2); x.fill();
+  x.drawImage(cat, catX - 150 * catScale, bottom + 18 * catScale - 360 * catScale, 300 * catScale, 360 * catScale);
   // название
-  let size = 64;
-  x.font = `700 ${size}px Fredoka, sans-serif`;
-  while (x.measureText(title).width > 420 && size > 30) { size -= 2; x.font = `700 ${size}px Fredoka, sans-serif`; }
-  const tw = x.measureText(title).width + 64;
-  pill(x, W / 2 - tw / 2, 22, tw, 86, CREAM);
-  x.fillStyle = INK; x.textAlign = 'center';
-  x.fillText(title, W / 2, 22 + 58);
+  await drawTitle(x, lang, W);
   return saveCanvas(c, name);
 }

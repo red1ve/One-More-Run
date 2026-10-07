@@ -71,7 +71,7 @@ Current implementation notes:
 | Skin shop for coins (`Shop.js`, START and Game Over screens), coins as earned / spent counters, cloud merge | P1 | DONE (2026-10-05) |
 | Daily run: the same track for everybody each Moscow day, coins for the first run and a day streak (`Daily.js`) | P1 | DONE (2026-10-05) |
 | «В МЕНЮ» on Game Over: back to the START screen (daily run, quests, shortcut), the first start after loading has no ad but a later start through the menu does (`Game.openMenu`) | P1 | DONE (2026-10-05) |
-| Store card kit: RU/EN texts with limit checks, 20 screenshots, two 27 s videos, icon and covers built from project art, `npm run pack` zip (`docs/store/`, `scripts/store-capture/`, `scripts/pack-zip.mjs`) | P1 | DONE (2026-10-05) |
+| Store card kit: RU/EN texts with limit checks, 20 screenshots, two 27 s videos, icon and covers (Gemini background plus the Loaf vector), `npm run pack` zip (`docs/store/`, `scripts/store-capture/`, `scripts/pack-zip.mjs`) | P1 | DONE (2026-10-05) |
 | Daily quests: three a day (3 / 5 / 8 coins) drawn from 8 kinds by the date, progress and payment at the moment of completion, a window on START (`Quests.js`) | P1 | DONE (2026-10-05) |
 | Vibration on events (`HapticsService`, follows the sound switch) | P2 | DONE (2026-10-01) |
 | Streak and coin-chain pitch (pentatonic, in tune with the music) | P2 | DONE (2026-10-01) |

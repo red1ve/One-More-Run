@@ -48,7 +48,7 @@ These events pause/resume an active run without changing START or GAMEOVER.
 Technical leaderboard name:
 
 ```text
-one_more_run_score
+OneMoreRunScore
 ```
 
 Create a numeric descending leaderboard with exactly this technical name in the Yandex Games Developer Console.
@@ -62,14 +62,14 @@ await ysdk.isAvailableMethod('leaderboards.setScore')
 and then uses:
 
 ```javascript
-await ysdk.leaderboards.setScore('one_more_run_score', score)
+await ysdk.leaderboards.setScore('OneMoreRunScore', score)
 ```
 
 The deprecated `ysdk.getLeaderboards()` API is not used. Score submission is not attempted every frame and is not required for local NEW BEST feedback. Unauthorized users continue with localStorage.
 
 ### Leaderboard screen and sign-in (2026-10-01)
 
-The START and Game Over screens show a «ЛИДЕРЫ / LEADERBOARD» button when the SDK has `leaderboards.getEntries` (in `npm run dev` a stub with an invented table is shown instead). It opens a window over the screen with the top 10 and the places around the player (`getEntries('one_more_run_score', { quantityTop: 10, includeUser: true, quantityAround: 1 })`; `getEntries` works without authorization). The answer is normalised in `YandexService.getLeaderboard` (places start at 1, a gap between the top and the player's neighbours is drawn as «…», a missing public name is shown as «ИГРОК», the player's own row is highlighted and, without a name, labelled «ВЫ») and cached for 20 s. States: loading, ready, empty, error (the window always says something and can always be closed: button, Esc).
+The START and Game Over screens show a «ЛИДЕРЫ / LEADERBOARD» button when the SDK has `leaderboards.getEntries` (in `npm run dev` a stub with an invented table is shown instead). It opens a window over the screen with the top 10 and the places around the player (`getEntries('OneMoreRunScore', { quantityTop: 10, includeUser: true, quantityAround: 1 })`; `getEntries` works without authorization). The answer is normalised in `YandexService.getLeaderboard` (places start at 1, a gap between the top and the player's neighbours is drawn as «…», a missing public name is shown as «ИГРОК», the player's own row is highlighted and, without a name, labelled «ВЫ») and cached for 20 s. States: loading, ready, empty, error (the window always says something and can always be closed: button, Esc).
 
 A player who is not signed in sees the table and a green «ВОЙТИ / SIGN IN» button with the line «войдите, чтобы ваш результат попал в таблицу». It calls `ysdk.auth.openAuthDialog()`; after a successful sign-in the service forgets the old player, the table cache and the last submitted score, the game sends the best score, merges the cloud data and reloads the table. Nothing else in the game asks for a login.
 
@@ -181,9 +181,9 @@ Making the zip by hand is possible (Explorer: select the contents of `dist` → 
 Everything for the draft lives in `docs/store/` and `release/` and is checked by `npm run store:check` and `scripts/phase1q-check.mjs` against the Yandex rules of 2026-10-05 (source: Yandex Games docs «Filling out the draft» and «Game requirements»):
 
 - **Texts** (`docs/store/listing.md`, RU and EN): name ≤ 50 characters, no «free / top / best» and not in capitals, short description ≤ 70, description 100–1000, how to play 100–1000, SEO description 50–160, developer comment ≤ 2048, tags ≤ 20; the names equal the in-game names (RU «Ещё забег», EN «One More Run»). The same file lists the other draft fields (version, languages, platforms, portrait orientation, categories, age rating, cloud saves, monetization, leaderboard).
-- **Icon 512×512 PNG** (`docs/store/icon-512.png`): Loaf's head on hedge green and sand, no text. **Cover 800×470 PNG** (`docs/store/cover-800x470-ru.png`, `-en.png`): a hedge wall with two gaps «+10» and «+100», Loaf and the title in the game font. Both are built from the project's own pictures (the cat vector, the art pack) by `scripts/store-capture/art.js`, not generated and not screenshots (Yandex 5.6 forbids screenshots as icon or cover; the visual bible §14 forbids a new «same vibe» cat). The optional hero image 1560×520 and maskable icon are not made.
+- **Icon 512×512 PNG** (`docs/store/icon-512.png`): Loaf's head on hedge green and sand, no text. **Cover 800×470 PNG** (`docs/store/cover-800x470-ru.png`, `-en.png`): a hedge wall with two gaps «+10» and «+100», Loaf and the title in the game font. Both are built by `scripts/store-capture/art.js`: the background (hedge wall with two gaps, sky, sand; a hedge and sand band for the icon) is drawn by Gemini without any cat (`docs/store/source/`, prompts in `docs/store/art-prompts.md`), while Loaf (the vector `assets/characters/loaf-sit.svg`), the «+10» / «+100» plates and the title are put on top by the code, because Gemini does not keep the cat's design and the visual bible §14 requires the same Loaf. They are not screenshots (Yandex 5.6 forbids screenshots as icon or cover). A fallback set made only from the project's own art-pack pictures is produced by `icon()` and `cover()` in the same file. The owner checks the Gemini terms for commercial use. The optional hero image 1560×520 and maskable icon are not made.
 - **Screenshots** (`docs/store/screenshots/`, 20 files): phone `<lang>-phone-1..5` 1080×1920 (fork with the hint, golden hour with a risk streak and ×1.5, night with fireflies, the swaying planter, dusk), desktop `<lang>-desktop-1..2` 1920×1080 (three real frames side by side, so real gameplay fills the picture), and `<lang>-extra-*` (start screen, quests, shop; not gameplay, optional). Frames are taken from the game itself at double canvas size (not stretched) while a simple autopilot plays: nothing is drawn over them. Yandex needs real gameplay on at least 70% of a screenshot, 9:16 or 16:9, long side 1280–2560, at least 2 per platform.
-- **Video**: the horizontal 16:9 video is **mandatory** in the draft (MP4, from 400 px high, up to 28 s, up to 100 MB). `release/video/ru-video-horizontal.mp4` and `en-...` are 27 s, 1280×720, H.264, the game in the middle (start screen, then a run through a dusk) with the rule «Wider = safer, narrower = more points» at the sides. They are 15 MB each and kept out of git. The browser records fragmented MP4 with an unknown duration, so `scripts/store-capture/remux-mp4.mjs` rewrites it into a regular MP4 (no re-encoding). No sound track.
+- **Video**: the horizontal 16:9 video is **mandatory** in the draft (MP4, from 400 px high, up to 28 s, up to 100 MB). `release/video/ru-video-horizontal.mp4` and `en-...` are 27 s, 1280×720, H.264, the game in the middle (start screen, then a run through a dusk) with the rule «Wider = safer, narrower = more points» at the sides. They are 15 MB each and kept out of git. The frames are drawn and encoded one by one with WebCodecs (H.264 High 3.1, exactly 30 fps, a silent AAC sound track so that the file has the ordinary structure of a phone video) and `scripts/store-capture/mux-mp4.mjs` writes a regular MP4 (moov first). An earlier try recorded in real time (24–27 fps with gaps, fragmented MP4 with an unknown duration) and the console answered «Invalid video»; the cause is not confirmed, the frame rate under 24 is only the main suspect, so `store:check` now demands at least 24 fps.
 - **How it was made and how to repeat it**: `scripts/store-capture/README.md` (a local server `server.mjs`, helpers `cap.js` / `recipe.js` / `art.js` run in the dev game's page; no Playwright or ffmpeg needed). The seeds, skins and times of day of every frame are in `recipe.js`, so the set can be shot again after the art or the screens change.
 
 ## Yandex Games Console
@@ -201,7 +201,7 @@ Everything for the draft lives in `docs/store/` and `release/` and is checked by
 - [ ] Check or switch off the sticky banner (see «Sticky banner»).
 - [ ] In the draft with the debug panel: watch a rewarded ad to the end (revive happens; ×2 coins only if the switch is on), close one early (nothing happens), check sound is muted during ads.
 - [ ] Create a numeric descending leaderboard.
-- [ ] Set its Technical leaderboard name to `one_more_run_score`.
+- [ ] Set its Technical leaderboard name to `OneMoreRunScore`. The console accepts only Latin letters and digits (mask `[a-zA-Z0-9]`, up to 100): no underscores, so the first name (with underscores) was replaced on 2026-10-06 (`CONFIG.YANDEX.LEADERBOARD_NAME`, guarded by `scripts/phase1q-check.mjs`).
 - [ ] Test leaderboard submission as an authorized player.
 - [ ] Test standalone/unauthorized behavior.
 - [ ] Draft + debug panel, leaderboard screen: the «ЛИДЕРЫ» button opens the table with the real top and your place; as a guest the «ВОЙТИ» button opens the Yandex login and, after signing in, your best score appears in the table.
