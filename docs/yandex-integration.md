@@ -223,6 +223,8 @@ Everything for the draft lives in `docs/store/` and `release/` and is checked by
 - [ ] Declare **portrait** orientation (the field is 9:16; in landscape on a phone it is narrow).
 - [ ] Upload the icon 512×512 and the cover (owner prepares them) and the screenshots from `docs/store/screenshots/` (phone 1080×1920 and desktop 1920×1080, honest gameplay frames).
 - [ ] Check portrait mobile scaling, touch, mouse, and keyboard.
+- [ ] Rewarded revive on a phone: watch the ad to the end, the cat must revive at once (fixed 2026-10-19); close it early, a notice appears and the button stays.
+- [ ] Picture sharpness on a phone (render scale 2 on dense screens; a weak phone lowers it by itself).
 - [ ] Submit the tested build for moderation.
 
 Developer Console resources, leaderboard creation, authorization behavior, monetization approval, real ad inventory, and moderation cannot be completed from application code.

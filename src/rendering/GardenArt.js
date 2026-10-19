@@ -78,6 +78,7 @@ export class GardenArt {
     this.ctx = ctx;
     this.width = CONFIG.CANVAS_WIDTH;
     this.height = CONFIG.CANVAS_HEIGHT;
+    this.scale = 1;
     this.onReady = options.onReady || null;
     const c = CONFIG.COLORS;
     this.c = c;
@@ -129,6 +130,14 @@ export class GardenArt {
         if (image.complete && image.naturalWidth > 0) this.trimSprite(item);
       });
     });
+  }
+
+  // Масштаб холста (RenderScale): картинки art-pack и запасной холст неба выбираются по настоящим пикселям.
+  setScale(scale) {
+    if (!(scale > 0) || scale === this.scale) return;
+    this.scale = scale;
+    this.artPack.scale = scale;
+    this.skyArt.scale = scale;
   }
 
   isReady(item) {
@@ -364,6 +373,13 @@ export class GardenArt {
 
   hudCoinIcon(cx, cy, r) {
     const ctx = this.ctx;
+    // Та же картинка, что и в мире. Пока она не загрузилась, рисуем простой золотой диск.
+    const sprite = this.coinSprite();
+    if (sprite && this.isReady(sprite)) {
+      const src = this.sourceRect(sprite);
+      const w = r * 2.3;
+      if (this.drawSprite(sprite, cx, cy, w, w * (src.sh / src.sw))) return;
+    }
     this.hudIconDisc(cx, cy, r, this.coinGold);
     ctx.strokeStyle = this.coinRim;
     ctx.lineWidth = Math.max(1.4, r * 0.22);
@@ -1043,13 +1059,9 @@ export class GardenArt {
     this.ctx.globalAlpha = 1;
   }
 
-  coinSprite(coin) {
-    const list = this.sheets.coins || [];
-    if (coin?.visualId) {
-      const named = list.find((item) => item.id === coin.visualId);
-      if (named) return named;
-    }
-    return this.pick('coins', coin?.visualSeed || 1);
+  // Монета в игре одна и та же везде (в мире и в значках интерфейса).
+  coinSprite() {
+    return (this.sheets.coins || [])[0] || null;
   }
 
   drawCoin(coin) {
@@ -1068,7 +1080,7 @@ export class GardenArt {
 
     if (occ.state === 'VISIBLE') this.contactShadow(cx, groundY, size * 0.7, vis.screenY);
 
-    const sprite = this.coinSprite(coin);
+    const sprite = this.coinSprite();
     if (sprite && this.isReady(sprite)) {
       this.drawSprite(sprite, cx, groundY + bob, size, size, {
         grounded: true,

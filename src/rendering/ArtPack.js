@@ -140,6 +140,8 @@ function buildLevels(source, mirror, gain) {
 export class ArtPack {
   constructor(onReady) {
     this.sprites = {};
+    // Во сколько раз холст чётче логического (RenderScale): размер картинки выбираем по настоящим пикселям.
+    this.scale = 1;
     // whenLoaded — все картинки обработаны (загрузились или не смогли): по нему
     // main.js сообщает Яндексу, что игра готова (LoadingAPI.ready).
     this.whenLoaded = Promise.resolve();
@@ -192,8 +194,9 @@ export class ArtPack {
     if (!sprite) return false;
     const levels = sprite.levels[flip ? 1 : 0];
     let level = levels[0];
+    const device = w * this.scale;
     for (let i = levels.length - 1; i >= 0; i -= 1) {
-      if (levels[i].width >= w) {
+      if (levels[i].width >= device) {
         level = levels[i];
         break;
       }

@@ -44,7 +44,8 @@ const peakSpeed = (period) => (SWAY.POCKET * TAU) / period;
 check('settings: gap, pockets and speeds are consistent', () => {
   assert(GAP <= CONFIG.TRACK_WIDTH - 2 * CONFIG.EDGE_WALL_MIN + 20, `the gap ${GAP} leaves no room for the edge walls`);
   assert(SWAY.POCKET >= CONFIG.PLAYER_WIDTH + 40, `the pocket ${SWAY.POCKET} is too tight for the cat (${CONFIG.PLAYER_WIDTH})`);
-  assert(SWAY.FROM === 90, 'the swaying planter must start after 90 s');
+  // 2026-10-09: ступени сдвинуты раньше (было 90 / 150 / 240 с), потому что трасса стала быстрее.
+  assert(SWAY.FROM === 45 && SWAY.TIER_1 === 90 && SWAY.TIER_2 === 150, 'the swaying planter must start after 45 s, then tiers at 90 and 150 s');
   assert(SWAY.PERIOD.length === 3 && SWAY.CHANCE.length === 3, 'three tiers expected');
   for (let i = 1; i < 3; i += 1) {
     assert(SWAY.PERIOD[i] < SWAY.PERIOD[i - 1], 'the later the faster');
@@ -59,13 +60,13 @@ check('settings: gap, pockets and speeds are consistent', () => {
 });
 
 check('settings: tiers, chances and periods follow the run time', () => {
-  assert(getSwayTier(0) === -1 && getSwayTier(89.9) === -1, 'no tier before 90 s');
-  assert(getSwayTier(90) === 0 && getSwayTier(149.9) === 0, 'tier 0 is 90…150 s');
-  assert(getSwayTier(150) === 1 && getSwayTier(239.9) === 1, 'tier 1 is 150…240 s');
-  assert(getSwayTier(240) === 2 && getSwayTier(900) === 2, 'tier 2 is 240+ s');
-  assert(getSwayChance(60) === 0 && getSwayChance(89.99) === 0, 'chance must be zero before 90 s');
-  assert(getSwayChance(100) === SWAY.CHANCE[0] && getSwayChance(200) === SWAY.CHANCE[1] && getSwayChance(300) === SWAY.CHANCE[2], 'chances by tier');
-  assert(getSwayPeriod(100) === SWAY.PERIOD[0] && getSwayPeriod(200) === SWAY.PERIOD[1] && getSwayPeriod(300) === SWAY.PERIOD[2], 'periods by tier');
+  assert(getSwayTier(0) === -1 && getSwayTier(44.9) === -1, 'no tier before 45 s');
+  assert(getSwayTier(45) === 0 && getSwayTier(89.9) === 0, 'tier 0 is 45…90 s');
+  assert(getSwayTier(90) === 1 && getSwayTier(149.9) === 1, 'tier 1 is 90…150 s');
+  assert(getSwayTier(150) === 2 && getSwayTier(900) === 2, 'tier 2 is 150+ s');
+  assert(getSwayChance(30) === 0 && getSwayChance(44.99) === 0, 'chance must be zero before 45 s');
+  assert(getSwayChance(60) === SWAY.CHANCE[0] && getSwayChance(120) === SWAY.CHANCE[1] && getSwayChance(300) === SWAY.CHANCE[2], 'chances by tier');
+  assert(getSwayPeriod(60) === SWAY.PERIOD[0] && getSwayPeriod(120) === SWAY.PERIOD[1] && getSwayPeriod(300) === SWAY.PERIOD[2], 'periods by tier');
 });
 
 // ---- (б) выбор ряда
@@ -82,8 +83,8 @@ function drawPatterns(runTime, { count = 4000, segmentType = 'NORMAL', lastType 
   return counts;
 }
 
-check('choice: no swaying row before 90 s and no extra random numbers are used', () => {
-  for (const runTime of [0, 10, 60, 89.9]) {
+check('choice: no swaying row before 45 s and no extra random numbers are used', () => {
+  for (const runTime of [0, 10, 30, 44.9]) {
     const counts = drawPatterns(runTime);
     assert(!counts.SWAY, `a swaying row appeared at ${runTime} s`);
   }
@@ -92,12 +93,12 @@ check('choice: no swaying row before 90 s and no extra random numbers are used',
   let calls = 0;
   const inner = createSeededRandom(1);
   director.random = () => { calls += 1; return inner(); };
-  for (let i = 0; i < 200; i += 1) director.choosePattern({ runTime: 50, segmentType: 'NORMAL', lastType: 'NORMAL' });
-  assert(calls === 200, `before 90 s each row must use exactly one random number, used ${calls / 200}`);
+  for (let i = 0; i < 200; i += 1) director.choosePattern({ runTime: 30, segmentType: 'NORMAL', lastType: 'NORMAL' });
+  assert(calls === 200, `before 45 s each row must use exactly one random number, used ${calls / 200}`);
 });
 
 check('choice: the share of swaying rows matches the settings at each tier', () => {
-  for (const [runTime, tier] of [[100, 0], [200, 1], [300, 2]]) {
+  for (const [runTime, tier] of [[60, 0], [120, 1], [200, 2]]) {
     const counts = drawPatterns(runTime);
     const share = (counts.SWAY || 0) / 4000;
     assert(Math.abs(share - SWAY.CHANCE[tier]) < 0.03, `tier ${tier}: ${share.toFixed(3)} instead of ${SWAY.CHANCE[tier]}`);
@@ -147,7 +148,7 @@ check('geometry: walls, one path, no coins, two pocket exits', () => {
   let made = 0;
   for (let seed = 1; seed <= 30; seed += 1) {
     for (const [exitX, exitWidth] of EXITS) {
-      for (const speed of [600, 720]) {
+      for (const speed of [600, 720, 900, 1050]) {
         const { track, segment, planter } = swayRow({ seed, speed, exitX, exitWidth });
         if (!planter) continue;
         made += 1;
@@ -234,7 +235,7 @@ check('geometry: fair placement — both pockets are reachable from anywhere in 
   for (const before of BEFORE) {
     for (let seed = 1; seed <= 25; seed += 1) {
       for (const [exitX, exitWidth] of before ? [EXITS[2]] : EXITS) {
-        for (const speed of [600, 720]) {
+        for (const speed of [600, 720, 900, 1050]) {
           const { track, segment, planter, exits } = swayRow({ seed, speed, exitX, exitWidth, before });
           if (!planter) continue;
           const gapX = planter.sway.minX;
@@ -349,7 +350,7 @@ function sweep(reaction) {
   let seed = 100;
   for (const before of BEFORE) {
     for (const period of SWAY.PERIOD) {
-      for (const speed of [560, 620, 680, 720]) {
+      for (const speed of [560, 620, 680, 720, 800, 900, 1000, 1050]) {
         for (const [exitX, exitWidth] of before ? [EXITS[2]] : EXITS) {
           for (let repeat = 0; repeat < (before ? 3 : 1); repeat += 1) {
             for (let k = 0; k < 24; k += 1) {
@@ -379,7 +380,9 @@ check('fairness: a smart bot passes every phase, speed, period and previous exit
   }
   assert(stats.runs >= 8000, `too few runs: ${stats.runs} (skipped ${stats.skipped})`);
   // Где кот не успел бы в карман, ряд не ставится вообще (вместо него обычный): это не ошибка, но не должно быть почти всегда.
-  assert(stats.skipped < (stats.runs + stats.skipped) * 0.4, `${stats.skipped} rows could not be placed (of ${stats.runs + stats.skipped})`);
+  // 2026-10-09: проверка идёт до 1050 px/s, а там ряд ставится реже (кот не успевает в карман, и его место занимает
+  // обычный ряд): было 0.4 при скоростях до 720, теперь 0.55.
+  assert(stats.skipped < (stats.runs + stats.skipped) * 0.55, `${stats.skipped} rows could not be placed (of ${stats.runs + stats.skipped})`);
   assert(stats.minTravel < 500, `no short free travel was tested (shortest ${stats.minTravel.toFixed(0)} px): rows after OFFSET/FUNNEL are missing`);
   assert(stats.hits.length === 0, `${stats.hits.length} hits of ${stats.runs}; first: ${stats.hits[0]}`);
   assert(stats.minRoom >= 24, `the safe place in the best pocket was only ${stats.minRoom.toFixed(1)} px wide (cat is ${CONFIG.PLAYER_WIDTH})`);
@@ -398,7 +401,7 @@ check('fairness: standing still in the middle of the gap is NOT always safe (the
 
 // ---- (д) обычный забег
 
-check('run: swaying rows appear only after 90 s, in about the configured share, rarely fall back', () => {
+check('run: swaying rows appear only after 45 s, in about the configured share, rarely fall back', () => {
   const stats = [0, 1, 2].map(() => ({ normal: 0, sway: 0 }));
   let chosen = 0;
   let built = 0;
@@ -442,11 +445,14 @@ check('run: swaying rows appear only after 90 s, in about the configured share, 
   if (process.env.VERBOSE) {
     console.log('run stats:', JSON.stringify({ chosen, built, tiers: stats.map((s) => ({ ...s, share: +(s.sway / Math.max(1, s.normal)).toFixed(3) })) }));
   }
-  assert(early === 0, `${early} swaying rows were created before 90 s`);
+  assert(early === 0, `${early} swaying rows were created before 45 s`);
   assert(adjacent === 0, `${adjacent} swaying rows came twice in a row`);
   assert(afterFork === 0, `${afterFork} swaying rows came right after a fork`);
   assert(chosen > 100, `too few swaying rows to judge: ${chosen}`);
-  assert(built / chosen >= 0.7, `only ${built} of ${chosen} chosen rows could be placed`);
+  // Было 0.7. С трассой быстрее (2026-10-09, максимум 950 px/s) ряд ставится только там, где кот успевает в любой
+  // карман (SWAY.REACTION), поэтому на большой скорости больше выбранных рядов уступает обычным (≈0.52); доли рядов
+  // по ступеням (ниже) при этом в норме. Если упадёт ниже 0.45, значит, ряд почти не ставится.
+  assert(built / chosen >= 0.45, `only ${built} of ${chosen} chosen rows could be placed`);
   const shares = stats.map((s) => s.sway / Math.max(1, s.normal));
   assert(shares[0] > 0.04 && shares[0] < 0.2, `tier 0 share ${shares[0].toFixed(3)}`);
   assert(shares[1] > 0.06 && shares[1] < 0.3, `tier 1 share ${shares[1].toFixed(3)}`);

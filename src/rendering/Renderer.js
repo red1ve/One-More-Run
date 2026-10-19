@@ -19,6 +19,7 @@ export class Renderer {
     this.ctx = ctx;
     this.width = CONFIG.CANVAS_WIDTH;
     this.height = CONFIG.CANVAS_HEIGHT;
+    this.scale = 1;
     this.playerSprite = null;
     this.playerSpriteReady = false;
     this.playerSpriteError = false;
@@ -33,6 +34,13 @@ export class Renderer {
       }
     });
     this.loadPlayerSprite(options.imageFactory);
+  }
+
+  // Масштаб холста относительно логических 540 × 960 (RenderScale.js). Рисуем по-прежнему в логических координатах.
+  setScale(scale) {
+    if (!(scale > 0) || scale === this.scale) return;
+    this.scale = scale;
+    this.garden?.setScale?.(scale);
   }
 
   markSpriteReady(kind) {
@@ -307,7 +315,8 @@ export class Renderer {
     const pulse = feel ? feel.playerPulse || 0 : 0;
     const stretchY = 1 + pulse * 0.18;
     const stretchX = 1 - pulse * 0.1;
-    const dir = player.moveDirection || 0;
+    // lean — наклон по реальному движению кота (Player.update); у простых объектов без него берём направление.
+    const dir = player.lean ?? player.moveDirection ?? 0;
     const lean = dir * 0.08;
 
     const shadow = CONFIG.VISUAL.CAT_SHADOW || {};
@@ -494,6 +503,7 @@ export class Renderer {
     // Области нажатия запоминаются при рисовании; на экране, где кнопки нет, она не нажимается.
     this.pauseButton = null;
     this.resumeButton = null;
+    this.pauseMenuButton = null;
     this.soundButtons = null;
     this.platformButtons = null;
     this.leaderboardButtons = null;
@@ -851,8 +861,10 @@ export class Renderer {
     const cx = this.width / 2;
     const cardX = 36;
     const cardW = this.width - cardX * 2;
-    const cardY = 40;
-    const cardH = 880;
+    // Пока продаётся ограниченный скин, ячеек 9 (пять рядов): карточка выше, ячейки ниже (compact).
+    const compact = Math.ceil(shop.skins.length / 2) > 4;
+    const cardY = compact ? 24 : 40;
+    const cardH = compact ? 912 : 880;
     this.shopButtons = { close: null, skins: [] };
 
     this.dimScreen(0.45);
@@ -876,10 +888,10 @@ export class Renderer {
     const cols = 2;
     const gap = 14;
     const cellW = (cardW - 28 - gap) / cols;
-    const cellH = 142;
-    const rowStep = 152;
+    const cellH = compact ? 116 : 142;
+    const rowStep = compact ? 124 : 152;
     const left = cardX + 14;
-    const top = cardY + 184;
+    const top = cardY + (compact ? 176 : 184);
     shop.skins.forEach((skin, index) => {
       const x = left + (index % cols) * (cellW + gap);
       const y = top + Math.floor(index / cols) * rowStep;
@@ -903,10 +915,10 @@ export class Renderer {
       ctx.stroke();
 
       // Кот в окраске скина (пока картинка грузится — тёплое пятно на её месте).
-      const previewW = 52;
-      const previewH = 122;
+      const previewW = compact ? 43 : 52;
+      const previewH = compact ? 100 : 122;
       const previewX = x + 12;
-      const previewY = y + 10;
+      const previewY = y + (compact ? 8 : 10);
       const preview = this.skinPreviews?.get(skin.id);
       if (preview?.ready) {
         ctx.drawImage(preview.image, previewX, previewY, previewW, previewH);
@@ -920,9 +932,14 @@ export class Renderer {
       }
 
       const textW = cellW - 80;
-      const textX = x + 70 + textW / 2;
-      this.fitText(t(`skin.${skin.id}`), textX, y + 46, 700, 21, textW, CONFIG.COLORS.UI_TEXT);
-      const statusY = y + 98;
+      const textX = x + (compact ? 64 : 70) + textW / 2;
+      this.fitText(t(`skin.${skin.id}`), textX, y + (compact ? 36 : 46), 700, 21, textW, CONFIG.COLORS.UI_TEXT);
+      // Ограниченный скин: сколько дней ещё продаётся.
+      if (skin.limited) {
+        const text = skin.limited <= 1 ? t('shop.limitedLast') : t('shop.limited', { n: skin.limited });
+        this.fitText(text, textX, y + (compact ? 59 : 72), 700, 15, textW, CONFIG.COLORS.HighRiskClay);
+      }
+      const statusY = y + (compact ? 90 : 98);
       if (skin.selected) {
         this.screenPill(textX, statusY, textW, 38, CONFIG.COLORS.SafeLawn);
         this.fitText(t('shop.selected'), textX, statusY + 6, 700, 17, textW - 16, CONFIG.COLORS.UI_TEXT);
@@ -1124,20 +1141,25 @@ export class Renderer {
   }
 
   // Кнопка «продолжить» на экране паузы под точкой?
+  hitPauseMenuButton(x, y) {
+    return Renderer.inRect(this.pauseMenuButton, x, y);
+  }
+
   hitResumeButton(x, y) {
     return Renderer.inRect(this.resumeButton, x, y);
   }
 
   // Экран паузы: карточка как на других экранах — название, счёт, рекорд, «продолжить»
   // и настройки звука под карточкой. Мир за карточкой стоит на месте.
-  drawPause(score, bestScore, muted = false, volume = 0.5) {
+  // extras.menuAsk — кнопка «В МЕНЮ» спрашивает «завершить забег?» и ждёт второго нажатия.
+  drawPause(score, bestScore, muted = false, volume = 0.5, extras = {}) {
     const cfg = this.screenCfg();
     const cx = this.width / 2;
     const cardX = cfg.CARD_X ?? 36;
     const cardW = cfg.CARD_W ?? this.width - cardX * 2;
     const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
-    const cardH = 392;
-    const cardY = 330;
+    const cardH = 456;
+    const cardY = 306;
 
     this.dimScreen(cfg.DIM_PAUSE ?? 0.28);
     this.garden.plate(cardX, cardY, cardW, cardH, 26);
@@ -1159,6 +1181,15 @@ export class Renderer {
     this.screenPill(cx, resumeY, resumeW, resumeH, CONFIG.COLORS.CoinAmber);
     this.fitText(t('pause.resume'), cx, resumeY + 9, 700, 26, resumeW - 40, CONFIG.COLORS.UI_TEXT);
     this.resumeButton = { x: cx - resumeW / 2, y: resumeY - resumeH / 2, w: resumeW, h: resumeH };
+
+    // «В МЕНЮ» поменьше и светлее «продолжить», чтобы случайно не нажать; при вопросе краснеет.
+    const menuW = 300;
+    const menuH = 52;
+    const menuY = cardY + 398;
+    const asking = !!extras.menuAsk;
+    this.screenPill(cx, menuY, menuW, menuH, asking ? CONFIG.COLORS.RiskApricot : CONFIG.COLORS.SkyPaper);
+    this.fitText(asking ? t('pause.menuAsk') : t('pause.menu'), cx, menuY + 8, 700, 22, menuW - 36, CONFIG.COLORS.UI_TEXT);
+    this.pauseMenuButton = { x: cx - menuW / 2, y: menuY - menuH / 2, w: menuW, h: menuH };
 
     this.drawSoundControls(cx, cardY + cardH + 44, muted, volume);
   }
@@ -1196,6 +1227,25 @@ export class Renderer {
     return null;
   }
 
+  // Строка о ближайшем скине на экране проигрыша: текст и полоска. Когда монет хватает — приглашение в магазин.
+  drawSkinGoal(cx, y, goal, maxWidth) {
+    const ctx = this.ctx;
+    const barW = Math.min(300, maxWidth);
+    const barH = 6;
+    const text = goal.ready
+      ? t('over.skinReady', { name: goal.name })
+      : t('over.skinGoal', { name: goal.name, c: goal.balance, p: goal.price });
+    this.fitText(text, cx, y, 700, 17, maxWidth, goal.ready ? CONFIG.COLORS.UI_TEXT : CONFIG.COLORS.UI_HUD);
+    const top = y + 11;
+    ctx.fillStyle = CONFIG.COLORS.FloorSand;
+    this.garden.roundedRectPath(cx - barW / 2, top, barW, barH, barH / 2);
+    ctx.fill();
+    const filled = Math.max(barH, barW * Math.min(1, goal.balance / Math.max(1, goal.price)));
+    ctx.fillStyle = CONFIG.COLORS.CoinAmber;
+    this.garden.roundedRectPath(cx - barW / 2, top, filled, barH, barH / 2);
+    ctx.fill();
+  }
+
   drawGameOver(score, bestScore, coins = 0, age = 1, extras = {}) {
     const cfg = this.screenCfg();
     const fade = Math.min(1, age / 0.25);
@@ -1208,9 +1258,12 @@ export class Renderer {
     const cardW = cfg.CARD_W ?? this.width - cardX * 2;
     const textW = cardW - (cfg.TEXT_PAD ?? 28) * 2;
     const offerStep = 66;
-    const cardH = 466 + offers * offerStep;
+    // Строка «СКИН … 118 / 130» с полоской добавляет 16 px высоты: капсулы выше, кнопки ниже.
+    const nextSkin = extras.nextSkin || null;
+    const goalExtra = nextSkin ? 16 : 0;
+    const cardH = 466 + goalExtra + offers * offerStep;
     // С двумя предложениями за рекламу карточка выше, чтобы под ней остались звук и кнопки магазина и лидеров.
-    const cardY = 320 - offers * 48;
+    const cardY = 320 - offers * 48 - (goalExtra ? 14 : 0);
     this.gameOverButtons = {};
 
     this.dimScreen((cfg.DIM_GAME_OVER ?? 0.28) * fade);
@@ -1257,8 +1310,8 @@ export class Renderer {
     const pillW = 360;
     const pillX = cx - pillW / 2;
     const rows = [
-      [cardY + 276, extras.daily ? t('daily.todayBest', { n: extras.daily.best }) : t('over.best', { n: bestScore }), 'paw'],
-      [cardY + 334, t('over.coins', { n: coins }), 'coin']
+      [cardY + 276 - (goalExtra ? 6 : 0), extras.daily ? t('daily.todayBest', { n: extras.daily.best }) : t('over.best', { n: bestScore }), 'paw'],
+      [cardY + 334 - (goalExtra ? 10 : 0), t('over.coins', { n: coins }), 'coin']
     ];
     for (const [pillY, label, icon] of rows) {
       this.screenPill(cx, pillY, pillW, 46, CONFIG.COLORS.SkyPaper);
@@ -1267,8 +1320,11 @@ export class Renderer {
       this.fitText(label, cx + 14, pillY + 7, 700, 21, pillW - 84, CONFIG.COLORS.UI_TEXT);
     }
 
+    // Ближайший скин: «СКИН «РЫЖИК» 118 / 130» и тонкая полоска накопления (ближняя цель, а не далёкая).
+    if (nextSkin) this.drawSkinGoal(cx, cardY + 372, nextSkin, textW);
+
     // Кнопки «за рекламу» — только если реклама доступна (добровольно, по нажатию).
-    let rowY = cardY + 404;
+    let rowY = cardY + 404 + goalExtra;
     const addButton = (name, fill, label) => {
       const w = 380;
       const h = 56;

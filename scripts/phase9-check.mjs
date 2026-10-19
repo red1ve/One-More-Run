@@ -156,8 +156,11 @@ check('OFFSET generates a moderate one-direction drift', () => {
   assert(deltas.every((delta) => Math.abs(delta) <= CONFIG.PATTERN_OFFSET_SHIFT_LATE + 0.01));
 });
 
+// Скорости трассы, на которых проверяется честность узоров: старый диапазон и новый максимум (2026-10-09: 950, затем 1050 px/s).
+const PROGRESSION_SPEEDS = [300, 450, 550, 650, 720, 800, 880, 950, 1050];
+
 check('OFFSET is reachable with safe clearance at progression speeds', () => {
-  [300, 450, 550, 650, 720].forEach((speed, index) => {
+  PROGRESSION_SPEEDS.forEach((speed, index) => {
     const generated = assertPatternGenerated('OFFSET', 'NORMAL', speed, 20 + index);
     assertAllRoutesValid(generated);
     generated.segment.gates.forEach((gate) => {
@@ -176,7 +179,7 @@ check('FUNNEL follows wide-medium-narrow-medium-wide progression', () => {
 });
 
 check('FUNNEL minimum clearance and reachability stay fair', () => {
-  [300, 450, 550, 650, 720].forEach((speed, index) => {
+  PROGRESSION_SPEEDS.forEach((speed, index) => {
     const generated = assertPatternGenerated('FUNNEL', 'NORMAL', speed, 30 + index);
     assertAllRoutesValid(generated);
     const minimum = Math.min(...generated.segment.gates.map((gate) => gate.openings[0].width));
@@ -198,7 +201,7 @@ check('OFFSET_GATE creates readable asymmetry without razor clearance', () => {
 });
 
 check('OFFSET_GATE remains reachable at all required speeds', () => {
-  [300, 450, 550, 650, 720].forEach((speed, index) => {
+  PROGRESSION_SPEEDS.forEach((speed, index) => {
     const generated = assertPatternGenerated('OFFSET_GATE', 'NORMAL', speed, 40 + index);
     assertAllRoutesValid(generated);
   });
@@ -219,7 +222,7 @@ check('DOUBLE_GATE has two spaced, offset corrections', () => {
 });
 
 check('DOUBLE_GATE is fully reachable at all required speeds', () => {
-  [300, 450, 550, 650, 720].forEach((speed, index) => {
+  PROGRESSION_SPEEDS.forEach((speed, index) => {
     const generated = assertPatternGenerated('DOUBLE_GATE', 'NORMAL', speed, 50 + index);
     assertAllRoutesValid(generated);
   });
@@ -236,7 +239,7 @@ check('pattern routes pass a 120 FPS physical collision simulation', () => {
     ['TWO_PATHS', 'OFFSET_GATE'],
     ['DUAL_RISK', 'OFFSET_GATE']
   ];
-  [300, 450, 550, 650, 720].forEach((speed, speedIndex) => {
+  PROGRESSION_SPEEDS.forEach((speed, speedIndex) => {
     cases.forEach(([type, pattern], caseIndex) => {
       const generated = assertPatternGenerated(pattern, type, speed, 100 + speedIndex * 20 + caseIndex);
       const routes = generated.segment.gates[0].openings.length;
@@ -413,8 +416,9 @@ check('Phase 9 preserves all balance constants', () => {
   assert(CONFIG.PLAYER_SPEED === 420);
   assert(CONFIG.PLAYER_WIDTH === 36 && CONFIG.PLAYER_HEIGHT === 36); // Phase 1b: bigger cat
   assert(CONFIG.TRACK_SPEED_START === 300);
-  assert(CONFIG.TRACK_SPEED_MAX === 720);
-  assert(CONFIG.TRACK_SPEED_TAU === 70);
+  // 2026-10-09: скорость стала быстрее по просьбе владельца (было 720 и 70, потом 950; сейчас 1050); цифры закреплены здесь.
+  assert(CONFIG.TRACK_SPEED_MAX === 1050);
+  assert(CONFIG.TRACK_SPEED_TAU === 45);
   assert(CONFIG.REWARDS.SAFE === 10);
   assert(CONFIG.REWARDS.RISKY === 100);
   assert(CONFIG.REWARDS.RISKY_EASY === 150);

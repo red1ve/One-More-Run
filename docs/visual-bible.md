@@ -332,7 +332,7 @@ AI image generation may be used only for early thumbnails. It is not needed for 
 
 - Different anatomy, longer legs, visible neck, slim body, realistic cat
 - Anime eyes, highlights in eyes, eyelashes, blush circles
-- Extra ears, wings, horns, hats that hide the folded ear
+- Extra ears, wings, horns, hats that hide the folded ear (the one exception is the witch hat of the limited Halloween skin, below)
 - Turning the patch into a logo or moving it to anatomical right
 - Moving the fold to the left ear, folding both ears, or mirroring canon
 - Long, thin, spiral, or left-side **run** tail; rear tail must stay a compact central plume
@@ -357,7 +357,7 @@ Implementation (2026-10-05, prototype): skins are made in code by recolouring th
 | Patch colour | Must remain a contrasting blob on the left head |
 | Pattern | Stripes, tuxedo bib, socks, spots — mapped to head/body/tail volumes |
 | Material cue | Paper crease, felt grain, yarn hatch — one treatment, subtle |
-| Accessory | **At most one**, and optional. Never required for the default skin |
+| Accessory | **At most one**, and optional. Never required for the default skin. Today only the limited Halloween skin has one: a black witch hat with the original shape (a sharp cone whose tip curls to the right, an orange band, a gold buckle and a star), worn LOW on the head: the brim is centred at y 200 of the run frame (the top of the head is at y ≈ 150), is ±184 wide and tilted 4° (right side lower). The ears are not covered by a dome (the cone is too narrow for that): the skin CUTS the cat along the upper arc of the brim (`skin.clip`, `hatClipPath` in `SkinArt.js`), so everything above the brim, the ear tips, disappears and the ears look as if they stayed inside the hat; the cut lies 5 px inside the brim ellipse and is hidden by its outline. The hat is drawn after the cut and is not clipped. The owner picked this variant (the 4th of six, «wider and almost straight») on 2026-10-19 after the dome-shaped crowns looked wrong to them. `HAT_GEOMETRY` holds the numbers and `scripts/phase1r-check.mjs` checks that the cut is hidden under the brim, that no ear point shows above the hat in any of the four frames, that the hat sits on the head and stays inside the frame. The sitting cat on START has no hat |
 
 ### What a skin must not change
 
@@ -382,9 +382,9 @@ Forbidden skin colours: neon, pure black `#000`, pure white `#FFF`, saturated ma
 - Maximum **one** accessory per skin
 - Must be smaller than an ear
 - Allowed: ribbon on tail, tiny collar band, one flower behind the folded ear, a paper tag
-- Forbidden: hats, backpacks, capes, sunglasses, crowns, weapons, shoes
+- Forbidden: hats, backpacks, capes, sunglasses, crowns, weapons, shoes (the one exception is the limited Halloween witch hat, see «What a skin may change»)
 - Accessory uses existing outline and shadow
-- Accessory must not cover the folded ear or the left patch
+- Accessory must not cover the folded ear or the left patch (the Halloween witch hat hides both ears on purpose, an owner-approved exception)
 
 ### Light and outline on skins
 
@@ -456,20 +456,22 @@ Procedural geometry stays procedural: the track (rows, openings, OFFSET/FUNNEL/�
 
 1. Sky: `sky-strip.jpg` painted once into a cache (`SkyArt.js`): the lower part is visible, its bottom on the horizon, mirrored copies at the sides, clouds below the HUD pills; the sky above uses the colour of the picture's top edge. A soft haze of the picture's bottom colour lies on the lawn at the horizon.
 2. Pergola `arch-wide-01` standing on the road end, posts at the road edges (`VISUAL.ROSE_ARCH`).
-3. Lawn (`LawnArt.js`, code): GardenLawn with soft patches and tufts.
+3. Lawn (`LawnArt.js`, code): GardenLawn with soft patches and tufts. Patches and tufts are anchored to the world exactly like trees and bushes: each one has a row number along the road and an offset from the hedge measured in road widths at its own depth, so it flies from the centre along a straight line together with them (fixed 2026-10-12: the offset used to be a share of the distance to the screen edge, and the patches drifted sideways slower than the trees). Checked by `scripts/phase1f-check.mjs`.
 4. Road sand (`SandArt.js`, code): FloorSand with soft spots and pebbles.
 5. Curb and hedge (`HedgeArt.js`): sand strip, wooden curb with post ticks (code), dark base, painted clumps in two overlapping rows (≈ one in five flowering), a fine far fringe with haze near the horizon (code).
 6. Lawn decor (`SideDecorArt.js`), clipped off the sand: trees in groups of 1–2 every 12 slots, bushes/rocks/fences/grass in between (`VISUAL.SIDE_DECOR`). One shared draw order for everything on the lawn: by ground line (y), far first, whatever is nearer to the camera is drawn on top (a nearer bush covers the foot of a farther tree, a nearer tree covers a farther bush); size and sideways offset are computed for the depth of that ground line, so every object stands on the same ground plane. Everything stands beyond the outer edge of the hedge (`hedgeOuterReach()` in `HedgeArt.js` + `HEDGE_GAP`): a prop's near edge, a tree's trunk (plus a fifth of the crown width). "The hedge is the end of the road, the background starts after it" — only a tree crown may hang over the hedge, never a trunk or a bush. Guarded by `scripts/phase1h-check.mjs`. The random depth shift of each object is set **in the world** (`k * period + progress + shift`), not in screen pixels: then every lawn object moves with the road at exactly the same speed and the order «far → near» between two objects never changes — a tree can never overtake a rock (fixed 2026-10-01; guarded by the overtaking check in `scripts/phase1f-check.mjs`).
 7. Obstacles (`ObstacleArt.js`): planters and gates, coins.
+
+The coin (changed 2026-10-09): ONE picture for the whole game, `assets/environment/collectibles/coin.png` (160×160, transparent), built from the vector source `coin.svg` next to it: CoinAmber disc with a thick InkBrown outline, a visible coin edge below, a reeded rim, a lighter inner field with an engraved paw print, a soft highlight on the upper left. The old four pictures (face on, tilted, edge on, 40–86 px) were replaced because the coins looked different from one another and were four times lower in resolution than the planters. The interface coin icon (`GardenArt.hudCoinIcon`) uses the same picture; the plain gold disc is only a fallback while the picture loads.
 8. Cat, particles, reward markers, HUD.
 
 ### Time of day (2026-10-01)
 
-During a run the garden changes with the run time (`CONFIG.TIME_OF_DAY`, `TimeOfDay.js`, `Renderer.drawTimeOfDay`): day (0–60 s) → golden hour (60) → dusk (120) → night (180) → dawn (260) → day (300), a 300 s cycle that repeats; each stage grows out of the previous one over 10 s. It is a presentation layer only: collisions, score and the track do not change, and the START screen is always plain day. No new pictures: a coloured veil (multiply) over the whole scene except the HUD, a light colour wash (so the yellow sand does not turn grey), a warm glow from the top, a soft darkening at the edges and, at night, up to 14 fireflies drifting on the lawn beside the road. Readability rule: every tint channel ≥ 140 and brightness ≥ 0.6 at every moment, so obstacles and gaps stay easy to see (guarded by `scripts/phase1k-check.mjs`). At every new stage a capsule with its name («ЗОЛОТОЙ ЧАС», «ВЕЧЕР», «НОЧЬ», «РАССВЕТ», «ДЕНЬ») appears under the HUD for 2.6 s with a short rising four-note figure (C E G C pentatonic) and a light vibration; it is a milestone for the player («reach the night»). Dev only: `?tod=200` shifts the clock so a run starts at that second of the cycle (to look at a stage without playing 3 minutes); the real run time and the difficulty are not touched.
+During a run the garden changes with the run time (`CONFIG.TIME_OF_DAY`, `TimeOfDay.js`, `Renderer.drawTimeOfDay`): day (0–16 s) → golden hour (16) → dusk (32) → night (48) → dawn (64) → day (80), an 80 s cycle that repeats (16 s per stage; changed 2026-10-09 from a 300 s cycle with 60/60/60/80/40 s stages, first to 12 s, then 20% longer, then another 10% because it was still too often); each stage grows out of the previous one over 5 s (was 10 s), the stage plaque stays 2.5 s (was 2.6 s). It is a presentation layer only: collisions, score and the track do not change, and the START screen is always plain day. No new pictures: a coloured veil (multiply) over the whole scene except the HUD, a light colour wash (so the yellow sand does not turn grey), a warm glow from the top, a soft darkening at the edges and, at night, up to 14 fireflies drifting on the lawn beside the road. Readability rule: every tint channel ≥ 140 and brightness ≥ 0.6 at every moment, so obstacles and gaps stay easy to see (guarded by `scripts/phase1k-check.mjs`). At every new stage a capsule with its name («ЗОЛОТОЙ ЧАС», «ВЕЧЕР», «НОЧЬ», «РАССВЕТ», «ДЕНЬ») appears under the HUD for 2.6 s with a short rising four-note figure (C E G C pentatonic) and a light vibration; it is a milestone for the player («reach the night»). Dev only: `?tod=200` shifts the clock so a run starts at that second of the cycle (to look at a stage without playing 3 minutes); the real run time and the difficulty are not touched.
 
 ### Swaying planter (2026-10-05)
 
-A moving obstacle after 90 s of a run (rules in `docs/business-rules.md`). It is the same wooden planter picture as the walls of the row, no new art. It is drawn separately from the walls (`GardenArt.drawSwayPlanter`), so at a wall it never melts into one wide box, and its picture is chosen by the row, not by the position, so it does not change while moving. It leans around its base in the direction of motion by up to 0.1 rad (≈ 6°) at full speed and stands upright at the turning points; that lean and the movement are the only cues that it is not a wall. No extra marker, glow or arrow: the movement is the signal. It must stay wide enough to be drawn as a planter and not as a bush (`BUSH_MAX_WIDTH`): the 84 px planter is ≈ 1.2–1.3 × that limit at every depth (`scripts/phase1l-check.mjs`).
+A moving obstacle after 45 s of a run (90 s until 2026-10-09; rules in `docs/business-rules.md`). It is the same wooden planter picture as the walls of the row, no new art. It is drawn separately from the walls (`GardenArt.drawSwayPlanter`), so at a wall it never melts into one wide box, and its picture is chosen by the row, not by the position, so it does not change while moving. It leans around its base in the direction of motion by up to 0.1 rad (≈ 6°) at full speed and stands upright at the turning points; that lean and the movement are the only cues that it is not a wall. No extra marker, glow or arrow: the movement is the signal. It must stay wide enough to be drawn as a planter and not as a bush (`BUSH_MAX_WIDTH`): the 84 px planter is ≈ 1.2–1.3 × that limit at every depth (`scripts/phase1l-check.mjs`).
 
 ### Obstacles / gates
 
@@ -877,7 +879,7 @@ The game looks authored when every object shares line, light, palette, and anato
 19. Watermarked or stock-looking illustration
 20. Slogans on START (“Unleash your destiny”)
 21. More than one accessory
-22. Hats that eat the ear silhouette
+22. Hats that eat the ear silhouette (except the Halloween witch hat, an owner-approved exception)
 23. Night / rain / seasonal weather that changes the light model
 24. Using a new generated image as a production sprite without rebuilding it on the grid
 

@@ -44,6 +44,24 @@ function makeStorage(initial = {}) {
   return { storage, memory, raw };
 }
 
+// Механику магазина (покупка, облако, «не хватает») проверяем на ЗАКРЕПЛЁННЫХ ценах 10 / 25 / 40 / 60 / 90 / 130 / 180:
+// настройка цен в CONFIG.SHOP (с 2026-10-19 они выше, потому что монет стало вдвое больше) не должна ломать
+// проверки механики. Настоящие цены проверяют только «список цен» и «экономика» ниже: они возвращают их на время.
+const REAL_PRICES = CONFIG.SHOP.SKINS;
+const FIXED_PRICES = [
+  { id: 'classic', price: 0 }, { id: 'ginger', price: 10 }, { id: 'honey', price: 25 }, { id: 'snow', price: 40 },
+  { id: 'tuxedo', price: 60 }, { id: 'siamese', price: 90 }, { id: 'calico', price: 130 }, { id: 'ribbon', price: 180 }
+];
+CONFIG.SHOP.SKINS = FIXED_PRICES;
+function withRealPrices(fn) {
+  CONFIG.SHOP.SKINS = REAL_PRICES;
+  try {
+    return fn();
+  } finally {
+    CONFIG.SHOP.SKINS = FIXED_PRICES;
+  }
+}
+
 // ---- (а) монеты
 
 await check('coins: two counters, balance is the difference, old saves keep their coins', () => {
@@ -82,14 +100,14 @@ await check('coins: broken saved numbers never make the balance negative or frac
 
 // ---- (б) правила магазина
 
-await check('shop: the price list matches the skins, starts free and rises', () => {
+await check('shop: the price list matches the skins, starts free and rises', () => withRealPrices(() => {
   const prices = CONFIG.SHOP.SKINS;
   assert([...prices.map((s) => s.id)].sort().join() === [...SKINS.map((s) => s.id)].sort().join(), 'ids must match SkinArt.SKINS');
   assert(prices[0].id === CONFIG.SHOP.DEFAULT_SKIN && prices[0].price === 0, 'the default skin is free');
   for (let i = 1; i < prices.length; i += 1) {
     assert(Number.isInteger(prices[i].price) && prices[i].price > prices[i - 1].price, `price of ${prices[i].id} must exceed the previous one`);
   }
-});
+}));
 
 await check('shop: buying spends exactly the price, owns and wears the skin; no double buying', () => {
   const { storage, raw } = makeStorage();
@@ -359,7 +377,7 @@ await check('game: a saved skin is put on the cat when the game starts', () => {
   // Конструктор нужен настоящий холст, поэтому его проверяем по тексту: скин надевается при запуске.
   const source = readFileSync(new URL('../src/game/Game.js', import.meta.url), 'utf8');
   const constructorText = source.slice(source.indexOf('constructor(canvas'), source.indexOf('  unlockAudio()'));
-  assert(/this\.shop = new Shop\(this\.storage\)/.test(constructorText) && /this\.applySelectedSkin\(\)/.test(constructorText), 'the constructor must create the shop and put the saved skin on the cat');
+  assert(/this\.shop = new Shop\(this\.storage(, \(\) => this\.todayKey\(\))?\)/.test(constructorText) && /this\.applySelectedSkin\(\)/.test(constructorText), 'the constructor must create the shop and put the saved skin on the cat');
 });
 
 // ---- (д) рисование
@@ -441,7 +459,7 @@ await check('sitting cat: every skin recolours the sitting cat, the shape never 
   assert(/data-part="earFolded"[^>]*fill="#5A4036"/.test(siamese) && /data-part="tail"[^>]*fill="#5A4036"/.test(siamese), 'siamese has dark ears and tail');
 });
 
-await check('economy: the prices fit the coins the track really offers', () => {
+await check('economy: the prices fit the coins the track really offers', () => withRealPrices(() => {
   let available30 = 0;
   let available60 = 0;
   const seeds = 40;
@@ -473,7 +491,7 @@ await check('economy: the prices fit the coins the track really offers', () => {
   assert(first / (pickup * available30) <= 12, `the first skin takes ${(first / (pickup * available30)).toFixed(1)} short runs: too long for a newcomer`);
   assert(first / (pickup * available30) >= 4, 'the first skin must not be instant');
   assert(total / (pickup * available60) <= 220, `all skins take ${(total / (pickup * available60)).toFixed(0)} minute-long runs: too long`);
-});
+}));
 
 console.log(results.join('\n'));
 const failed = results.filter((line) => line.startsWith('FAIL'));

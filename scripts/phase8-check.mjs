@@ -275,8 +275,9 @@ check('starting a run resets the run rules', () => {
 check('Phase 8 leaves gameplay balance invariants unchanged', () => {
   assert(CONFIG.PLAYER_SPEED === 420);
   assert(CONFIG.TRACK_SPEED_START === 300);
-  assert(CONFIG.TRACK_SPEED_MAX === 720);
-  assert(CONFIG.TRACK_SPEED_TAU === 70);
+  // 2026-10-09: скорость стала быстрее по просьбе владельца (было 720 и 70, потом 950; сейчас 1050); цифры закреплены здесь.
+  assert(CONFIG.TRACK_SPEED_MAX === 1050);
+  assert(CONFIG.TRACK_SPEED_TAU === 45);
   assert(CONFIG.MULTIPLIER_STEP === 0.5);
   assert(CONFIG.MULTIPLIER_MAX === 5);
   assert(CONFIG.COIN_VALUE === 1);

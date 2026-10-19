@@ -31,7 +31,7 @@
 ### [howto] Как играть (100–1000 знаков)
 
 ```
-Касайся левой или правой половины экрана, чтобы кот бежал в ту сторону. На компьютере: A/D или стрелки, P или Esc — пауза, M — звук. Проходи между препятствиями: чем дольше бежишь, тем быстрее забег. На развилке широкий проход безопасный (+10 очков), узкий рискованный (+100 и больше). Несколько рискованных проходов подряд растят множитель очков, безопасный выбор его сбрасывает. Пройдёшь вплотную к стене — бонус «впритирку». Монеты тратятся в магазине на окраски кота. Раз в день доступны «Забег дня» с одинаковой трассой для всех и три задания, за них дают монеты. Врезался в препятствие — забег окончен: жми «Ещё раз» или вернись в меню.
+Прижми палец к экрану: кот бежит за ним. На компьютере: зажми кнопку мыши или A/D, стрелки, P или Esc — пауза, M — звук. Проходи между препятствиями: чем дольше бежишь, тем быстрее забег. На развилке широкий проход безопасный (+10 очков), узкий рискованный (+100 и больше). Несколько рискованных проходов подряд растят множитель очков, безопасный выбор его сбрасывает. Пройдёшь вплотную к стене — бонус «впритирку». Монеты тратятся в магазине на окраски кота. Раз в день доступны «Забег дня» с одинаковой трассой для всех и три задания, за них дают монеты. Врезался в препятствие — забег окончен: жми «Ещё раз» или вернись в меню.
 ```
 
 ### [seo] SEO-описание (50–160 знаков)
@@ -75,7 +75,7 @@ One More Run is a quick arcade runner about Loaf, a fluffy cat racing down a gar
 ### [howto] How to play (100–1000 characters)
 
 ```
-Tap the left or right half of the screen to make the cat run that way. On a computer use A/D or the arrow keys, P or Esc to pause, M for sound. Slip between the obstacles: the longer you run, the faster it gets. At a fork the wide gap is safe (+10 points) and the narrow one is risky (+100 and more). Several risky passes in a row grow your score multiplier, a safe choice resets it. Pass close to a wall for a close-call bonus. Coins are spent in the shop on cat skins. Once a day you get the Daily Run, the same track for everyone, and three quests that pay coins. Hit an obstacle and the run is over: press More or go back to the menu.
+Hold a finger on the screen and the cat runs to it. On a computer hold the mouse button, or use A/D or the arrow keys, P or Esc to pause, M for sound. Slip between the obstacles: the longer you run, the faster it gets. At a fork the wide gap is safe (+10 points) and the narrow one is risky (+100 and more). Several risky passes in a row grow your score multiplier, a safe choice resets it. Pass close to a wall for a close-call bonus. Coins are spent in the shop on cat skins. Once a day you get the Daily Run, the same track for everyone, and three quests that pay coins. Hit an obstacle and the run is over: press More or go back to the menu.
 ```
 
 ### [seo] SEO description (50–160 characters)

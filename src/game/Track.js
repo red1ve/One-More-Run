@@ -10,7 +10,6 @@ const VISUAL_OBSTACLE_IDS = {
   STANDING_PLANTER: ['planter-04', 'planter-06', 'planter-08'],
   GARDEN_FENCE: ['garden-fence']
 };
-const COIN_VISUAL_IDS = ['coin-01', 'coin-02', 'coin-03', 'coin-04'];
 
 function visualUnit(n) {
   const x = Math.sin(Number(n) * 127.1 + 311.7) * 43758.5453;
@@ -235,6 +234,15 @@ export class Track {
     const left = x - CONFIG.TRACK_LEFT;
     const right = CONFIG.TRACK_RIGHT - (x + width);
     return (left <= hidden || left >= min) && (right <= hidden || right >= min);
+  }
+
+  // Тонкая стена у края (см. EDGE_WALL_THIN_MAX): из-под бордюра торчит на пару пикселей, её не видно, а кот её задевает.
+  edgeWallsThin(x, width) {
+    const hidden = CONFIG.EDGE_WALL_HIDDEN + 0.01;
+    const thin = CONFIG.EDGE_WALL_THIN_MAX;
+    const left = x - CONFIG.TRACK_LEFT;
+    const right = CONFIG.TRACK_RIGHT - (x + width);
+    return (left > hidden && left < thin) || (right > hidden && right < thin);
   }
 
   // На сколько px можно сдвигать проём (развилку), оставляя стены у краёв допустимыми, если на
@@ -859,8 +867,9 @@ export class Track {
   }
 
   pickWeighted(items, lastValue) {
+    // Середина прохода реже краёв: монеты у стен рискованнее (CONFIG.COIN_CENTER_WEIGHT).
     const weights = items.map((item) => (
-      item === lastValue ? CONFIG.COIN_ZONE_REPEAT_WEIGHT : 1
+      (item === lastValue ? CONFIG.COIN_ZONE_REPEAT_WEIGHT : 1) * (item === 'CENTER' ? CONFIG.COIN_CENTER_WEIGHT : 1)
     ));
     const total = weights.reduce((sum, weight) => sum + weight, 0);
     let roll = this.random() * total;
@@ -910,7 +919,14 @@ export class Track {
     if (!available) return null;
     const { minX, maxX } = available;
     const range = this.zoneXRange(zone, minX, maxX);
-    let x = range.min + Math.max(0, Math.min(1, jitter)) * Math.max(0, range.max - range.min);
+    const span = Math.max(0, range.max - range.min);
+    const unit = Math.max(0, Math.min(1, jitter));
+    // У краёв положение внутри зоны жмётся к стене (степень EDGE_POWER): монета ближе к стене, рискованнее.
+    const pushed = unit ** CONFIG.COIN_EDGE_POWER;
+    let x;
+    if (zone === 'LEFT') x = range.min + pushed * span;
+    else if (zone === 'RIGHT') x = range.max - pushed * span;
+    else x = range.min + unit * span;
     const { maxLeftX, minRightX } = this.skippableXBounds(path, size);
 
     if (zone === 'LEFT') {
@@ -999,7 +1015,6 @@ export class Track {
     const y = this.coinYForSlot(segment, path, size, ySlot, yJitter);
     if (x == null || y == null) return null;
 
-    const visualSeed = Math.abs(Math.round(x * 17 + (segment.id || 1) * 13)) + 1;
     const coin = {
       x,
       y,
@@ -1007,10 +1022,7 @@ export class Track {
       height: size,
       collected: false,
       zone,
-      ySlot,
-      visualSeed,
-      visualId: COIN_VISUAL_IDS[Math.floor(visualUnit(visualSeed) * COIN_VISUAL_IDS.length)
-        % COIN_VISUAL_IDS.length]
+      ySlot
     };
     if (!this.isCoinValid(segment, path, coin)) return null;
 
@@ -1034,7 +1046,23 @@ export class Track {
 
     for (const zone of zoneOrder) {
       for (const ySlot of slotOrder) {
-        if (this.tryPlaceCoin(segment, { zone, ySlot })) return;
+        const first = this.tryPlaceCoin(segment, { zone, ySlot });
+        if (!first) continue;
+        // Иногда вторая монета в том же ряду: у той же стены, в другом месте по глубине («дорожка» из двух).
+        if (this.random() < CONFIG.COIN_PAIR_CHANCE) {
+          for (const slot of slotOrder.filter((item) => item !== ySlot)) {
+            const second = this.tryPlaceCoin(segment, { zone, ySlot: slot });
+            if (!second) continue;
+            // Две монеты не должны налезать друг на друга (зазор 6 px): иначе убираем вторую и пробуем другое место.
+            const gap = 6;
+            const touching = Math.abs(second.x - first.x) < first.width + gap && Math.abs(second.y - first.y) < first.height + gap;
+            if (!touching) break;
+            segment.coins.pop();
+            this.lastCoinZone = first.zone;
+            this.lastCoinYSlot = first.ySlot;
+          }
+        }
+        return;
       }
     }
   }
@@ -1231,6 +1259,7 @@ export class Track {
 
     const tryLayout = (riskyLeft, forkX, strictEdges = true) => {
       if (strictEdges && !this.edgeWallsOk(forkX, forkW)) return null;
+      if (!strictEdges && this.edgeWallsThin(forkX, forkW)) return null;
       let safeX;
       let riskX;
       let dividerX;
@@ -1356,6 +1385,7 @@ export class Track {
 
     const tryLayout = (hardLeft, forkX, strictEdges = true) => {
       if (strictEdges && !this.edgeWallsOk(forkX, forkW)) return null;
+      if (!strictEdges && this.edgeWallsThin(forkX, forkW)) return null;
       let easyX;
       let hardX;
       let dividerX;

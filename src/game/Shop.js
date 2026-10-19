@@ -1,4 +1,5 @@
 import { CONFIG } from '../config.js';
+import { gameDay, isDay } from './Daily.js';
 
 // Магазин скинов: правила покупки и хранения, без рисования. Монеты лежат в StorageService
 // (два счётчика), а здесь — список купленных скинов, выбранный скин и слияние с облаком.
@@ -10,6 +11,13 @@ import { CONFIG } from '../config.js';
 
 const OWNED_KEY = 'skinsOwned';
 const SELECTED_KEY = 'skinSelected';
+// День первого запуска игры: от него считаются дни ограниченного скина. В облаке берётся более ранний.
+const FIRST_DAY_KEY = 'firstDay';
+const MS_PER_DAY = 86400000;
+
+function dayNumber(day) {
+  return Math.floor(Date.parse(`${day}T00:00:00Z`) / MS_PER_DAY);
+}
 
 function whole(value) {
   const number = Math.floor(Number(value));
@@ -17,8 +25,46 @@ function whole(value) {
 }
 
 export class Shop {
-  constructor(storage) {
+  // today — функция, которая даёт игровой день 'ГГГГ-ММ-ДД' (Game.todayKey: серверное время Яндекса);
+  // без неё берётся время устройства.
+  constructor(storage, today = null) {
     this.storage = storage;
+    this.today = typeof today === 'function' ? today : () => gameDay(Date.now());
+  }
+
+  // ---- ограниченные скины
+
+  firstDay() {
+    const day = this.storage.get(FIRST_DAY_KEY, null);
+    return isDay(day) ? day : null;
+  }
+
+  // Запоминает день первого запуска (один раз, дальше не меняется). Возвращает его.
+  ensureFirstDay() {
+    const known = this.firstDay();
+    if (known) return known;
+    const today = this.today();
+    if (!isDay(today)) return null;
+    this.storage.set(FIRST_DAY_KEY, today);
+    return today;
+  }
+
+  limitOf(id) {
+    return CONFIG.SHOP.SKINS.find((skin) => skin.id === id)?.limited || null;
+  }
+
+  // Можно ли сейчас купить скин по времени: { available, daysLeft }. У обычного скина всегда да, daysLeft null.
+  // Купленный остаётся доступен всегда. Окно: `days` дней с первого запуска и не позже `until`.
+  availability(id) {
+    const limit = this.limitOf(id);
+    if (!limit || this.isOwned(id)) return { available: true, daysLeft: null };
+    const today = this.today();
+    const first = this.firstDay() || today;
+    if (!isDay(today) || !isDay(first)) return { available: false, daysLeft: 0 };
+    const elapsed = Math.max(0, dayNumber(today) - dayNumber(first));
+    const daysLeft = limit.days - elapsed;
+    const inSeason = !isDay(limit.until) || today <= limit.until;
+    return { available: daysLeft > 0 && inSeason, daysLeft: Math.max(0, daysLeft) };
   }
 
   ids() {
@@ -56,16 +102,36 @@ export class Shop {
   }
 
   // Список для экрана: id, цена, куплен ли, выбран ли.
+  // Ограниченный скин, пока он продаётся, идёт с `limited` — сколько дней осталось; когда окно закрылось и скина
+  // нет у игрока, его в списке нет.
   list() {
     const owned = new Set(this.owned());
     const selected = this.selected();
-    return CONFIG.SHOP.SKINS.map(({ id, price }) => ({ id, price, owned: owned.has(id), selected: id === selected }));
+    return CONFIG.SHOP.SKINS
+      .filter(({ id }) => owned.has(id) || this.availability(id).available)
+      .map(({ id, price }) => {
+        const own = owned.has(id);
+        const limited = !own && this.limitOf(id) ? this.availability(id).daysLeft : null;
+        return { id, price, owned: own, selected: id === selected, limited };
+      });
+  }
+
+  // Ближайшая цель для экрана проигрыша: самый дешёвый платный скин, которого ещё нет. Возвращает
+  // { id, price, balance, missing } или null, если всё куплено. Строка «СКИН … 118 / 130» и полоска на экране.
+  nextTarget() {
+    const owned = new Set(this.owned());
+    const open = CONFIG.SHOP.SKINS.filter((skin) => skin.price > 0 && !skin.limited && !owned.has(skin.id));
+    if (!open.length) return null;
+    const cheapest = open.reduce((best, skin) => (skin.price < best.price ? skin : best));
+    const balance = this.balance();
+    return { id: cheapest.id, price: cheapest.price, balance, missing: Math.max(0, cheapest.price - balance) };
   }
 
   // Можно ли купить: { ok: true } или { ok: false, reason: 'unknown' | 'owned' | 'poor', missing }.
   canBuy(id) {
     if (!this.isKnown(id)) return { ok: false, reason: 'unknown', missing: 0 };
     if (this.isOwned(id)) return { ok: false, reason: 'owned', missing: 0 };
+    if (!this.availability(id).available) return { ok: false, reason: 'unavailable', missing: 0 };
     const missing = this.price(id) - this.balance();
     if (missing > 0) return { ok: false, reason: 'poor', missing };
     return { ok: true, missing: 0 };
@@ -97,7 +163,8 @@ export class Shop {
       coinsEarned: earned,
       coinsSpent: spent,
       skinsOwned: this.owned(),
-      skinSelected: this.selected()
+      skinSelected: this.selected(),
+      firstDay: this.firstDay()
     };
   }
 
@@ -120,6 +187,8 @@ export class Shop {
       const merged = this.ids().filter((id) => union.has(id));
       if (merged.join() !== this.owned().join()) this.storage.set(OWNED_KEY, merged);
     }
+    // День первого запуска: берём более ранний из двух (иначе на втором устройстве окно ограниченного скина началось бы заново).
+    if (isDay(data.firstDay) && (!this.firstDay() || data.firstDay < this.firstDay())) this.storage.set(FIRST_DAY_KEY, data.firstDay);
     // Новое устройство (игрок здесь ещё ничего не выбирал) берёт выбор из облака, если этот скин куплен.
     if (this.storage.get(SELECTED_KEY, null) === null && this.isKnown(data.skinSelected) && this.isOwned(data.skinSelected)) {
       this.storage.set(SELECTED_KEY, data.skinSelected);
