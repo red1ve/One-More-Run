@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 160 160" width="160" height="160">
+  <!-- Монета «Ещё забега»: одна на всю игру. Исходник; в игру идёт coin.png (160x160), собранный из этого файла.
+       Цвета: CoinAmber #E8B84A и его оттенки, контур InkBrown #4A3428 (docs/visual-bible.md). -->
+  <defs>
+    <g id="paw">
+      <path d="M80 70 C92 70 102 82 102 91 C102 99 94 103 87 100 C83.5 98.5 76.5 98.5 73 100 C66 103 58 99 58 91 C58 82 68 70 80 70 Z"/>
+      <ellipse cx="57" cy="60" rx="7.2" ry="9.5" transform="rotate(-24 57 60)"/>
+      <ellipse cx="70.5" cy="48" rx="7.6" ry="10" transform="rotate(-8 70.5 48)"/>
+      <ellipse cx="89.5" cy="48" rx="7.6" ry="10" transform="rotate(8 89.5 48)"/>
+      <ellipse cx="103" cy="60" rx="7.2" ry="9.5" transform="rotate(24 103 60)"/>
+    </g>
+  </defs>
+  <!-- ребро монеты (видна толщина снизу) -->
+  <circle cx="80" cy="84" r="66" fill="#C98A2B" stroke="#4A3428" stroke-width="7"/>
+  <!-- лицевая сторона -->
+  <circle cx="80" cy="74" r="66" fill="#E8B84A" stroke="#4A3428" stroke-width="7"/>
+  <!-- рифлёный край: 24 насечки по кругу -->
+  <circle cx="80" cy="74" r="57.5" fill="none" stroke="#D3962F" stroke-width="6" stroke-dasharray="7.6 7.6"/>
+  <!-- внутреннее поле и бортик -->
+  <circle cx="80" cy="74" r="50" fill="#F2C95C"/>
+  <circle cx="80" cy="74" r="50" fill="none" stroke="#C98A2B" stroke-width="5"/>
+  <!-- лапка: светлая подложка и тёмный оттиск -->
+  <g transform="translate(0 5)">
+    <use href="#paw" xlink:href="#paw" fill="#FBE3A0" transform="translate(2 2.6)"/>
+    <use href="#paw" xlink:href="#paw" fill="#A8661B"/>
+  </g>
+  <!-- блик на краю -->
+  <path d="M23.8 64.1 A57 57 0 0 1 70.1 17.9" fill="none" stroke="#FFF0BE" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+</svg>
