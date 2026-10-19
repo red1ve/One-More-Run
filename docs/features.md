@@ -37,13 +37,13 @@ Priorities:
 
 Current implementation notes:
 
-- Horizontal player speed grows with the track speed: 420 px/s at the start, 500 px/s at the track maximum (Phase 1b; the generator still plans with 420). Phase 1b: the cat is drawn at 150 px with a 36×36 hitbox, the road at the cat is ~364 px wide, and narrow gaps are 6 px wider so side clearance is unchanged.
+- Horizontal player speed grows with the track speed: 420 px/s at the start, 500 px/s at the track maximum (Phase 1b; the generator still plans with 420). Since 2026-10-09 the maximum is 600 px/s (`PLAYER_SPEED_MAX`; first 560), because the track is faster. Phase 1b: the cat is drawn at 150 px with a 36×36 hitbox, the road at the cat is ~364 px wide, and narrow gaps are 6 px wider so side clearance is unchanged.
 - Player X is clamped to the visual garden-path inner edges (hedge borders), not to empty grass outside the sand.
-- Track speed follows `v(t) = max - (max - start) * e^(-t / tau)` (300 → 720, tau 70).
+- Track speed follows `v(t) = max - (max - start) * e^(-t / tau)`: 300 → 1050, tau 45 (changed 2026-10-09 at the owner's request, "a more dynamic game"; it was 300 → 720, tau 70, then 950 for a few hours). In px/s: 10 s → 449, 30 s → 665, 60 s → 852, 120 s → 998; what used to be the speed at the second minute (644) is now reached at about 28 s. The start did not change.
 - Choices are SAFE/RISK (`TWO_PATHS`) and RISK/RISK (`DUAL_RISK` after 30s). No other Choice types.
 - Intentional RISK grows streak; SAFE on a Choice resets streak and multiplier to 1.0x. Breathing / non-choice does not change streak.
 - Multiplier starts at 1.0x, steps +0.5, caps at 5.0x. Path reward uses the multiplier **before** the step.
-- Coins are a separate meta counter (+1), not score/streak/multiplier. They persist through Game Over and are spent in the skin shop.
+- Coins (changed 2026-10-19, the owner found them too rare): about twice as many (chances ×1.6–2.2, `COIN_REPEAT_CHANCE_SCALE` 0.75, sometimes a second coin along the same wall `COIN_PAIR_CHANCE`), placed closer to the walls of the gap (`COIN_CENTER_WEIGHT`, `COIN_EDGE_POWER`: the share within 12 px of a wall rose from 11% to 27%), every coin still reachable and skippable; skin prices were raised ×1.6 (16 … 290, Halloween 350). Coins are a separate meta counter (+1), not score/streak/multiplier. They persist through Game Over and are spent in the skin shop.
 - `VariationDirector` spaces Choices; reachability remains the source of truth, with fallback.
 - Track patterns use ordered gate rows compiled into the existing obstacle/path rectangles. OFFSET, FUNNEL, OFFSET_GATE, and DOUBLE_GATE vary steering geometry without adding controls or rewards.
 - All four patterns can vary NORMAL; SAFE/RISK supports OFFSET, FUNNEL, and OFFSET_GATE; DUAL_RISK supports OFFSET_GATE. DOUBLE_GATE unlocks after 60 seconds and remains NORMAL-only.
@@ -66,8 +66,12 @@ Current implementation notes:
 | NEW BEST feedback | P1       | DONE   |
 | Close call bonus (+10..30, `Track.checkGraze`) | P1 | DONE (2026-10-01) |
 | Time of day: day, golden hour, dusk, night (fireflies), dawn, with a milestone capsule | P1 | DONE (2026-10-01) |
-| Swaying planter: a moving obstacle after 90 s, always a free pocket of 90+ px (`CONFIG.SWAY`, `Track.createSway`) | P1 | DONE (2026-10-05) |
-| Cat skins engine: 8 colourways by recolouring the run frames and the sitting cat (`SkinArt.js`) | P1 | DONE (2026-10-05) |
+| Swaying planter: a moving obstacle after 45 s (was 90 s until 2026-10-09; tiers 45 / 90 / 150 s), always a free pocket of 90+ px (`CONFIG.SWAY`, `Track.createSway`) | P1 | DONE (2026-10-05) |
+| Cat skins engine: 8 colourways by recolouring the run frames and the sitting cat (`SkinArt.js`); a 9th, the limited Halloween skin with a witch hat, since 2026-10-19 | P1 | DONE (2026-10-05) |
+| Limited skin: sold for 14 days from each player's first launch (but not after `until`), expensive, owned forever (`CONFIG.SHOP`, `Shop.availability`, cloud key `firstDay` merged by the earlier day) | P1 | DONE (2026-10-19) |
+| Game Over: the nearest skin goal «SKIN … 118 / 130» with a bar, next to the existing «N TO NEW BEST» | P1 | DONE (2026-10-19) |
+| Rewarded ads: the cat revives even if the platform resume event is late; a short notice when no reward came (`over.noReward`, `over.adFailed`) | P0 | DONE (2026-10-19) |
+| Sharper picture on phones: the canvas gets 1× / 1.5× / 2× real pixels (`RenderScale.js`), drops by itself on a slow phone and remembers it | P1 | DONE (2026-10-19) |
 | Skin shop for coins (`Shop.js`, START and Game Over screens), coins as earned / spent counters, cloud merge | P1 | DONE (2026-10-05) |
 | Daily run: the same track for everybody each Moscow day, coins for the first run and a day streak (`Daily.js`) | P1 | DONE (2026-10-05) |
 | «В МЕНЮ» on Game Over: back to the START screen (daily run, quests, shortcut), the first start after loading has no ad but a later start through the menu does (`Game.openMenu`) | P1 | DONE (2026-10-05) |
@@ -123,6 +127,7 @@ Current implementation notes:
 | Mute toggle          | P1       | DONE    |
 | Volume control (−/+, default 50%) | P1 | DONE |
 | Pause (HUD button, P / Esc)       | P1 | DONE |
+| «В МЕНЮ» on the pause screen (two taps, quiet end of the run) | P1 | DONE |
 | Full settings menu   | P1       | PLANNED |
 | Russian localization | P0       | DONE    |
 | English UI           | P0       | DONE    |

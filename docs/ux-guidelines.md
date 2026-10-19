@@ -89,6 +89,8 @@ Do not hardcode interface text inside gameplay logic.
 
 Controls must be comfortable with one hand.
 
+Steering (changed 2026-10-09): put a finger anywhere and hold it; the cat drives to that point at its normal speed and stops exactly under the finger, ignoring small tremor (`CONFIG.STEER`). The mouse works the same while the button is held. The old rule for the mouse (left and right half of the screen) and the 10 px dead zone for the finger are gone: the finger sometimes made the cat jitter at the edge of the dead zone.
+
 Interactive elements must have sufficient touch area.
 
 The interface must not cover important gameplay information.
@@ -108,6 +110,8 @@ Shop window (2026-10-05): a cream plate with the title, the balance (coin icon +
 Daily run (2026-10-05): on the START screen a green capsule «ЗАБЕГ ДНЯ» sits right under the amber «ИГРАТЬ» (the card grows by 72 px and moves up). Its second line says what waits: «+5 МОНЕТ» (a new streak), «+11 МОНЕТ • СЕРИЯ 4» (a streak that can continue) or, once played today, «СЕГОДНЯ 1234 • СЕРИЯ 4». A tap on the capsule starts the daily run, a tap anywhere else an ordinary run; with a window open (shop, leaderboard) the capsule is out of reach. The daily button exists only on START (reached on loading or with «В МЕНЮ» on Game Over); the Game Over screen of a daily run replaces the record lines with the reward capsule (or the title «ЗАБЕГ ДНЯ») and «ЛУЧШИЙ ЗА СЕГОДНЯ». Its buttons below keep their places.
 
 Quests (2026-10-05): the START button «ЗАДАНИЯ n/3» carries a check icon (a green disc) and turns green when all three quests are done. The window is a cream plate like the shop's (title, a quiet line «НОВЫЕ ЗАДАНИЯ ЧЕРЕЗ 5 Ч 12 МИН», three rows, «ЗАКРЫТЬ»): each row has the title (no numbers in it), a quiet «ЗА ДЕНЬ» / «ЗА ОДИН ЗАБЕГ», an amber capsule with a coin and the reward (or a green «ГОТОВО» and a green-tinted row), an outlined progress bar and the numbers («3 / 10», «40 / 75 С», «×1 / ×2»). In a run the capsule «ЗАДАНИЕ ВЫПОЛНЕНО +5» appears under the HUD (below the time-of-day capsule when both show), fades in and out, and on Game Over sits above the card; it is not drawn over the pause screen.
+
+Pause screen (2026-10-19): the cream card (456 px tall) holds the sitting cat, «ПАУЗА», the current score and the best, the big orange «ПРОДОЛЖИТЬ • P» and below it a smaller, lighter «В МЕНЮ» (300 × 52, a quieter colour so it is not hit by accident). After the first tap it turns apricot and says «ЗАВЕРШИТЬ ЗАБЕГ?» for 3 seconds; the second tap leaves to the main menu. The sound row stays under the card.
 
 ## No emoji
 

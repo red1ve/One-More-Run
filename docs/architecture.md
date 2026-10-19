@@ -45,11 +45,11 @@ Full-route reachability propagates valid player-center intervals through every r
 
 ### input/
 
-Keyboard, desktop mouse (left/right half of the canvas), and touch input.
+Keyboard (left/right keys), mouse and touch. A held finger or mouse button is a target point: `Player.steerTo(x)` drives the cat to it at its normal speed (`CONFIG.PLAYER_SPEED`) but never past it, starts only when the finger moves more than `CONFIG.STEER.START_PX` away and stops within `STOP_PX`, so finger tremor does not move the cat. Keys win over finger and mouse. The cat's lean (`Player.lean`) follows its real movement, not the pressed direction. Checks: `scripts/phase1r-check.mjs`.
 
 ### rendering/
 
-Canvas rendering and visual effects.
+Canvas rendering and visual effects. All drawing code works in logical 540 × 960 coordinates; `Game.render` sets `ctx.setTransform(scale…)` from the canvas width every frame, so a canvas with 1.5× or 2× real pixels (`RenderScale.js`) needs no changes in the drawing code. Caches in real pixels (the sky cache in `SkyArt`) and the picture-size choice of `ArtPack` follow `scale`.
 
 Painted art (hedge clumps, trees, planters, gates, bushes, props, pergola, sky) comes from `assets/art-pack/`. The originals stay untouched; `node scripts/art-pack-game.mjs` writes game-sized copies to `assets/art-pack/game/` (WebP plus a PNG/JPG fallback). `rendering/ArtPack.js` checks WebP support once, loads one set, and keeps pre-scaled and mirrored copies so each frame only copies ready images. After replacing or adding a picture, rerun the script and add the file to `ArtPack.js` and to the script's `PLAN`.
 
