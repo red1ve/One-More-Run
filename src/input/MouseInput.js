@@ -1,3 +1,5 @@
+import { CONFIG } from '../config.js';
+
 export class MouseInput {
   constructor(canvas) {
     this.canvas = canvas;
@@ -23,7 +25,7 @@ export class MouseInput {
     if (!Number.isFinite(event?.clientX)) return null;
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width <= 0) return null;
-    return ((event.clientX - rect.left) / rect.width) * this.canvas.width;
+    return ((event.clientX - rect.left) / rect.width) * CONFIG.CANVAS_WIDTH;
   }
 
   onDown(event) {
@@ -59,11 +61,9 @@ export class MouseInput {
     this.suppress = this.buttonsDown > 0;
   }
 
-  getMoveDirection() {
-    if (this.suppress || !this.held || !Number.isFinite(this.logicalX)) return 0;
-    const mid = this.canvas.width / 2;
-    if (this.logicalX < mid - 8) return -1;
-    if (this.logicalX > mid + 8) return 1;
-    return 0;
+  // Пока кнопка зажата — x курсора в логических пикселях (кот едет к нему, как к пальцу), иначе null.
+  getTargetX() {
+    if (this.suppress || !this.held || !Number.isFinite(this.logicalX)) return null;
+    return this.logicalX;
   }
 }

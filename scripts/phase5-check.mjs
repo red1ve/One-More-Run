@@ -1,4 +1,5 @@
 // Фаза 5: кнопки «за рекламу» на экране проигрыша (входит в npm run check).
+import fs from 'node:fs';
 import { CONFIG } from '../src/config.js';
 import { Game } from '../src/game/Game.js';
 import { Player } from '../src/game/Player.js';
@@ -20,7 +21,7 @@ function assert(condition, message = 'assertion failed') {
 const METHODS = [
   'canRevive', 'revive', 'canOfferRevive', 'canOfferDoubleCoins', 'handleTap', 'showRewardedAd',
   'requestRevive', 'requestDoubleCoins', 'gameOverInputLocked', 'tryLaunch', 'setAdPaused',
-  'isGameplayPaused', 'syncGameplayLifecycle', 'start'
+  'isGameplayPaused', 'syncGameplayLifecycle', 'start', 'showNotice', 'updateNotice'
 ];
 
 // Игра на экране проигрыша; реклама отвечает так, как скажет `adResult`.
@@ -74,6 +75,63 @@ await check('closing the ad early gives no revive and keeps Game Over', async ()
   await new Promise((r) => setTimeout(r, 0));
   assert(game.state === 'GAMEOVER' && !game.reviveUsed, 'no reward, no revive');
   assert(game.canOfferRevive(), 'revive can still be offered after a failed ad');
+});
+
+// Баг с телефона (2026-10-19): реклама досмотрена, закрыта, а кот не возрождается. Яндекс присылает «возобновить»
+// (game_api_resume) вокруг onClose; пока флаг паузы платформы не снят, возрождение отказывало, и награда терялась.
+await check('the revive reward is paid even while the platform pause flag is not yet released', async () => {
+  for (const flags of [{ platformPaused: true }, { hidden: true }, { platformPaused: true, hidden: true }]) {
+    const { game } = makeGameOver();
+    game.handleTap(270, 728);
+    Object.assign(game, flags); // «возобновить» ещё не пришло, когда реклама уже закрылась
+    await new Promise((r) => setTimeout(r, 0));
+    assert(game.state === 'PLAYING' && game.reviveUsed, `no revive with ${JSON.stringify(flags)}`);
+    assert(!game.adPaused && !game.rewardPending, 'the ad pause is released');
+    assert(game.isGameplayPaused(), 'the game still waits for the platform to resume (nothing runs yet)');
+  }
+});
+
+await check('an ordinary revive (no ad) is still refused while the game is paused', () => {
+  const { game } = makeGameOver();
+  game.platformPaused = true;
+  assert(!game.canRevive() && game.revive() === false, 'no revive on pause without a reward');
+  assert(game.canRevive({ ignorePause: true }), 'a reward may revive');
+  game.reviveUsed = true;
+  assert(!game.canRevive({ ignorePause: true }), 'but only once per run');
+});
+
+await check('no reward: a short notice tells why (closed early / ad failed), nothing is shown after a reward', async () => {
+  const closedEarly = makeGameOver({ adResult: { attempted: true, rewarded: false } });
+  closedEarly.game.handleTap(270, 728);
+  await new Promise((r) => setTimeout(r, 0));
+  assert(closedEarly.game.notice && closedEarly.game.notice.key === 'over.noReward', 'closed early');
+  assert(closedEarly.game.state === 'GAMEOVER' && closedEarly.game.canOfferRevive(), 'the revive button stays');
+
+  const failed = makeGameOver({ adResult: { attempted: true, rewarded: false, error: new Error('no ad') } });
+  failed.game.handleTap(270, 728);
+  await new Promise((r) => setTimeout(r, 0));
+  assert(failed.game.notice && failed.game.notice.key === 'over.adFailed', 'the ad failed');
+
+  const rewarded = makeGameOver({ adResult: { attempted: true, rewarded: true } });
+  rewarded.game.handleTap(270, 728);
+  await new Promise((r) => setTimeout(r, 0));
+  assert(!rewarded.game.notice, 'no notice after a reward');
+
+  const { game } = closedEarly;
+  game.updateNotice(CONFIG.YANDEX.NOTICE_SECONDS - 0.1);
+  assert(game.notice, 'still on the screen');
+  game.updateNotice(0.2);
+  assert(game.notice === null, 'gone after NOTICE_SECONDS');
+});
+
+await check('the notice strings exist in both languages and the notice is drawn on Game Over', () => {
+  for (const lang of ['ru', 'en']) {
+    const dict = JSON.parse(fs.readFileSync(new URL(`../src/localization/${lang}.json`, import.meta.url), 'utf8'));
+    assert(dict.over.noReward && dict.over.adFailed, `${lang}: notice strings`);
+  }
+  const source = fs.readFileSync(new URL('../src/game/Game.js', import.meta.url), 'utf8');
+  assert(/drawStageToast\(t\(notice\.key\)/.test(source), 'render draws the notice');
+  assert(/this\.updateNotice\?\.\(deltaTime\)/.test(source), 'update ages the notice');
 });
 
 // «×2 монеты» включена вместе с магазином (CONFIG.YANDEX.DOUBLE_COINS_AD, шаг 6б): монеты есть на что

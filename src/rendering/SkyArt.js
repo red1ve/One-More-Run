@@ -15,17 +15,21 @@ export class SkyArt {
     this.height = height;
     this.canvas = null;
     this.horizon = null;
+    // Во сколько раз холст игры чётче логического (RenderScale): запасной холст неба строится в тех же пикселях.
+    this.scale = 1;
+    this.builtScale = 1;
   }
 
   // Холст перестраивается, только если изменился горизонт или догрузилась картинка неба.
   ensure(horizon, strip = null) {
-    if (this.canvas && this.horizon === horizon && this.strip === strip) return this.canvas;
+    if (this.canvas && this.horizon === horizon && this.strip === strip && this.builtScale === this.scale) return this.canvas;
     if (typeof document === 'undefined') return null;
     const canvas = document.createElement('canvas');
-    canvas.width = this.width;
-    canvas.height = Math.ceil(horizon + PAD * 2);
+    canvas.width = Math.ceil(this.width * this.scale);
+    canvas.height = Math.ceil((horizon + PAD * 2) * this.scale);
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
+    ctx.scale(this.scale, this.scale);
     const base = horizon + PAD;
     if (strip) {
       this.paintStrip(ctx, base, strip);
@@ -34,8 +38,9 @@ export class SkyArt {
       ctx.fillRect(0, 0, this.width, base);
     }
     ctx.fillStyle = LAWN_HAZE;
-    ctx.fillRect(0, base, this.width, canvas.height - base);
+    ctx.fillRect(0, base, this.width, canvas.height / this.scale - base);
     this.canvas = canvas;
+    this.builtScale = this.scale;
     this.horizon = horizon;
     this.strip = strip;
     return canvas;
@@ -45,7 +50,7 @@ export class SkyArt {
   draw(ctx, horizon, shift = 0, strip = null) {
     const canvas = this.ensure(horizon, strip);
     if (!canvas) return false;
-    ctx.drawImage(canvas, 0, shift - PAD);
+    ctx.drawImage(canvas, 0, shift - PAD, this.width, canvas.height / this.scale);
     return true;
   }
 

@@ -1,3 +1,5 @@
+import { CONFIG } from '../config.js';
+
 export class TouchInput {
   constructor(canvas) {
     this.canvas = canvas;
@@ -15,7 +17,8 @@ export class TouchInput {
   touchLogicalX(touch) {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width <= 0) return null;
-    return ((touch.clientX - rect.left) / rect.width) * this.canvas.width;
+    // Логические 540 пикселей, а не canvas.width: у холста теперь может быть больше пикселей (RenderScale).
+    return ((touch.clientX - rect.left) / rect.width) * CONFIG.CANVAS_WIDTH;
   }
 
   handleTouch(e) {

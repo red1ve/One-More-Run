@@ -1,14 +1,21 @@
 import { CONFIG } from '../config.js';
 
 // Газон по бокам от изгороди, как на референсе: сплошной сочный GardenLawn без дымки,
-// мягкие пятна потемнее и посветлее, мелкие пучки травы. Пятна и пучки
-// привязаны к миру (едут вместе с дорогой) и уменьшаются по перспективе.
+// мягкие пятна потемнее и посветлее, мелкие пучки травы. Пятна и пучки привязаны к миру:
+// у каждого есть номер ряда вдоль дороги и отступ от изгороди В ШИРИНАХ ДОРОГИ (как у деревьев
+// и кустов в SideDecorArt), поэтому они летят от центра по прямой вместе с ними, а не «плывут».
+// (Раньше отступ считался долей оставшегося до края экрана: край и дорога расходятся по-разному,
+// и пятна ползли вбок медленнее деревьев.)
 
 // Палитра из docs/visual-bible.md §6 (2026-09).
 const LAWN = '#B4C05A'; // GardenLawn
 const LAWN_SHADE = '#9EB455'; // LawnShade
 const LAWN_LIGHT = '#BEC96A'; // LawnLight
 const TUFT = '#94A74F'; // LawnTuft
+
+// Внутри полосы предметы жмутся к изгороди (степень больше 1): у самой изгороди газона видно больше всего,
+// а дальше от дороги он заслонён деревьями; без этого вблизи, где видна узкая полоска, пятен было бы мало.
+const NEAR_BIAS = 1.8;
 
 function hash(n) {
   const x = Math.sin(n * 91.7 + 47.3) * 43758.5453;
@@ -43,10 +50,19 @@ export class LawnArt {
     ctx.restore();
   }
 
+  // Ряд k лежит на мировой линии k * period + progress и едет вместе с дорогой. Вдоль ряда газон
+  // нарезан на полосы шириной SLOT_WIDTH ширин дороги, считая от изгороди; в каждой полосе по
+  // номеру (k, сторона, полоса) решается, есть ли пятно и пучок и где именно (в долях полосы).
+  // От кадра и соседей ничего не зависит, так что один и тот же предмет в каждом кадре на своём
+  // месте. Полос столько, сколько влезает до края экрана; вдали, где дорога узкая, их больше.
+  // Предмет — ключ места: patches (x, y, rx, ry, светлое, ключ), tufts (x, y, высота, ключ).
   collect(progress) {
     const art = this.art;
     const cfg = CONFIG.VISUAL.LAWN || {};
     const period = cfg.PATCH_PERIOD ?? 34;
+    const slotWidth = cfg.SLOT_WIDTH ?? 0.9;
+    const maxSlots = cfg.MAX_SLOTS ?? 10;
+    const tuftsPerSlot = cfg.TUFTS_PER_SLOT ?? 3;
     const patches = this.patches;
     const tufts = this.tufts;
     patches.length = 0;
@@ -59,19 +75,33 @@ export class LawnArt {
       if (p.drawY < art.horizonY() + 4 || prevY - p.drawY < 1.2) break;
       prevY = p.drawY;
       const s = p.scale;
+      const slotPx = slotWidth * p.roadWidth;
       for (const side of [-1, 1]) {
         const outer = this.hedgeOuter(p, side);
         const room = side < 0 ? outer : art.width - outer;
         if (room < 6) continue;
-        const seed = k * 5.9 + side * 2.3;
-        const x = outer + side * (8 * s + hash(seed) * room);
-        if (hash(seed + 1) < (cfg.PATCH_CHANCE ?? 0.34)) {
-          patches.push(x, p.drawY, (30 + hash(seed + 2) * 34) * s, (8 + hash(seed + 3) * 6) * s,
-            hash(seed + 4) < 0.88 ? 0 : 1);
-        }
-        if (s > 0.5 && hash(seed + 5) < (cfg.TUFT_CHANCE ?? 0.8)) {
-          const tx = outer + side * (6 * s + hash(seed + 6) * room);
-          tufts.push(tx, p.drawY + hash(seed + 7) * period * 0.5 * s, 6 * s);
+        const slots = Math.min(maxSlots, Math.ceil(room / slotPx));
+        for (let j = 0; j < slots; j += 1) {
+          const seed = k * 5.9 + side * 2.3 + j * 31.7;
+          const key = (k * 2 + (side < 0 ? 0 : 1)) * 16 + j;
+          if (hash(seed + 1) < (cfg.PATCH_CHANCE ?? 0.34)) {
+            const x = outer + side * (8 * s + (j + hash(seed) ** NEAR_BIAS) * slotPx);
+            if (x > -80 * s && x < art.width + 80 * s) {
+              patches.push(x, p.drawY, (30 + hash(seed + 2) * 34) * s, (8 + hash(seed + 3) * 6) * s,
+                hash(seed + 4) < 0.88 ? 0 : 1, key);
+            }
+          }
+          if (s <= 0.5) continue;
+          for (let n = 0; n < tuftsPerSlot; n += 1) {
+            const tseed = seed + 5 + n * 11.9;
+            if (hash(tseed) >= (cfg.TUFT_CHANCE ?? 0.55)) continue;
+            // Сдвиг пучка по глубине задан в мире, как у деревьев: он едет вместе с рядом, а размер,
+            // отступ от изгороди и ширина дороги считаются на его собственной глубине (q).
+            const q = art.roadAt(k * period + progress + hash(tseed + 1) * period * 0.5);
+            const qOuter = this.hedgeOuter(q, side);
+            const tx = qOuter + side * (6 * q.scale + (j + hash(tseed + 2) ** NEAR_BIAS) * slotWidth * q.roadWidth);
+            if (tx > 0 && tx < art.width) tufts.push(tx, q.drawY, 6 * q.scale, key * 4 + n);
+          }
         }
       }
     }
@@ -82,7 +112,7 @@ export class LawnArt {
     for (const light of [0, 1]) {
       ctx.fillStyle = light ? LAWN_LIGHT : LAWN_SHADE;
       ctx.beginPath();
-      for (let i = 0; i < p.length; i += 5) {
+      for (let i = 0; i < p.length; i += 6) {
         if (p[i + 4] !== light) continue;
         // Два наложенных овала дают неровную мягкую кляксу, а не «лужу».
         const rx = p[i + 2];
@@ -103,7 +133,7 @@ export class LawnArt {
     ctx.lineCap = 'round';
     ctx.lineWidth = 1.3;
     ctx.beginPath();
-    for (let i = 0; i < t.length; i += 3) {
+    for (let i = 0; i < t.length; i += 4) {
       const x = t[i];
       const y = t[i + 1];
       const h = t[i + 2];

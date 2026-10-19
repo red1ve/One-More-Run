@@ -82,6 +82,32 @@ check('frames: silhouette, tail, feet and ears are found in all four run frames'
   });
 });
 
+check('frames: forehead stripes are never taken for ears (the left one used to turn dark in one frame of the Siamese)', () => {
+  FRAMES.forEach((svg, i) => {
+    const paths = readPaths(svg);
+    // Верх головы: крупные контуры полос — уши (их ровно два), мелкие — полоски лба.
+    const top = paths.filter((p) => p.role === 'stripe' && p.box.cy < 262 && p.part !== 'whole');
+    const ears = top.filter((p) => p.part === 'ear');
+    const foreheads = top.filter((p) => p.part === 'head');
+    assert(ears.length === 2, `frame ${i + 1}: ${ears.length} ears`);
+    assert(ears.every((p) => p.box.area >= 2500), `frame ${i + 1}: a small shape is taken for an ear`);
+    assert(foreheads.length >= 2 && foreheads.every((p) => p.box.area < 2500), `frame ${i + 1}: forehead stripes ${foreheads.map((p) => Math.round(p.box.area))}`);
+    // Сиамский: ни одна полоска лба не тёмная (тёмные только уши, хвост и лапы).
+    const siamese = readPaths(skinSvg(svg, 'siamese'));
+    paths.forEach((p, k) => {
+      if (p.part !== 'head' || p.role !== 'stripe') return;
+      const lightness = hslLightness(siamese[k].fill);
+      assert(lightness > 0.6, `frame ${i + 1}: forehead stripe ${k} is ${siamese[k].fill} on the Siamese`);
+    });
+  });
+});
+
+function hslLightness(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const channels = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => v / 255);
+  return (Math.max(...channels) + Math.min(...channels)) / 2;
+}
+
 check('frames: role of a fill by colour (cream, shade, stripe, pad, outline)', () => {
   assert(roleOf('#eedac6') === 'body' && roleOf('#ceaa95') === 'shade', 'body / shade');
   assert(roleOf('#d8a582') === 'stripe' && roleOf('#bc825f') === 'tan', 'stripe / tan');
@@ -90,8 +116,9 @@ check('frames: role of a fill by colour (cream, shade, stripe, pad, outline)', (
 
 // ---- (б) каждый скин на каждом кадре
 
-check('skins: the list has the 8 agreed skins, classic first and unchanged', () => {
-  assert(SKINS.map((s) => s.id).join() === 'classic,ginger,tuxedo,calico,siamese,honey,snow,ribbon', `ids: ${SKINS.map((s) => s.id)}`);
+check('skins: the list has the 9 agreed skins (8 and the limited Halloween last), classic first and unchanged', () => {
+  assert(SKINS.map((s) => s.id).join() === 'classic,ginger,tuxedo,calico,siamese,honey,snow,ribbon,halloween', `ids: ${SKINS.map((s) => s.id)}`);
+  assert(SKINS.filter((s) => s.seasonal).map((s) => s.id).join() === 'halloween', 'only the Halloween skin is seasonal');
   assert(new Set(SKINS.map((s) => s.id)).size === SKINS.length, 'duplicate ids');
   FRAMES.forEach((svg) => assert(skinSvg(svg, 'classic') === svg, 'classic must return the frame untouched'));
   assert(skinSvg(FRAMES[0], 'no-such-skin') === FRAMES[0], 'an unknown skin must return the frame untouched');
@@ -128,7 +155,8 @@ check('colours: natural cat colours only — no black, no white, no neon, hues b
       const { h, s, l } = hsl(color);
       assert(l > 0.18 && l < 0.97, `${skin.id}: ${color} is too dark or too light (L ${l.toFixed(2)})`);
       assert(s <= 0.8, `${skin.id}: ${color} is too saturated (S ${s.toFixed(2)})`);
-      assert(h < 60 || h > 335 || s < 0.12, `${skin.id}: ${color} has an unnatural hue (${h.toFixed(0)}°)`);
+      // Сезонный скин (Хэллоуин: тёмно-фиолетовый кот) вправе иметь не «кошачий» оттенок; остальное для него в силе.
+      if (!skin.seasonal) assert(h < 60 || h > 335 || s < 0.12, `${skin.id}: ${color} has an unnatural hue (${h.toFixed(0)}°)`);
     }
   }
   assert(mix('#000000', '#ffffff', 0.5) === '#808080', 'mix() must blend channels');

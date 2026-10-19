@@ -86,8 +86,9 @@ await check('reward: 5, 7, 9, 11, 13, 15 and then 15; never more than the maximu
   assert(rewards.join() === '5,7,9,11,13,15,15,15,15', `rewards ${rewards}`);
   for (const bad of [0, -3, NaN, undefined, 'x']) assert(dailyReward(bad) === CONFIG.DAILY.REWARD_BASE, `dailyReward(${String(bad)}) must be the base`);
   assert(rewards.slice(0, 7).reduce((a, b) => a + b, 0) === 75, 'a week of streak pays 75');
-  assert(dailyReward(1) + dailyReward(2) >= CONFIG.SHOP.SKINS[1].price, 'two daily runs pay for the first skin');
-  assert(dailyReward(1) < CONFIG.SHOP.SKINS[1].price, 'one daily run alone does not buy the first skin: the streak matters');
+  // С 2026-10-19 первый скин стоит 16 (монет стало вдвое больше): три дня серии (5 + 7 + 9) его оплачивают.
+  assert(dailyReward(1) + dailyReward(2) + dailyReward(3) >= CONFIG.SHOP.SKINS[1].price, 'three daily runs pay for the first skin');
+  assert(dailyReward(1) + dailyReward(2) < CONFIG.SHOP.SKINS[1].price, 'two daily runs alone do not buy the first skin: the streak matters');
 });
 
 // ---- (в) серия

@@ -16,6 +16,7 @@ import { timeOfDay } from './TimeOfDay.js';
 import { Shop } from './Shop.js';
 import { Daily, dailySeed, gameDay, msUntilNextDay } from './Daily.js';
 import { Quests } from './Quests.js';
+import { FrameGovernor, lowerScale, pickRenderScale } from '../rendering/RenderScale.js';
 
 export class Game {
   constructor(canvas, platformService = null) {
@@ -51,16 +52,19 @@ export class Game {
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
     this.coins = this.storage.getCoins();
-    this.shop = new Shop(this.storage);
+    this.shop = new Shop(this.storage, () => this.todayKey());
     this.shopWindow = null; // null — закрыт; иначе { message } (подсказка «не хватает монет»)
     this.daily = new Daily(this.storage);
     this.dailyRun = false; // идущий (или только что закончившийся) забег — забег дня
     this.dailyPending = false; // игрок нажал «забег дня»: следующий start() запустит его
     this.dailyResult = null; // итог забега дня для экрана проигрыша: { reward, streak, best, first }
     this.clockOffset = 0; // серверное время минус время устройства (миллисекунды), см. syncClock
+    this.frameGovernor = new FrameGovernor(); // следит за кадрами: слабому телефону масштаб холста снижается (RenderScale)
+    this.shop.ensureFirstDay?.(); // с этого дня идут дни ограниченного скина
     this.quests = new Quests(this.storage);
     this.questsWindow = null; // null — закрыто; иначе {} (окно заданий дня на стартовом экране)
     this.questToasts = []; // плашки «задание выполнено» по очереди: [{ reward, age }]
+    this.notice = null; // короткая надпись на экране проигрыша (например, «награды нет»): { key, age }
     this.questWatch = []; // задания «за один забег», за которыми следим в забеге: [{ kind, target }]
     this.runMaxMultiplier = CONFIG.MULTIPLIER_START; // наибольший множитель забега (для задания про множитель)
     this.questRunCounted = false; // этот забег уже посчитан для «сыграй забеги» (возрождение не считается дважды)
@@ -79,6 +83,7 @@ export class Game {
     this.platformPaused = false;
     this.adPaused = false;
     this.userPaused = false; // игрок поставил забег на паузу кнопкой, P или Esc
+    this.pauseMenuAskUntil = 0; // до какого момента (performance.now) «В МЕНЮ» на паузе ждёт второго нажатия
     this.launchPending = false;
     this.adFinished = false;
     this.stageKey = 0; // этап суток забега (TimeOfDay.key): меняется — показываем плашку
@@ -138,6 +143,7 @@ export class Game {
   pause() {
     if (this.state !== 'PLAYING' || this.userPaused) return false;
     this.userPaused = true;
+    this.pauseMenuAskUntil = 0;
     this.haptics?.stop();
     // Палец или клавиша, зажатые в момент паузы, не должны рулить котом после возврата.
     this.keyboardInput?.reset?.();
@@ -150,6 +156,7 @@ export class Game {
   resume() {
     if (!this.userPaused) return false;
     this.userPaused = false;
+    this.pauseMenuAskUntil = 0;
     this.keyboardInput?.reset?.();
     this.mouseInput?.reset?.();
     this.touchInput?.reset?.();
@@ -160,6 +167,36 @@ export class Game {
 
   togglePause() {
     return this.userPaused ? this.resume() : this.pause();
+  }
+
+  // «В МЕНЮ» на экране паузы: забег начат случайно (или хочется в магазин), а до этого выйти можно было только
+  // проиграв. Нажатие защищено от случайного: первое спрашивает «завершить забег?», второе в течение
+  // CONFIG.PAUSE_MENU_CONFIRM_MS выходит. true — нажатие обработано.
+  menuFromPause() {
+    if (this.state !== 'PLAYING' || !this.userPaused) return false;
+    const now = performance.now();
+    if (!(this.pauseMenuAskUntil > now)) {
+      this.pauseMenuAskUntil = now + CONFIG.PAUSE_MENU_CONFIRM_MS;
+      return true;
+    }
+    this.pauseMenuAskUntil = 0;
+    return this.quitToMenu();
+  }
+
+  // Ждёт ли кнопка «В МЕНЮ» второго нажатия (для рисования).
+  pauseMenuAsking() {
+    return this.state === 'PLAYING' && !!this.userPaused && this.pauseMenuAskUntil > performance.now();
+  }
+
+  // Завершает забег как обычный проигрыш (счёт, рекорд, задания, облако, счётчик рекламы), но без экрана проигрыша,
+  // звука поражения и просьбы об оценке, и открывает главное меню. Следующий забег из меню идёт по тем же правилам
+  // рекламы, что и после «В МЕНЮ» с экрана проигрыша (fromMenu).
+  quitToMenu() {
+    if (this.state !== 'PLAYING') return false;
+    this.userPaused = false;
+    this.pauseMenuAskUntil = 0;
+    this.gameOver({ quiet: true });
+    return this.openMenu();
   }
 
   syncGameplayLifecycle() {
@@ -269,6 +306,7 @@ export class Game {
     this.stageToast = null;
     // Задания дня: плашки прошлого забега гаснут, за заданиями «за один забег» следим с нуля.
     this.questToasts = [];
+    this.notice = null;
     this.questWatch = this.quests ? this.quests.watch(this.todayKey()) : [];
     this.runMaxMultiplier = CONFIG.MULTIPLIER_START;
     this.questRunCounted = false;
@@ -300,11 +338,53 @@ export class Game {
     }
   }
 
+  // ---- чёткость холста (RenderScale.js)
+
+  // Сколько настоящих пикселей приходится на логический (холст 540 × 960): 1, 1.5 или 2.
+  renderScale() {
+    const width = this.canvas?.width;
+    return width > 0 ? width / CONFIG.CANVAS_WIDTH : 1;
+  }
+
+  // Меняет размер холста под масштаб. Рисование остаётся в логических координатах: Game.render ставит
+  // преобразование каждый кадр. true — размер изменился.
+  applyRenderScale(scale) {
+    const width = Math.round(CONFIG.CANVAS_WIDTH * scale);
+    const height = Math.round(CONFIG.CANVAS_HEIGHT * scale);
+    if (!this.canvas || (this.canvas.width === width && this.canvas.height === height)) return false;
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.frameGovernor?.reset();
+    this.requestRender?.();
+    return true;
+  }
+
+  // Подбирает масштаб по экрану: cssWidth — ширина холста на экране в CSS-пикселях, devicePixelRatio —
+  // плотность экрана. Слабому телефону игра уже снижала масштаб и запомнила его (renderScaleCap): выше не идём.
+  // override — принудительный масштаб (только в разработке, адрес ?scale=).
+  initRenderScale({ cssWidth, devicePixelRatio = 1, override = null } = {}) {
+    const stored = Number(this.storage?.get?.('renderScaleCap', CONFIG.RENDER.MAX_SCALE));
+    const cap = Number.isFinite(stored) && stored >= 1 ? Math.min(stored, CONFIG.RENDER.MAX_SCALE) : CONFIG.RENDER.MAX_SCALE;
+    const scale = override > 0 ? override : pickRenderScale({ cssWidth, devicePixelRatio, cap });
+    return this.applyRenderScale(scale);
+  }
+
+  // Кадры идут медленно: масштаб на ступень ниже, и игра это запоминает (в следующий раз начнёт с него).
+  downgradeRenderScale() {
+    const next = lowerScale(this.renderScale());
+    if (next >= this.renderScale()) return false;
+    this.storage?.set?.('renderScaleCap', next);
+    return this.applyRenderScale(next);
+  }
+
   loop(timestamp) {
     if (!this.isRunning) return;
 
     const deltaTime = (timestamp - this.lastTime) / 1000;
     const cappedDeltaTime = Math.min(deltaTime, 0.1);
+    // Устойчиво медленные кадры в идущем забеге (не пауза, не первые секунды) снижают масштаб холста.
+    const playing = this.state === 'PLAYING' && !this.isGameplayPaused() && this.runTime > 2;
+    if (this.frameGovernor?.observe(deltaTime * 1000, playing)) this.downgradeRenderScale();
     this.lastTime = timestamp;
 
     this.update(cappedDeltaTime);
@@ -320,6 +400,7 @@ export class Game {
       this.feel.update(deltaTime, this.currentSpeed);
       this.updateFloating(deltaTime);
       this.updateQuestToast?.(deltaTime);
+      this.updateNotice?.(deltaTime);
       return;
     }
 
@@ -329,20 +410,12 @@ export class Game {
     if (this.keyboardInput.isLeftPressed()) moveDirection = -1;
     else if (this.keyboardInput.isRightPressed()) moveDirection = 1;
 
-    if (moveDirection === 0) {
-      moveDirection = this.mouseInput?.getMoveDirection?.() || 0;
-    }
-
-    if (moveDirection === 0) {
-      const touchX = this.touchInput.getTouchX();
-      if (touchX !== null) {
-        const deadZone = 10;
-        const distance = touchX - this.player.x;
-        if (Math.abs(distance) > deadZone) moveDirection = Math.sign(distance);
-      }
-    }
+    // Мышь и палец: кот едет к точке нажатия (Player.steerTo). Клавиатура главнее.
+    let targetX = this.mouseInput?.getTargetX?.() ?? null;
+    if (targetX === null) targetX = this.touchInput.getTouchX();
 
     this.player.setMoveDirection(moveDirection);
+    this.player.steerTo?.(targetX);
 
     // Защита от «проскоков»: если за кадр мир или кот сдвигаются больше чем на
     // SUBSTEP_MAX_PX (лаг, слабый телефон), кадр делится на мелкие шаги и
@@ -600,6 +673,7 @@ export class Game {
     this.currentSpeed = CONFIG.TRACK_SPEED_START;
     this.floatingRewards = [];
     this.questToasts = [];
+    this.notice = null;
     this.stageToast = null;
     this.dailyRun = false;
     this.dailyResult = null;
@@ -694,6 +768,13 @@ export class Game {
   }
 
   // Что нарисовать в окне магазина.
+  // Ближайший скин для строки на экране проигрыша: { name, price, balance, ready } или null.
+  nextSkinView() {
+    const target = this.shop?.nextTarget?.();
+    if (!target) return null;
+    return { name: t(`skin.${target.id}`), price: target.price, balance: target.balance, ready: target.missing === 0 };
+  }
+
   shopView() {
     return { skins: this.shop.list(), balance: this.shop.balance(), message: this.shopWindow?.message || null };
   }
@@ -715,6 +796,7 @@ export class Game {
       changed = this.shop.select(id);
     } else {
       const result = this.shop.buy(id);
+      if (!result.ok && result.reason === 'unavailable') return false;
       if (!result.ok) {
         if (result.reason === 'poor') {
           this.showShopMessage(t('shop.missing', { n: result.missing }));
@@ -894,6 +976,7 @@ export class Game {
     if (this.state === 'PLAYING') {
       if (this.userPaused) {
         if (this.renderer?.hitResumeButton?.(x, y)) this.resume();
+        else if (this.renderer?.hitPauseMenuButton?.(x, y)) this.menuFromPause();
       } else if (this.renderer?.hitPauseButton?.(x, y)) {
         this.pause();
       }
@@ -909,22 +992,39 @@ export class Game {
   }
 
   // Показ рекламы за награду: игра и звук на паузе, награда — только после onRewarded.
+  // Если награды нет, игрок видит короткую надпись (раньше после закрытия рекламы не происходило ничего).
   showRewardedAd(onRewarded) {
     this.rewardPending = true;
     this.setAdPaused(true);
     return Promise.resolve(this.platform.showRewarded())
-      .catch(() => ({ attempted: true, rewarded: false }))
+      .catch((error) => ({ attempted: true, rewarded: false, error }))
       .then((result) => {
         this.rewardPending = false;
         this.setAdPaused(false);
         if (result?.rewarded) onRewarded();
+        else if (result?.attempted) this.showNotice(result.error ? 'over.adFailed' : 'over.noReward');
         return !!result?.rewarded;
       });
   }
 
+  // Надпись на экране проигрыша: ключ строки и возраст в секундах (живёт CONFIG.YANDEX.NOTICE_SECONDS).
+  showNotice(key) {
+    this.notice = { key, age: 0 };
+  }
+
+  updateNotice(deltaTime) {
+    if (!this.notice) return;
+    this.notice.age += deltaTime;
+    if (this.notice.age >= CONFIG.YANDEX.NOTICE_SECONDS) this.notice = null;
+  }
+
+  // Возрождение за рекламу не должно зависеть от того, снят ли уже флаг паузы платформы: Яндекс присылает
+  // «возобновить» (game_api_resume) вокруг onClose, и до этого игра считала себя на паузе и отказывала в
+  // возрождении, хотя реклама была досмотрена (на телефоне «ничего не происходило»). Игра сама стоит, пока
+  // пауза не снимется (update ничего не делает), так что возродить можно сразу.
   requestRevive() {
     if (!this.canOfferRevive()) return false;
-    this.showRewardedAd(() => this.revive());
+    this.showRewardedAd(() => this.revive({ ignorePause: true }));
     return true;
   }
 
@@ -940,17 +1040,17 @@ export class Game {
 
   // Возрождение: один раз за забег, только с экрана проигрыша.
   // Счёт продолжается, серия и множитель уже сброшены проигрышем.
-  canRevive() {
-    // Не во время рекламы/паузы и не когда уже запрошен рестарт (иначе рестарт
-    // после следующей смерти заблокируется).
+  canRevive({ ignorePause = false } = {}) {
+    // Не во время рекламы/паузы (кроме выдачи награды, ignorePause) и не когда уже запрошен рестарт
+    // (иначе рестарт после следующей смерти заблокируется).
     return this.state === 'GAMEOVER'
       && !this.reviveUsed
       && !this.launchPending
-      && !this.isGameplayPaused?.();
+      && (ignorePause || !this.isGameplayPaused?.());
   }
 
-  revive() {
-    if (!this.canRevive()) return false;
+  revive({ ignorePause = false } = {}) {
+    if (!this.canRevive({ ignorePause })) return false;
     this.reviveUsed = true;
     this.track.clearAhead(this.player.y, CONFIG.REVIVE_CLEAR_AHEAD);
     this.invulnerableTime = CONFIG.REVIVE_INVULNERABLE_SECONDS;
@@ -1125,7 +1225,8 @@ export class Game {
     this.recordQuest?.('coins', gained);
   }
 
-  gameOver() {
+  // quiet — выход в меню с паузы: те же итоги забега, но без эффектов поражения и просьбы об оценке.
+  gameOver({ quiet = false } = {}) {
     this.state = 'GAMEOVER';
     const totalScore = Math.floor(this.distanceScore + this.pathReward);
     const previousBest = this.bestScore || 0;
@@ -1144,10 +1245,10 @@ export class Game {
     if (!this.reviveUsed) this.platform?.recordRunCompleted?.();
     // Рекорд, монеты и подсказки уходят в облако Яндекса (платформа сама ограничивает частоту).
     this.platform?.saveCloudData?.(this.cloudSnapshot());
-    this.maybeAskForReview?.();
+    if (!quiet) this.maybeAskForReview?.();
     this.syncGameplayLifecycle?.();
-    this.feel?.onGameOver(this.player.x, this.player.y);
-    if (this.isNewBest) this.feel?.onNewBest?.(this.player.x, this.player.y);
+    if (!quiet) this.feel?.onGameOver(this.player.x, this.player.y);
+    if (this.isNewBest && !quiet) this.feel?.onNewBest?.(this.player.x, this.player.y);
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
     console.log('Game Over! Score:', totalScore);
@@ -1160,6 +1261,11 @@ export class Game {
   render() {
     const camera = this.camera;
     const time = this.feel?.time || 0;
+
+    // Рисуем в логических 540 × 960; настоящих пикселей на холсте может быть вдвое больше (RenderScale).
+    const scale = this.renderScale?.() || 1;
+    this.ctx?.setTransform?.(scale, 0, 0, scale, 0, 0);
+    this.renderer.setScale?.(scale);
 
     this.renderer.clear();
     this.renderer.drawBackdrop(time);
@@ -1208,7 +1314,8 @@ export class Game {
         Math.floor(this.score),
         this.bestScore,
         this.audio?.muted,
-        this.audio?.volume
+        this.audio?.volume,
+        { menuAsk: this.pauseMenuAsking?.() }
       );
     } else if (this.state === 'GAMEOVER') {
       this.renderer.drawGameOver(
@@ -1224,6 +1331,7 @@ export class Game {
           offerDouble: this.canOfferDoubleCoins(),
           runCoins: this.runCoins || 0,
           coinsDoubled: !!this.coinsDoubled,
+          nextSkin: this.nextSkinView(),
           daily: this.dailyRun ? this.dailyResult : null,
           leaderboard: this.canShowLeaderboard(),
           menu: true
@@ -1239,12 +1347,21 @@ export class Game {
       });
     }
 
+    // Надпись «награды нет»: на экране проигрыша выше карточки (плашка задания, если она есть, уходит выше).
+    const notice = this.notice;
+    if (notice && this.state === 'GAMEOVER') {
+      const life = CONFIG.YANDEX.NOTICE_SECONDS;
+      const alpha = Math.min(1, notice.age / 0.2, (life - notice.age) / 0.4);
+      this.renderer.drawStageToast(t(notice.key), alpha, 124);
+    }
+
     // Плашка «задание выполнено»: в забеге под плашкой времени суток, на экране проигрыша выше карточки.
     const questToast = this.questToasts?.[0];
     if (questToast && (this.state === 'GAMEOVER' || (this.state === 'PLAYING' && !this.userPaused))) {
       const life = CONFIG.QUESTS.TOAST_SECONDS;
       const alpha = Math.min(1, questToast.age / 0.25, (life - questToast.age) / 0.5);
-      this.renderer.drawStageToast(t('quest.toast', { n: questToast.reward }), alpha, this.state === 'PLAYING' ? 176 : 124);
+      const top = this.state === 'PLAYING' ? 176 : (notice ? 76 : 124);
+      this.renderer.drawStageToast(t('quest.toast', { n: questToast.reward }), alpha, top);
     }
 
     // Окна магазина, заданий и таблицы лидеров лежат поверх любого экрана.

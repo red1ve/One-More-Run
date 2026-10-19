@@ -35,7 +35,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // ?tod=200 — время суток начинается с 200-й секунды цикла (ночь), чтобы посмотреть этап, не играя 3 минуты.
     const todParam = new URLSearchParams(window.location.search).get('tod');
     if (todParam !== null && Number.isFinite(Number(todParam))) game.todOffset = Number(todParam);
-    // ?start=100 — забег начинается со 100-й секунды: сразу высокая скорость и качающееся кашпо (от 90 с).
+    // ?start=100 — забег начинается со 100-й секунды: сразу высокая скорость и качающееся кашпо (от 45 с).
     const startParam = new URLSearchParams(window.location.search).get('start');
     if (startParam !== null && Number.isFinite(Number(startParam))) game.devStartTime = Math.max(0, Number(startParam));
     // ?day=2026-10-06 — «сегодня» для забега дня (чтобы проверить смену дней и серию, не ждав полуночи).
@@ -46,6 +46,16 @@ window.addEventListener('DOMContentLoaded', () => {
     if (skinParam) game.renderer?.setSkin?.(skinParam);
     window.__omrGame = game;
   }
+  // Чёткость на телефонах: холст получает до двух настоящих пикселей на логический (RenderScale.js). Только в
+  // разработке: ?scale=1 или ?scale=2 принудительно, чтобы сравнить.
+  const scaleParam = import.meta.env?.DEV ? Number(new URLSearchParams(window.location.search).get('scale')) : NaN;
+  const refreshRenderScale = () => game.initRenderScale({
+    cssWidth: canvas.getBoundingClientRect().width,
+    devicePixelRatio: window.devicePixelRatio || 1,
+    override: Number.isFinite(scaleParam) && scaleParam > 0 ? scaleParam : null
+  });
+  refreshRenderScale();
+  window.addEventListener('resize', refreshRenderScale);
   const gameArea = canvas.closest('#game-container') || canvas;
   game.setHidden(document.visibilityState === 'hidden');
 
@@ -58,8 +68,9 @@ window.addEventListener('DOMContentLoaded', () => {
     game.unlockAudio();
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return game.tryLaunch();
-    const x = ((clientX - rect.left) / rect.width) * canvas.width;
-    const y = ((clientY - rect.top) / rect.height) * canvas.height;
+    // Логические координаты (540 × 960), а не пиксели холста: их число зависит от масштаба (RenderScale).
+    const x = ((clientX - rect.left) / rect.width) * CONFIG.CANVAS_WIDTH;
+    const y = ((clientY - rect.top) / rect.height) * CONFIG.CANVAS_HEIGHT;
     return game.handleTap(x, y);
   };
 

@@ -40,6 +40,8 @@
     "selected": "WEARING",
     "owned": "OWNED",
     "missing": "{n} MORE COINS NEEDED",
+    "limited": "{n} DAYS LEFT",
+    "limitedLast": "LAST DAY",
     "close": "CLOSE"
   },
   "daily": {
@@ -83,7 +85,8 @@
     "tuxedo": "TUXEDO",
     "siamese": "SIAMESE",
     "calico": "CALICO",
-    "ribbon": "RIBBON"
+    "ribbon": "RIBBON",
+    "halloween": "HALLOWEEN"
   },
   "stage": {
     "day": "DAY",
@@ -94,7 +97,9 @@
   },
   "pause": {
     "title": "PAUSE",
-    "resume": "RESUME  •  P"
+    "resume": "RESUME  •  P",
+    "menu": "MENU",
+    "menuAsk": "END THE RUN?"
   },
   "over": {
     "title": "GAME OVER",
@@ -105,7 +110,11 @@
     "coins": "COINS {n}  •  SAVED",
     "restart": "TAP / R TO RESTART",
     "revive": "CONTINUE • AD",
-    "double": "x2 COINS • AD"
+    "double": "x2 COINS • AD",
+    "skinGoal": "{name} SKIN  {c} / {p}",
+    "skinReady": "{name} SKIN IS READY TO BUY",
+    "noReward": "WATCH THE AD TO THE END",
+    "adFailed": "NO AD AVAILABLE RIGHT NOW"
   },
   "hud": {
     "best": "BEST {n}",

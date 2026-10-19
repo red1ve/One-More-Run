@@ -1420,18 +1420,19 @@ check('Coin feedback stays below SAFE and RISK', () => {
   assert(CONFIG.FEEL.INTENSITY_SAFE < CONFIG.FEEL.INTENSITY_RISK);
 });
 
-check('mouse strafe uses canvas halves, not follow', () => {
+check('mouse follows the cursor while the button is held (no canvas halves)', () => {
   const mouse = Object.create(MouseInput.prototype);
   mouse.canvas = { width: 540 };
   mouse.held = true;
   mouse.logicalX = 40;
-  assert(MouseInput.prototype.getMoveDirection.call(mouse) === -1);
-  mouse.logicalX = 500;
-  assert(MouseInput.prototype.getMoveDirection.call(mouse) === 1);
+  assert(MouseInput.prototype.getTargetX.call(mouse) === 40);
   mouse.logicalX = 270;
-  assert(MouseInput.prototype.getMoveDirection.call(mouse) === 0);
+  assert(MouseInput.prototype.getTargetX.call(mouse) === 270, 'the centre is a normal target, not a dead spot');
   mouse.held = false;
-  assert(MouseInput.prototype.getMoveDirection.call(mouse) === 0);
+  assert(MouseInput.prototype.getTargetX.call(mouse) === null);
+  mouse.held = true;
+  mouse.suppress = true;
+  assert(MouseInput.prototype.getTargetX.call(mouse) === null, 'a suppressed press must not steer');
 });
 
 check('Audio mute and hidden tab do not play SFX', () => {

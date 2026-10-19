@@ -64,8 +64,10 @@ export class VariationDirector {
       choiceProb = 0.55 + 0.28 * t;
     }
 
-    if (breathingSinceChoice >= 5) choiceProb = Math.max(choiceProb, late ? 0.62 : 0.72);
-    if (breathingSinceChoice >= 7) choiceProb = Math.max(choiceProb, late ? 0.78 : 0.9);
+    // Порог в участках не короче по времени, чем при скорости CHOICE_PACE_SPEED (см. config.js).
+    const pace = Math.max(1, speed / CONFIG.CHOICE_PACE_SPEED);
+    if (breathingSinceChoice >= 5 * pace) choiceProb = Math.max(choiceProb, late ? 0.62 : 0.72);
+    if (breathingSinceChoice >= 7 * pace) choiceProb = Math.max(choiceProb, late ? 0.78 : 0.9);
     if (this.dualBlocked && breathingSinceChoice < 3) choiceProb *= 0.55;
 
     if (this.random() >= choiceProb) return 'NORMAL';

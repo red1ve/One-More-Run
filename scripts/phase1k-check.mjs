@@ -32,20 +32,24 @@ const sameLook = (a, b, eps = 1e-9) => a.tint.every((value, i) => close(value, b
   && a.glow.color.every((value, i) => close(value, b.glow.color[i], eps)) && close(a.glow.alpha, b.glow.alpha, eps)
   && close(a.vignette, b.vignette, eps) && close(a.fireflies, b.fireflies, eps);
 const stageLook = (name) => TOD.STAGES.find((stage) => stage.name === name).look;
+// Момент, когда ночь уже полностью наступила (после перехода и с запасом): светлячки все на месте.
+const NIGHT_T = TOD.STAGES.find((stage) => stage.name === 'night').from + TOD.BLEND + 1;
 
 // ---- (а) этапы и переходы
 
 check('stages: day, golden hour, dusk, night, dawn at the configured seconds, then the cycle repeats', () => {
+  // С 2026-10-09 этап длится 16 секунд, цикл 80 (было 60/60/60/80/40 и цикл 300; потом 12/60 и 14.4/72).
   const expect = [
-    [0, 'day', 0], [59.9, 'day', 0], [60, 'golden', 1], [119.9, 'golden', 1], [120, 'dusk', 2], [179.9, 'dusk', 2],
-    [180, 'night', 3], [259.9, 'night', 3], [260, 'dawn', 4], [299.9, 'dawn', 4],
-    [300, 'day', 0], [359.9, 'day', 0], [360, 'golden', 1], [480, 'night', 3], [600, 'day', 0]
+    [0, 'day', 0], [15.9, 'day', 0], [16, 'golden', 1], [31.9, 'golden', 1], [32, 'dusk', 2], [47.9, 'dusk', 2],
+    [48, 'night', 3], [63.9, 'night', 3], [64, 'dawn', 4], [79.9, 'dawn', 4],
+    [80, 'day', 0], [95.9, 'day', 0], [96, 'golden', 1], [128, 'night', 3], [160, 'day', 0]
   ];
   for (const [time, name, index] of expect) {
     const stage = timeOfDay(time);
     assert(stage.name === name && stage.index === index, `at ${time} s expected ${name}, got ${stage.name}`);
   }
-  assert(timeOfDay(0).cycle === 0 && timeOfDay(299.9).cycle === 0 && timeOfDay(300).cycle === 1 && timeOfDay(650).cycle === 2, 'cycle numbers');
+  assert(timeOfDay(0).cycle === 0 && timeOfDay(79.9).cycle === 0 && timeOfDay(80).cycle === 1 && timeOfDay(170).cycle === 2, 'cycle numbers');
+  assert(TOD.CYCLE === 80 && TOD.STAGES.every((stage, i, all) => Math.abs((i === all.length - 1 ? TOD.CYCLE : all[i + 1].from) - stage.from - 16) < 1e-9), 'every stage lasts 16 seconds');
   assert(TOD.STAGES.map((stage) => stage.name).join() === 'day,golden,dusk,night,dawn', 'the five stages in order');
   for (const bad of [NaN, -5, undefined, null, 'x', {}]) {
     const stage = timeOfDay(bad);
@@ -56,39 +60,46 @@ check('stages: day, golden hour, dusk, night, dawn at the configured seconds, th
 check('stages: the key changes exactly when a stage changes and never goes back (a toast is due at every change)', () => {
   let previous = timeOfDay(0).key;
   const changes = [];
-  for (let time = 0; time <= 700; time += 1 / 60) {
+  for (let time = 0; time <= 170; time += 1 / 60) {
     const key = timeOfDay(time).key;
     assert(key >= previous, `the key went back at ${time.toFixed(2)} s`);
     if (key !== previous) changes.push([Math.round(time), stageName(key)]);
     previous = key;
   }
-  assert(changes.map((item) => item.join(':')).join() === '60:golden,120:dusk,180:night,260:dawn,300:day,360:golden,420:dusk,480:night,560:dawn,600:day,660:golden', `changes ${JSON.stringify(changes)}`);
+  assert(changes.map((item) => item.join(':')).join() === '16:golden,32:dusk,48:night,64:dawn,80:day,96:golden,112:dusk,128:night,144:dawn,160:day', `changes ${JSON.stringify(changes)}`);
   assert(stageName(0) === 'day' && stageName(13) === 'night' && stageName(21) === 'golden' && stageName(24) === 'dawn', 'stageName reads the stage from the key (cycle * 10 + index)');
 });
 
 check('transitions: a run starts as plain day, every stage grows out of the previous one over BLEND seconds, no jumps', () => {
-  assert(sameLook(timeOfDay(0).look, stageLook('day')) && sameLook(timeOfDay(30).look, stageLook('day')), 'the first minute is plain day');
+  assert(sameLook(timeOfDay(0).look, stageLook('day')) && sameLook(timeOfDay(TOD.STAGES[1].from - 0.1).look, stageLook('day')), 'the first stage is plain day');
   assert(timeOfDay(0).look.tint.every((value) => value === 255) && timeOfDay(0).look.fireflies === 0, 'day has no tint and no fireflies');
   const names = TOD.STAGES.map((stage) => stage.name);
   TOD.STAGES.slice(1).forEach((stage, i) => {
     const before = stageLook(names[i]);
     assert(sameLook(timeOfDay(stage.from).look, before), `${stage.name}: must start exactly where ${names[i]} ended`);
     assert(sameLook(timeOfDay(stage.from + TOD.BLEND).look, stage.look), `${stage.name}: must be fully there after BLEND seconds`);
-    assert(sameLook(timeOfDay(stage.from + TOD.BLEND + 20).look, stage.look), `${stage.name}: stays put until the next stage`);
+    assert(sameLook(timeOfDay(stage.from + TOD.BLEND + 1).look, stage.look), `${stage.name}: stays put until the next stage`);
   });
   assert(sameLook(timeOfDay(TOD.CYCLE).look, stageLook('dawn')), 'at the end of the cycle the day grows out of dawn');
   assert(sameLook(timeOfDay(TOD.CYCLE + TOD.BLEND).look, stageLook('day')), 'and is plain day again after BLEND seconds');
   let worst = 0;
+  let worstFireflies = 0;
   let last = timeOfDay(0).look;
-  for (let time = 1 / 60; time <= 620; time += 1 / 60) {
+  for (let time = 1 / 60; time <= 170; time += 1 / 60) {
     const look = timeOfDay(time).look;
     for (let i = 0; i < 3; i += 1) {
       worst = Math.max(worst, Math.abs(look.tint[i] - last.tint[i]), Math.abs(look.wash.color[i] - last.wash.color[i]));
     }
-    worst = Math.max(worst, Math.abs(look.vignette - last.vignette) * 255, Math.abs(look.fireflies - last.fireflies) * 20, Math.abs(look.wash.alpha - last.wash.alpha) * 255);
+    worst = Math.max(worst, Math.abs(look.vignette - last.vignette) * 255, Math.abs(look.wash.alpha - last.wash.alpha) * 255);
+    worstFireflies = Math.max(worstFireflies, Math.abs(look.fireflies - last.fireflies));
     last = look;
   }
-  assert(worst < 1.2, `a colour jumps by ${worst.toFixed(2)} in one frame`);
+  // Был предел 1.2 при BLEND 10; при BLEND 4 самый резкий переход (ночь → рассвет, цвет заливки) даёт 1.42 из 255
+  // за кадр. «Скачок» — это десятки единиц за кадр, поэтому предел 2.
+  assert(worst < 2, `a colour jumps by ${worst.toFixed(2)} in one frame`);
+  // Светлячки появляются и гаснут плавно: последний «проявляется» (рисуется с долей прозрачности), поэтому
+  // счёт может меняться на доли за кадр, но не на целого светлячка (раньше шаг был в 4 раза меньше при BLEND 10).
+  assert(worstFireflies < 0.12, `fireflies change by ${worstFireflies.toFixed(3)} in one frame`);
 });
 
 // ---- (б) читаемость
@@ -106,7 +117,8 @@ check('readability: at every moment of the cycle the picture stays bright enough
     assert(look.fireflies >= 0 && look.fireflies <= 20, 'a sane number of fireflies');
   }
   assert(darkest < 1, 'sanity');
-  assert(timeOfDay(200).look.fireflies > 10 && timeOfDay(100).look.fireflies === 0, 'fireflies only at night (and a few at dawn)');
+  const night = TOD.STAGES.find((stage) => stage.name === 'night');
+  assert(timeOfDay(night.from + TOD.BLEND + 1).look.fireflies > 10 && timeOfDay(TOD.STAGES[1].from + TOD.BLEND + 1).look.fireflies === 0, 'fireflies only at night (and a few at dawn)');
 });
 
 // ---- (в) игра: плашка этапа
@@ -124,14 +136,14 @@ function makeStageGame(over = {}) {
 check('toast: one per stage change, none at the start of a run, gone after TOAST_SECONDS', () => {
   const { game, calls } = makeStageGame();
   const shown = [];
-  for (let step = 0; step < 60 * 130; step += 1) {
+  for (let step = 0; step < 60 * 50; step += 1) {
     game.runTime = step / 60;
     const before = game.stageToast;
     game.updateStage(1 / 60);
     if (game.stageToast && game.stageToast !== before) shown.push([Math.round(game.runTime), game.stageToast.name]);
   }
-  assert(shown.map((item) => item.join(':')).join() === '60:golden,120:dusk', `toasts ${JSON.stringify(shown)}`);
-  assert(calls.stage === 2, 'the sound/vibration hook fires once per change');
+  assert(shown.map((item) => item.join(':')).join() === '16:golden,32:dusk,48:night', `toasts ${JSON.stringify(shown)}`);
+  assert(calls.stage === 3, 'the sound/vibration hook fires once per change');
 
   const fresh = makeStageGame();
   fresh.game.runTime = 5;
@@ -139,7 +151,7 @@ check('toast: one per stage change, none at the start of a run, gone after TOAST
   assert(fresh.game.stageToast === null && fresh.calls.stage === 0, 'no toast at the start of a run');
 
   const life = makeStageGame();
-  life.game.runTime = 60;
+  life.game.runTime = TOD.STAGES[1].from;
   life.game.updateStage(0);
   assert(life.game.stageToast && life.game.stageToast.age === 0, 'a new toast starts at age 0');
   let elapsed = 0;
@@ -154,7 +166,7 @@ check('toast: one per stage change, none at the start of a run, gone after TOAST
 check('toast: a long run shows the repeating stages again, and a new run starts clean', () => {
   const { game } = makeStageGame();
   const names = [];
-  for (let time = 0; time <= 420; time += 0.5) {
+  for (let time = 0; time <= 113; time += 0.5) {
     game.runTime = time;
     const before = game.stageToast;
     game.updateStage(0.5);
@@ -168,15 +180,15 @@ check('toast: a long run shows the repeating stages again, and a new run starts 
 });
 
 check('dev offset: ?tod shifts the look of the whole run without a toast at the start, and does not touch the real run time', () => {
-  const { game, calls } = makeStageGame({ todOffset: 200 });
-  game.stageKey = timeOfDay(200).key; // как делает start()
+  const { game, calls } = makeStageGame({ todOffset: 50 });
+  game.stageKey = timeOfDay(50).key; // как делает start()
   game.runTime = 0;
   game.updateStage(1 / 60);
   assert(game.stageToast === null && calls.stage === 0, 'a run that starts in the night shows no toast');
-  game.runTime = 60; // 260 s в цикле: рассвет
+  game.runTime = 15; // 65 s в цикле: рассвет
   game.updateStage(1 / 60);
   assert(game.stageToast && game.stageToast.name === 'dawn', 'the stages follow the shifted clock');
-  assert(game.runTime === 60, 'the real run time (speed, difficulty) is untouched');
+  assert(game.runTime === 15, 'the real run time (speed, difficulty) is untouched');
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   assert(/get\('tod'\)/.test(main) && /game\.todOffset/.test(main), 'main.js reads ?tod in dev');
   assert(/import\.meta\.env\?\.DEV/.test(main.slice(0, main.indexOf("get('tod')"))), 'only in dev');
@@ -211,14 +223,14 @@ check('drawing: day paints nothing; night paints the veil, the fade at the edges
   assert(day.calls.filter((name) => name === 'fillRect').length === 0 && day.calls.filter((name) => name === 'arc').length === 0, 'plain day must draw nothing at all');
 
   const night = recordingContext();
-  new Renderer(night.ctx).drawTimeOfDay(timeOfDay(200).look, 3);
+  new Renderer(night.ctx).drawTimeOfDay(timeOfDay(NIGHT_T).look, 3);
   assert(night.sets.join() === 'multiply,source-over', `composite modes ${night.sets}`);
   assert(night.calls.filter((name) => name === 'fillRect').length >= 4, 'veil, wash, glow and edge fade');
-  assert(night.calls.filter((name) => name === 'arc').length === 2 * Math.ceil(timeOfDay(200).look.fireflies), 'two circles (halo and core) per firefly');
+  assert(night.calls.filter((name) => name === 'arc').length === 2 * Math.ceil(timeOfDay(NIGHT_T).look.fireflies), 'two circles (halo and core) per firefly');
   assert(night.saveDepth() === 0 && night.calls[0] === 'save' && night.calls.at(-1) === 'restore', 'save and restore must be balanced');
 
   const dusk = recordingContext();
-  new Renderer(dusk.ctx).drawTimeOfDay(timeOfDay(140).look, 3);
+  new Renderer(dusk.ctx).drawTimeOfDay(timeOfDay(33).look, 3);
   assert(dusk.calls.filter((name) => name === 'arc').length === 0, 'no fireflies at dusk');
 
   const fade = recordingContext();
@@ -277,13 +289,13 @@ check('drawing: the stage toast shows the text, fades out, and Game.render draws
   const make = (state, extra = {}) => Object.assign(Object.create(Game.prototype), {
     state, renderer: stub, camera: null, feel: { time: 4, particles: { particles: [] } }, track: { segments: [] }, player: { y: 840 }, floatingRewards: [],
     score: 0, multiplier: 1, bestScore: 0, riskStreak: 0, coins: 0, userPaused: false, platform: null, choiceHintSeen: true,
-    distanceScore: 0, pathReward: 0, audio: null, leaderboard: null, runTime: 200, stageToast: null,
+    distanceScore: 0, pathReward: 0, audio: null, leaderboard: null, runTime: NIGHT_T, stageToast: null,
     daily: { playedToday: () => false, nextReward: () => 5, streakAt: () => 0, bestToday: () => 0 }, clockOffset: 0, dailyRun: false, dailyResult: null, ...extra
   });
   make('START').render();
   assert(drawn.length === 0, 'the start screen is always plain day');
   make('PLAYING').render();
-  assert(drawn.join() === 'veil:night', `playing at 200 s drew ${drawn}`);
+  assert(drawn.join() === 'veil:night', `playing at ${NIGHT_T} s drew ${drawn}`);
   drawn.length = 0;
   make('GAMEOVER').render();
   assert(drawn.join() === 'veil:night', 'Game Over keeps the night it ended in');

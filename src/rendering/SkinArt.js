@@ -90,12 +90,17 @@ function boxOf(d, attrs) {
   return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, area: Math.abs(area2) / 2 };
 }
 
+// Меньше этой площади контур у верха головы — полоска лба, а не ухо.
+const EAR_MIN_AREA = 2500;
+
 // Часть тела по положению контура (координаты холста 1024 × 1024, кот стоит по центру).
 // Хвост здесь не определяется: в каждом кадре он лежит по-своему, его ищет readPaths по устройству рисунка.
 export function partOf(box, role) {
   if (box.area > 60000) return 'whole'; // силуэт целиком: голова, спина, тело
   if (box.cy >= 828 || (box.cy >= 690 && box.cx < 500 && box.area < 9000)) return 'foot';
-  if (role === 'stripe' && box.cy < 262) return box.cx < 485 || box.cx > 560 ? 'ear' : 'head';
+  // Ухо — крупный контур (≈ 4900–5500), полоски на лбу — мелкие (≈ 1000). Раньше уху считалось всё, что левее x 485,
+  // и в одном кадре бега левая полоска лба (x ≈ 484) красилась у сиамского в тёмный цвет ушей.
+  if (role === 'stripe' && box.cy < 262) return box.area >= EAR_MIN_AREA && (box.cx < 485 || box.cx > 560) ? 'ear' : 'head';
   if (box.cy < 262) return 'head';
   if (box.cy >= 400 && box.cy <= 560) return 'back';
   return 'body';
@@ -185,7 +190,21 @@ export const SKINS = [
   },
   { id: 'honey', colors: { body: '#E9BE63', shade: '#D2A347', stripe: '#BE8A32', tan: '#A9751F', pad: '#C9806A' } },
   { id: 'snow', colors: { body: '#F6F1EA', shade: '#E3DBD2', stripe: '#CFC8C0', tan: '#B9B1A8', pad: '#D9A89C' } },
-  { id: 'ribbon', extra: ribbonShapes }
+  { id: 'ribbon', extra: ribbonShapes },
+  {
+    // Хэллоуин (ограниченный скин, см. CONFIG.SHOP): тёмный кот с рыжими полосками и ведьминской шляпой.
+    // Сезонный: правило «природные цвета» для него не действует (phase1m), но тело светлее контура.
+    id: 'halloween',
+    seasonal: true,
+    colors: { body: '#554A5E', shade: '#41384A', stripe: '#E4892F', tan: '#C96F1F', pad: '#C9806A' },
+    parts: {
+      ear: { stripe: '#E4892F', body: '#554A5E', shade: '#41384A' },
+      tail: { body: '#554A5E', shade: '#41384A', stripe: '#E4892F', tan: '#C96F1F' },
+      foot: { body: '#4A4054', shade: '#3A3142', stripe: '#E4892F' }
+    },
+    extra: witchHatShapes,
+    clip: hatClipPath // уши над полями обрезаются, шляпа рисуется поверх
+  }
 ];
 
 const ROLE_KEYS = ['body', 'shade', 'stripe', 'tan', 'pad'];
@@ -235,10 +254,133 @@ function ribbonShapes() {
 </g>`;
 }
 
+// Ведьминская шляпа Хэллоуина. Форма исходная (владельцу понравилась): острый конус с загибом вправо, рыжая лента,
+// золотая пряжка, звезда. Но надета она на голову, а не поставлена на макушку: центр полей на y = 200 (макушка кота
+// на y ≈ 150, кончики ушей на y ≈ 102…135, низ ушей на y ≈ 242), поля широкие (±184), наклон 4° правой стороной вниз.
+// Уши над полями не прячутся куполом (форма шляпы не позволяет), а ОБРЕЗАЮТСЯ: скин обрезает кота (skin.clip) по
+// верхней дуге полей, всё выше неё исчезает, и кажется, что уши остались внутри шляпы. Дуга лежит на 5 px внутри
+// эллипса полей, поэтому срез скрыт под их контуром. Цвета: чёрная шляпа (первая фиолетовая сливалась с котом).
+// Вариант 4 из шести (2026-10-19): «шире и почти прямо».
+const HAT = { main: '#241C2B', light: '#3C3047', dark: '#17111D', band: '#F28B2F', gold: '#F6CE5A', ink: '#57271C' };
+// cx, cy — центр полей; halfBrim, brimHeight — полуоси полей; tilt — наклон по часовой стрелке (правая сторона ниже);
+// kx, ky — во сколько раз корона шире и выше эскиза CROWN_SKETCH.
+export const HAT_GEOMETRY = { cx: 520, cy: 200, halfBrim: 184, brimHeight: 34, tilt: 4, kx: 1.35, ky: 1.1 };
+
+function starPath(cx, cy, r) {
+  const points = [];
+  for (let i = 0; i < 10; i += 1) {
+    const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+    const radius = i % 2 ? r * 0.45 : r;
+    points.push(`${(cx + Math.cos(angle) * radius).toFixed(1)} ${(cy + Math.sin(angle) * radius).toFixed(1)}`);
+  }
+  return `M ${points.join(' L ')} Z`;
+}
+
+// Контур короны: эскиз относительно центра полей (ноль — центр полей, вверх — минус, до наклона и растяжения kx, ky).
+// Начало и кубические кривые по три точки: левая стенка, подъём к вершине, загнутый вправо кончик, правая стенка, низ.
+const CROWN_SKETCH = {
+  start: [-66, -4],
+  curves: [
+    [[-56, -46], [-34, -90], [-8, -118]],
+    [[14, -142], [52, -150], [82, -122]],
+    [[50, -126], [30, -106], [30, -84]],
+    [[50, -50], [62, -24], [66, -4]],
+    [[40, 16], [-40, 16], [-66, -4]]
+  ]
+};
+
+// Точка эскиза в координатах кадра (до наклона шляпы).
+function hatPoint([a, b]) {
+  const { cx, cy, kx, ky } = HAT_GEOMETRY;
+  return [cx + a * kx, cy + b * ky];
+}
+
+// Поворот вокруг центра полей на наклон шляпы: из координат шляпы в координаты кадра.
+function tiltPoint([x, y]) {
+  const { cx, cy, tilt } = HAT_GEOMETRY;
+  const angle = (tilt * Math.PI) / 180;
+  return [
+    cx + (x - cx) * Math.cos(angle) - (y - cy) * Math.sin(angle),
+    cy + (x - cx) * Math.sin(angle) + (y - cy) * Math.cos(angle)
+  ];
+}
+
+// Контур короны в координатах кадра ПОСЛЕ наклона: многоугольник из точек на кривых (для проверок).
+export function hatCrownPolygon(steps = 16) {
+  const points = [hatPoint(CROWN_SKETCH.start)];
+  let from = CROWN_SKETCH.start;
+  for (const [c1, c2, to] of CROWN_SKETCH.curves) {
+    const [p0, p1, p2, p3] = [from, c1, c2, to].map(hatPoint);
+    for (let i = 1; i <= steps; i += 1) {
+      const t = i / steps;
+      const u = 1 - t;
+      points.push([
+        u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0],
+        u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]
+      ]);
+    }
+    from = to;
+  }
+  return points.map(tiltPoint);
+}
+
+// Верхняя дуга полей (в координатах кадра после наклона), слева направо, на 5 px внутри эллипса полей.
+export function hatCutArc(steps = 40) {
+  const { cx, cy, halfBrim, brimHeight } = HAT_GEOMETRY;
+  const arc = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const theta = Math.PI + (Math.PI * i) / steps;
+    arc.push(tiltPoint([cx + (halfBrim - 2) * Math.cos(theta), cy + (brimHeight - 5) * Math.sin(theta)]));
+  }
+  return arc;
+}
+
+// Видимая часть кота: всё ниже верхней дуги полей. Всё выше — уши — обрезается.
+export function hatVisiblePolygon() {
+  const arc = hatCutArc();
+  const first = arc[0];
+  const last = arc[arc.length - 1];
+  return [[0, 1100], [0, first[1]], ...arc, [1100, last[1]], [1100, 1100]];
+}
+
+// Контур видимой части кота для clipPath.
+export function hatClipPath() {
+  return `M ${hatVisiblePolygon().map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(' L ')} Z`;
+}
+
+function witchHatShapes() {
+  const { main, light, dark, band, gold, ink } = HAT;
+  const { cx, cy, halfBrim, brimHeight, tilt, kx, ky } = HAT_GEOMETRY;
+  const P = (dx, dy) => `${(cx + dx * kx).toFixed(1)} ${(cy + dy * ky).toFixed(1)}`;
+  const k = Math.min(kx, 1.2); // пряжка и звезда растут медленнее короны
+  const crown = `M ${P(...CROWN_SKETCH.start)} ${CROWN_SKETCH.curves.map((curve) => `C ${curve.map((point) => P(...point)).join(' ')}`).join(' ')} Z`;
+  return `<g transform="rotate(${tilt} ${cx} ${cy})" stroke-linejoin="round" stroke-linecap="round">
+<ellipse cx="${cx}" cy="${cy + 26}" rx="${(halfBrim * 0.84).toFixed(1)}" ry="26" fill="#1C1623" opacity="0.38"/>
+<ellipse cx="${cx}" cy="${cy + 11}" rx="${halfBrim}" ry="${brimHeight}" fill="${dark}" stroke="${ink}" stroke-width="6"/>
+<ellipse cx="${cx}" cy="${cy}" rx="${halfBrim}" ry="${brimHeight}" fill="${main}" stroke="${ink}" stroke-width="6"/>
+<path d="M ${(cx - halfBrim * 0.78).toFixed(1)} ${cy + 8} Q ${cx} ${cy + brimHeight + 2} ${(cx + halfBrim * 0.78).toFixed(1)} ${cy + 8}" fill="none" stroke="${light}" stroke-width="5" opacity="0.7"/>
+<path d="${crown}" fill="${main}" stroke="${ink}" stroke-width="6"/>
+<path d="M ${P(-52, -10)} C ${P(-44, -50)} ${P(-26, -86)} ${P(-6, -112)} C ${P(-14, -80)} ${P(-22, -46)} ${P(-24, -8)} Z" fill="${light}" opacity="0.75"/>
+<path d="M ${P(-68, -26)} C ${P(-30, -10)} ${P(30, -10)} ${P(68, -26)} L ${P(72, -2)} C ${P(36, 16)} ${P(-36, 16)} ${P(-72, -2)} Z" fill="${band}" stroke="${ink}" stroke-width="6"/>
+<rect x="${(cx - 18 * k).toFixed(1)}" y="${(cy - 22 * ky).toFixed(1)}" width="${(36 * k).toFixed(1)}" height="${(34 * ky).toFixed(1)}" rx="5" fill="${gold}" stroke="${ink}" stroke-width="5"/>
+<rect x="${(cx - 9 * k).toFixed(1)}" y="${(cy - 13 * ky).toFixed(1)}" width="${(18 * k).toFixed(1)}" height="${(16 * ky).toFixed(1)}" rx="2" fill="${main}"/>
+<path d="${starPath(cx + 12 * kx, cy - 72 * ky, 15)}" fill="${gold}"/>
+</g>`;
+}
+
+// Обрезка кота по контуру d: всё рисунок кадра кладётся в группу с clipPath. Накладки скина идут уже после неё.
+function clipCat(svg, d) {
+  const open = svg.match(/<svg[^>]*>/);
+  const end = svg.lastIndexOf('</svg>');
+  if (!open || end < 0) return svg;
+  const at = open.index + open[0].length;
+  return `${svg.slice(0, at)}<defs><clipPath id="omr-skin-cut"><path d="${d}"/></clipPath></defs><g clip-path="url(#omr-skin-cut)">${svg.slice(at, end)}</g>${svg.slice(end)}`;
+}
+
 // SVG кадра в окраске скина.
 export function skinSvg(svg, skinId) {
   const skin = SKINS.find((s) => s.id === skinId);
-  if (!skin || (!skin.colors && !skin.parts && !skin.patches && !skin.extra && !skin.dropParts)) return svg;
+  if (!skin || (!skin.colors && !skin.parts && !skin.patches && !skin.extra && !skin.dropParts && !skin.clip)) return svg;
   const paths = readPaths(svg);
   let out = '';
   let cursor = 0;
@@ -255,6 +397,7 @@ export function skinSvg(svg, skinId) {
     cursor = path.index + path.length;
   }
   out += svg.slice(cursor);
+  if (skin.clip) out = clipCat(out, skin.clip());
   if (!skin.patches && !skin.extra) return out;
   // Накладки идут перед закрывающим </svg>.
   let tail = '';
@@ -284,6 +427,7 @@ const SIT_PALETTE = {
   calico: { patch: '#E3A04F', earFolded: '#5E4235', tail: '#E3A04F', inner: '#E3A04F', nose: '#C9806A' },
   siamese: { body: '#F2E4D6', patch: '#CDB7A3', earFolded: '#5A4036', earFull: '#5A4036', tail: '#5A4036', paw: '#5A4036', inner: '#4A3128', nose: '#8B5A4E' },
   honey: { body: '#E9BE63', patch: '#BE8A32', tail: '#BE8A32', inner: '#BE8A32', nose: '#C9806A' },
+  halloween: { body: '#554A5E', patch: '#41384A', earFolded: '#E4892F', earFull: '#E4892F', tail: '#E4892F', paw: '#4A4054', inner: '#C96F1F', nose: '#C9806A' },
   snow: { body: '#F6F1EA', patch: '#CFC8C0', tail: '#CFC8C0', inner: '#CFC8C0', nose: '#D9A89C' }
 };
 const SIT_BODY_PARTS = ['body', 'head', 'earFolded', 'earFull', 'paw'];

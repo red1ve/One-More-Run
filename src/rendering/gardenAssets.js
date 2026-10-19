@@ -1,11 +1,9 @@
-// Картинки монет (всё остальное в саду — картинки art-pack, см. ArtPack.js).
-// Каждый путь написан целиком: так Vite кладёт в сборку только эти файлы.
+// Картинка монеты (всё остальное в саду — картинки art-pack, см. ArtPack.js).
+// Монета одна на всю игру: coin.png собран из исходника coin.svg рядом с ней.
+// Путь написан целиком: так Vite кладёт в сборку только этот файл.
 export const PACK_GARDEN_SHEETS = {
   coins: [
-    { id: 'coin-01', url: new URL('../../assets/environment/collectibles/coin-01.png', import.meta.url).href },
-    { id: 'coin-02', url: new URL('../../assets/environment/collectibles/coin-02.png', import.meta.url).href },
-    { id: 'coin-03', url: new URL('../../assets/environment/collectibles/coin-03.png', import.meta.url).href },
-    { id: 'coin-04', url: new URL('../../assets/environment/collectibles/coin-04.png', import.meta.url).href }
+    { id: 'coin', url: new URL('../../assets/environment/collectibles/coin.png', import.meta.url).href }
   ].map((item) => ({ ...item, sx: 0, sy: 0, sw: 0, sh: 0 }))
 };
 
