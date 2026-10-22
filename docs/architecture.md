@@ -126,6 +126,17 @@ npm run dev
 
 ```
 
+## Performance (measured 2026-10-22, before the first release)
+
+Measured in the Browser pane of the desktop app at a phone-sized viewport (375 px, devicePixelRatio 2, canvas scale 2 = 1080 × 1920) with a bot that plays on its own. A phone is several times slower than this computer, so these are relative numbers. The owner played the build on a real phone on 2026-10-22 and found it smooth (no frame counter was needed; an idea for a dev-only `?fps=1` counter was dropped on purpose).
+
+- A frame costs 2.5 ms of main-thread time (the budget at 60 fps is 16.7 ms): `update` 0.06 ms, drawing 2.4 ms. Nothing inside it is above 0.9 ms; the biggest piece is the hedge (`HedgeArt.drawPackClumps`: about 1000 `drawImage` calls a frame, all of them visible, medium size, overdraw 1.4×) and everything else is smaller. Per frame the code makes about 4400 `lineTo` (the hedge and curb polygons), 1070 `drawImage`, 290 `ellipse`; the road ribbon is only 370 of the `lineTo`.
+- Memory: the JS heap saw-tooths between 11 and 25 MB (about 230 KB of garbage per frame, mostly the objects that `projectWorldToScreen` returns), no growth over a long run; the audio scheduler costs under 1 ms a second (10–12 oscillators and 6 filters a second).
+- Loading the production build: 41 requests, 644 KB (WebP set; the PNG fallback set is not loaded where WebP works), the `load` event at about 0.55 s on localhost, no task over 50 ms. Switching a skin takes 22–30 ms.
+- The camera shift changes every frame, so the road and hedge outlines cannot be cached between frames (and they cost only 0.3 ms).
+
+Tried and rejected (no gain in a measurement against pixel-identical frames, so the code stayed as it is): turning the pre-scaled sprites into `ImageBitmap`s (same time, same pixels); drawing the hedge sprites from one atlas canvas (not faster, and the pixels differ at the sprite edges). Not done on purpose: skipping frames on 90–120 Hz screens (a 60 fps cap would give 45 fps on 90 Hz screens), caching road geometry, pooling the projector results (a refactor of the render path for a gain that cannot be seen without a phone). Known and harmless: the game over screen and the pause keep redrawing every frame (battery, not speed).
+
 ## Production
 
 ```bash

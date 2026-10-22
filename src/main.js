@@ -107,8 +107,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Пауза: P или Esc ставят и снимают её во время забега.
     if (e.code === 'KeyP' || e.code === 'Escape') {
-      // Esc сначала закрывает окно магазина, заданий или таблицы лидеров, если оно открыто.
-      if (game.shopWindow) game.closeShop();
+      // Esc сначала закрывает окно магазина (из большого превью скина он возвращает к сетке), заданий, достижений или таблицы лидеров, если оно открыто.
+      if (game.shopWindow) game.backFromShop();
       else if (game.questsWindow) game.closeQuests();
       else if (game.achievementsWindow) game.closeAchievements();
       else if (game.leaderboard) game.closeLeaderboard();

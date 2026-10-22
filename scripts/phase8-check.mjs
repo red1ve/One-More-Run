@@ -57,7 +57,7 @@ check('START is short: title, play button and controls only; the rule is explain
   const { context, renderer } = makeRenderer();
   renderer.drawStartScreen(false, 0.5);
   assert(context.texts.includes('TAP TO START'));
-  assert(context.texts.includes('A/D or ←/→  •  TAP LEFT/RIGHT'));
+  assert(context.texts.includes('A/D or ←/→  •  MOVE A FINGER, THE CAT FOLLOWS'));
   assert(!context.texts.some((text) => /WIDER|NARROWER|COINS STAY|STREAK/.test(text)), 'no hint lines on the start card');
   const hint = makeRenderer();
   hint.renderer.drawChoiceHint('WIDER = SAFER  •  NARROWER = MORE POINTS');
