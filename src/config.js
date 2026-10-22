@@ -183,16 +183,41 @@ export const CONFIG = {
     REACTION: 0.25,
     WINDOW_SLACK: 20
   },
+  // Новые ряды (шлифовка, фаза 4, 2026-10-22). Как и качающееся кашпо, ставятся только в обычный ряд, не сразу
+  // после развилки и не подряд с другим особым рядом (VariationDirector.choosePattern); если на этой скорости
+  // кот не успевает, вместо них обычный ряд. Шансы по этапам забега, как у SWAY: до FROM — 0, потом CHANCE[0],
+  // с TIER_1 — CHANCE[1], с TIER_2 — CHANCE[2].
+  //
+  // СТВОРКИ (Track.createDoors): стена с двумя проходами по DOORWAY px, между ними стенка MIDDLE px; в каждом
+  // проходе створка (ворота калитки), открыта всегда ровно одна, они меняются каждые HALF_PERIOD секунд.
+  // Когда ряд ближе LOCK_DISTANCE px до кота, выбор замирает: кот видит, куда ехать, и успевает перебежать
+  // между створками (ряд не ставится, если на этой скорости не хватает времени: DOORWAY + MIDDLE + SLACK px за
+  // LOCK_DISTANCE / скорость − REACTION секунд). Оба прохода достижимы из ЛЮБОЙ точки прошлого выхода (какой из
+  // них окажется открытым, заранее не известно). RISE_SPEED — как быстро створка поднимается (только картинка).
+  DOORS: { FROM: 50, TIER_1: 100, TIER_2: 160, CHANCE: [0.12, 0.18, 0.24], DOORWAY: 100, MIDDLE: 56, HALF_PERIOD: 0.9, LOCK_DISTANCE: 650, REACTION: 0.3, SLACK: 10, RISE_SPEED: 14 },
+  // ТЕЛЕЖКА (Track.createCart): в широком проходе GAP px едет кашпо-тележка WIDTH px. Её положение зависит
+  // только от пути трассы, а не от времени: на SWEEP px в сторону на каждый px пути до кота, поэтому на любой
+  // скорости она переезжает проход на одном и том же расстоянии, а в ряду у кота стоит там, где задумано (при
+  // этом слева и справа от неё не меньше MIN_FREE px). Достаточно успеть хотя бы в один из двух промежутков;
+  // в каждом из них центру кота должно быть где встать на ROOM px и больше (с учётом бордюра и сдвига тележки).
+  CART: { FROM: 70, TIER_1: 130, CHANCE: [0.12, 0.18], GAP: 260, WIDTH: 84, SWEEP: 0.3, MIN_FREE: 80, ROOM: 28, REACTION: 0.3 },
+  // ЗОЛОТОЙ ЧАС (VariationDirector.goldenStep, Track.createGolden): один раз за этап суток «золотой час» идёт
+  // серия из ROWS подряд идущих рядов с проходом уже обычного (NARROW от обычной ширины, но не уже MIN_WIDTH:
+  // проход всё равно ставится достижимым) и с монетой в каждом проходе — дорожка монет. Серия не задерживает
+  // развилку: когда обычных рядов подряд BREATHING_LIMIT, тип ряда выбирает директор, а остаток серии идёт после неё.
+  // Монеты серии прибавляют примерно 3 монеты в первые 30 секунд, поэтому первый скин стал стоить 20 (было 16).
+  GOLDEN: { ROWS: 4, NARROW: 0.85, MIN_WIDTH: 108, BREATHING_LIMIT: 5 },
   // Магазин скинов (Shop.js, Game, Renderer.drawShop). Те же id, что у SKINS в SkinArt.js; порядок — по
   // возрастанию цены, так они и стоят в окне магазина. Цена — в монетах. Цены подбирались по
   // scripts/phase1n-check.mjs («сколько монет выпадает за минуту забега»). 2026-10-19: монет стало вдвое больше
   // (COIN_CHANCE_*), цены выросли в 1.6 раза: первый скин 16 (≈ 5 коротких забегов), самый дорогой 290.
+  // 2026-10-22: после монет «золотого часа» (+3 за первые 30 с) первый скин 20, чтобы он снова стоил не меньше 4 коротких забегов.
   // Бесплатный classic есть у всех с самого начала.
   SHOP: {
     DEFAULT_SKIN: 'classic',
     SKINS: [
       { id: 'classic', price: 0 },
-      { id: 'ginger', price: 16 },
+      { id: 'ginger', price: 20 },
       { id: 'honey', price: 40 },
       { id: 'snow', price: 65 },
       { id: 'tuxedo', price: 95 },
@@ -711,6 +736,24 @@ export function getSwayChance(runTimeSeconds) {
 }
 
 // Период качания кашпо (секунды) для ряда, созданного в этот момент забега.
+// Шанс особого ряда по этапам забега: до FROM — 0, потом CHANCE[0], с TIER_1 — CHANCE[1], с TIER_2 — CHANCE[2]
+// (у тележки два этапа).
+function tierChance(cfg, runTimeSeconds) {
+  const t = Math.max(0, Number(runTimeSeconds) || 0);
+  if (t < cfg.FROM) return 0;
+  if (t < cfg.TIER_1) return cfg.CHANCE[0];
+  if (cfg.TIER_2 === undefined || t < cfg.TIER_2) return cfg.CHANCE[1];
+  return cfg.CHANCE[2];
+}
+
+export function getDoorsChance(runTimeSeconds) {
+  return tierChance(CONFIG.DOORS, runTimeSeconds);
+}
+
+export function getCartChance(runTimeSeconds) {
+  return tierChance(CONFIG.CART, runTimeSeconds);
+}
+
 export function getSwayPeriod(runTimeSeconds) {
   return CONFIG.SWAY.PERIOD[Math.max(0, getSwayTier(runTimeSeconds))];
 }

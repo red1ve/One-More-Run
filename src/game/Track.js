@@ -3,6 +3,7 @@ import {
   CONFIG, getCoinChance, getPlayerSpeed, getSwayPeriod, getTimeAtDistance, getTrackSpeed, isIntentionalRiskType
 } from '../config.js';
 import { VariationDirector } from './VariationDirector.js';
+import { playableXBounds } from './Corridor.js';
 
 const VISUAL_OBSTACLE_TYPES = ['FLOWER_GATE', 'STANDING_PLANTER', 'GARDEN_FENCE'];
 const VISUAL_OBSTACLE_IDS = {
@@ -177,6 +178,9 @@ export class Track {
       return 'NORMAL';
     }
     if (requested) return requested;
+    // Серия золотого часа идёт подряд, но развилку не задерживает: после BREATHING_LIMIT обычных рядов тип выбирает
+    // директор, а оставшиеся ряды серии продолжатся после развилки.
+    if (this.director.goldenActive() && this.breathingSinceChoice < CONFIG.GOLDEN.BREATHING_LIMIT) return 'NORMAL';
 
     const lastType = this.segments.length > 0
       ? this.segments[this.segments.length - 1].type
@@ -565,6 +569,8 @@ export class Track {
       coins: [],
       gates: [],
       sway: null, // качающееся кашпо ряда (препятствие со свойством sway) или null
+      movers: null, // створки и тележка (препятствия со свойствами door / cart), которых двигает placeMover, или null
+      golden: false, // ряд серии «золотого часа» (узкий проход и монета)
       coinPath: null,
       initialTravel: null,
       visualObstacleType: chooseVisualObstacleType(
@@ -610,11 +616,14 @@ export class Track {
     segment.paths = geometry.paths;
     segment.gates = geometry.gates || [];
     segment.sway = geometry.sway || null;
+    segment.movers = geometry.movers || null;
+    segment.golden = !!geometry.golden;
     segment.coinPath = geometry.coinPath || segment.paths[0] || null;
     segment.initialTravel = geometry.initialTravel ?? null;
     segment.coins = [];
     this.segments.push(segment);
-    this.maybePlaceCoin(segment);
+    if (segment.golden) this.placeGoldenCoins(segment);
+    else this.maybePlaceCoin(segment);
     this.maybePlaceYarn(segment);
     this.director.observe(segment, this.runTime);
 
@@ -728,6 +737,203 @@ export class Track {
     return { obstacles, paths, sway: planter, initialTravel };
   }
 
+  // ---- створки (CONFIG.DOORS)
+
+  // Стена с двумя проходами, в каждом створка (калитка). Открыта ровно одна, они меняются каждые HALF_PERIOD секунд,
+  // а когда ряд ближе LOCK_DISTANCE px до кота, выбор замирает (placeDoor). null — на этой скорости кот не успел бы
+  // перебежать между створками после «замка» или нет места: тогда вместо ряда обычный (addSegment).
+  createDoors(segmentY) {
+    const cfg = CONFIG.DOORS;
+    const height = CONFIG.PATTERN_GATE_HEIGHT;
+    const gapY = segmentY + 300;
+    const speed = Math.max(this.speed, 1);
+    const playerSpeed = getPlayerSpeed(speed);
+    // Кот видит, какая створка открыта, только за LOCK_DISTANCE px до ряда: от замка до ряда он должен успеть
+    // перебежать от стенки между проходами к любому из них, и даже с одного прохода на другой.
+    const afterLock = playerSpeed * Math.max(0, cfg.LOCK_DISTANCE / speed - cfg.REACTION);
+    if (afterLock < cfg.DOORWAY + cfg.MIDDLE + cfg.SLACK) return null;
+
+    const initialTravel = this.getFreeTravelTo(gapY, height);
+    // Какой из проходов окажется открытым, заранее не известно: из ЛЮБОЙ точки каждого выхода прошлого ряда
+    // нужно успеть в оба (даже если кот начнёт ехать только через REACTION секунд).
+    const lateral = playerSpeed * Math.max(0, initialTravel / speed - cfg.REACTION);
+    const total = cfg.DOORWAY * 2 + cfg.MIDDLE;
+    const preferred = this.lastGapX + (this.random() - 0.5) * 80;
+    const wallOk = (width) => width <= CONFIG.EDGE_WALL_HIDDEN + 0.01 || width >= CONFIG.EDGE_WALL_MIN - 0.01;
+    let bestX = null;
+    let bestScore = Infinity;
+    for (let x = CONFIG.TRACK_LEFT; x <= CONFIG.TRACK_RIGHT - total; x += 4) {
+      if (!wallOk(x - CONFIG.TRACK_LEFT) || !wallOk(CONFIG.TRACK_RIGHT - (x + total))) continue;
+      const left = { x, width: cfg.DOORWAY };
+      const right = { x: x + cfg.DOORWAY + cfg.MIDDLE, width: cfg.DOORWAY };
+      const reachable = this.lastExits.every((exit) => (
+        this.canReachFromAnywhere(exit, left, initialTravel, lateral) && this.canReachFromAnywhere(exit, right, initialTravel, lateral)
+      ));
+      if (!reachable) continue;
+      const score = Math.abs(x + total / 2 - preferred);
+      if (score < bestScore) {
+        bestScore = score;
+        bestX = x;
+      }
+    }
+    if (bestX === null) return null;
+
+    const openings = [
+      { x: bestX, width: cfg.DOORWAY },
+      { x: bestX + cfg.DOORWAY + cfg.MIDDLE, width: cfg.DOORWAY }
+    ];
+    const obstacles = [];
+    this.addWallsAroundOpenings(obstacles, openings, gapY, height);
+    const state = { open: 0, locked: false, phase: this.random() * cfg.HALF_PERIOD * 2 };
+    const doors = openings.map((opening, index) => ({
+      x: opening.x,
+      y: gapY,
+      width: opening.width,
+      height,
+      vx: 0,
+      open: false,
+      rise: 1,
+      sway: { range: 0, period: 1 }, // подвижное препятствие: рисуется отдельно от стен (GardenArt)
+      door: { index, state }
+    }));
+    doors.forEach((door) => this.placeDoor(door, 0));
+    obstacles.push(...doors);
+    const paths = openings.map((opening) => ({ x: opening.x, y: gapY, width: opening.width, height, type: 'SAFE' }));
+    this.setExits(openings.map((opening) => ({ x: opening.x, width: opening.width })));
+    return { obstacles, paths, movers: doors, initialTravel };
+  }
+
+  // Створка: какая открыта, считается по времени забега, пока ряд дальше LOCK_DISTANCE от кота; потом замок.
+  // Открытая створка не задевает кота (checkCollision, checkGraze пропускают её); rise (0…1) — как высоко она
+  // поднята на картинке, плавно догоняет цель (deltaTime 0 — сразу).
+  placeDoor(door, deltaTime) {
+    const cfg = CONFIG.DOORS;
+    const state = door.door.state;
+    if (!state.locked) {
+      const lockLine = CONFIG.PLAYER_START_Y - CONFIG.PLAYER_HEIGHT / 2 - cfg.LOCK_DISTANCE;
+      if (door.y + door.height >= lockLine) state.locked = true;
+      else state.open = Math.floor((this.swayClock + state.phase) / cfg.HALF_PERIOD) % 2;
+    }
+    door.open = door.door.index === state.open;
+    const target = door.open ? 0 : 1;
+    door.rise = deltaTime > 0 ? door.rise + (target - door.rise) * Math.min(1, deltaTime * cfg.RISE_SPEED) : target;
+  }
+
+  // ---- тележка (CONFIG.CART)
+
+  // Широкий проход со стенами по краям, в нём едет тележка-кашпо. В ряду у кота она стоит так, что слева и справа
+  // от неё свободно не меньше MIN_FREE px, а с каждым px пути до кота смещается на SWEEP px в одну сторону
+  // (placeCart), поэтому её путь не зависит от скорости. Проход ставится там, где из ЛЮБОЙ точки каждого выхода
+  // прошлого ряда успеть хотя бы в один из двух свободных промежутков; выходы после ряда — оба промежутка.
+  createCart(segmentY) {
+    const cfg = CONFIG.CART;
+    const height = CONFIG.PATTERN_GATE_HEIGHT;
+    const gapY = segmentY + 300;
+    const room = cfg.GAP - cfg.WIDTH;
+    if (room < cfg.MIN_FREE * 2) return null;
+    const initialTravel = this.getFreeTravelTo(gapY, height);
+    const speed = Math.max(this.speed, 1);
+    const lateral = getPlayerSpeed(speed) * Math.max(0, initialTravel / speed - cfg.REACTION);
+    const offset = cfg.MIN_FREE + this.random() * (room - 2 * cfg.MIN_FREE);
+    const dir = this.random() < 0.5 ? -1 : 1;
+    const preferred = this.lastGapX + (this.random() - 0.5) * 80;
+    const half = CONFIG.PLAYER_WIDTH / 2;
+    // Где кот может стоять: не ближе края, чем позволяет бордюр (у самого края дорожки он не встанет).
+    const bounds = playableXBounds(CONFIG.PLAYER_START_Y - CONFIG.VISUAL.CAMERA_LEAD, CONFIG.PLAYER_WIDTH);
+    // Пока ряд пересекает кота, тележка сдвигается ещё на SWEEP × (ряд + кот) / 2 px в каждую сторону от
+    // положения xArr: слева и справа от неё стоять можно, только отступив от неё на этот сдвиг (плюс запас).
+    const drift = (cfg.SWEEP * (height + CONFIG.PLAYER_HEIGHT)) / 2 + 4;
+    let bestX = null;
+    let bestScore = Infinity;
+    for (let x = CONFIG.TRACK_LEFT; x <= CONFIG.TRACK_RIGHT - cfg.GAP; x += 4) {
+      if (!this.edgeWallsOk(x, cfg.GAP)) continue;
+      // Места для кота (центр кота) слева и справа от тележки; в каждом должно быть не меньше ROOM px.
+      const stands = [
+        { from: Math.max(bounds.minX, x + half), to: x + offset - half - drift },
+        { from: x + offset + cfg.WIDTH + half + drift, to: Math.min(bounds.maxX, x + cfg.GAP - half) }
+      ];
+      if (stands.some((stand) => stand.to - stand.from < cfg.ROOM)) continue;
+      const reachable = this.lastExits.every((exit) => {
+        // Из каждой точки выхода (проверяем 11 точек) хотя бы в одно место, не дальше lateral px.
+        for (let k = 0; k <= 10; k += 1) {
+          const from = exit.x + half + ((exit.width - 2 * half) * k) / 10;
+          const near = stands.some((stand) => Math.max(stand.from - from, from - stand.to, 0) <= lateral);
+          if (!near) return false;
+        }
+        return exit.width >= 2 * half;
+      });
+      if (!reachable) continue;
+      const score = Math.abs(x + cfg.GAP / 2 - preferred);
+      if (score < bestScore) {
+        bestScore = score;
+        bestX = x;
+      }
+    }
+    if (bestX === null) return null;
+
+    const obstacles = [];
+    this.addWallsAroundGap(obstacles, bestX, cfg.GAP, gapY, height);
+    const cart = {
+      x: bestX + offset,
+      y: gapY,
+      width: cfg.WIDTH,
+      height,
+      vx: 0,
+      sway: { range: 0, period: 1 }, // подвижное препятствие: рисуется отдельно от стен (GardenArt)
+      cart: { dir, xArr: bestX + offset, gapX: bestX, gap: cfg.GAP }
+    };
+    this.placeCart(cart);
+    obstacles.push(cart);
+    const paths = [{ x: bestX, y: gapY, width: cfg.GAP, height, type: 'SAFE' }];
+    this.setExits([
+      { x: bestX, width: offset },
+      { x: bestX + offset + cfg.WIDTH, width: cfg.GAP - offset - cfg.WIDTH }
+    ]);
+    return { obstacles, paths, movers: [cart], initialTravel };
+  }
+
+  // Положение тележки по пути до кота: центр ряда на высоте кота — она стоит в xArr, раньше (дальше от кота)
+  // была сдвинута против направления dir на SWEEP px за каждый px пути, но не выходит за проход.
+  placeCart(cart) {
+    const info = cart.cart;
+    const remaining = CONFIG.PLAYER_START_Y - (cart.y + cart.height / 2);
+    const x = info.xArr - info.dir * CONFIG.CART.SWEEP * remaining;
+    cart.x = Math.max(info.gapX, Math.min(info.gapX + info.gap - cart.width, x));
+    cart.vx = info.dir * CONFIG.CART.SWEEP * this.speed; // px/s на экране: по нему рисунок наклоняется
+  }
+
+  // Подвижные препятствия ряда (створки и тележка) на этом кадре.
+  placeMover(mover, deltaTime) {
+    if (mover.door) this.placeDoor(mover, deltaTime);
+    else if (mover.cart) this.placeCart(mover);
+  }
+
+  // ---- золотой час (CONFIG.GOLDEN)
+
+  // Ряд серии: как обычный, но проход уже (NARROW от обычной ширины, не уже MIN_WIDTH; если такой не достижим,
+  // placeReachableGap расширяет его, как у любого ряда).
+  createGolden(segmentY) {
+    const cfg = CONFIG.GOLDEN;
+    const height = 40;
+    const gapY = segmentY + 300;
+    const preferred = this.lastGapX + (this.random() - 0.5) * 80;
+    const width = Math.max(cfg.MIN_WIDTH, Math.round(this.getBreathingWidth() * cfg.NARROW));
+    const gap = this.placeReachableGap(width, gapY, preferred);
+    const obstacles = [];
+    this.addWallsAroundGap(obstacles, gap.x, gap.width, gapY, height);
+    const paths = [{ x: gap.x, y: gapY, width: gap.width, height, type: 'SAFE' }];
+    this.setExits([gap]);
+    return { obstacles, paths, golden: true };
+  }
+
+  // Монета в проходе золотого часа: посередине, перед стеной (дорожка из монет по рядам серии). Все параметры
+  // заданы, случайные числа не берутся.
+  placeGoldenCoins(segment) {
+    for (const ySlot of ['APPROACH', 'MID', 'AHEAD']) {
+      if (this.tryPlaceCoin(segment, { zone: 'CENTER', ySlot, xJitter: 0.5, yJitter: 0.5 })) return;
+    }
+  }
+
   // Положение качающегося кашпо в этот момент забега: синусоида от левой стены прохода до правой
   // (sway.range — размах левого края кашпо). vx — его скорость (px/s), по ней рисунок наклоняется.
   placeSway(planter) {
@@ -742,6 +948,9 @@ export class Track {
     if (pattern === 'SWAY') {
       return this.createSway(segmentY);
     }
+    if (pattern === 'DOORS') return this.createDoors(segmentY);
+    if (pattern === 'CART') return this.createCart(segmentY);
+    if (pattern === 'GOLDEN') return this.createGolden(segmentY);
     if (pattern !== 'STRAIGHT') {
       return this.createPatternedNormal(segmentY, pattern);
     }
@@ -1037,7 +1246,7 @@ export class Track {
 
   maybePlaceCoin(segment) {
     if (segment.type !== 'NORMAL') return;
-    if (segment.sway) return; // кашпо качается по всему проходу: монету нечестно класть на его путь
+    if (segment.sway || segment.movers) return; // кашпо качается по всему проходу: монету нечестно класть на его путь
     if (this.random() >= getCoinChance(this.runTime) * this.director.coinChanceScale()) return;
 
     const zones = ['LEFT', 'CENTER', 'RIGHT'];
@@ -1077,7 +1286,7 @@ export class Track {
   // ни с клубками, ни без них, а с одним seed клубки стоят на тех же местах (забег дня одинаков у всех).
   maybePlaceYarn(segment) {
     const cfg = CONFIG.SHIELD;
-    if (segment.type !== 'NORMAL' || segment.sway) return null;
+    if (segment.type !== 'NORMAL' || segment.sway || segment.movers) return null;
     if (this.runTime < cfg.FIRST_AT || this.runTime - this.lastYarnTime < cfg.MIN_GAP) return null;
     const unit = (salt) => visualUnit(segment.id * 0.37 + salt * 91.7);
     if (unit(1) >= cfg.CHANCE) return null;
@@ -1094,6 +1303,12 @@ export class Track {
       segment.coins.pop();
       this.lastCoinZone = saved.zone;
       this.lastCoinYSlot = saved.slot;
+      // Не вплотную к монетам ряда (например, к монете золотого часа): между ними не меньше 6 px.
+      const crowded = segment.coins.some((other) => this.rectsOverlap(
+        { x: coin.x - 6, y: coin.y - 6, width: coin.width + 12, height: coin.height + 12 },
+        other
+      ));
+      if (crowded) continue;
       const yarn = { x: coin.x, y: coin.y, width: coin.width, height: coin.height, collected: false, kind: 'YARN' };
       if (!segment.pickups) segment.pickups = [];
       segment.pickups.push(yarn);
@@ -1549,6 +1764,7 @@ export class Track {
         gate.y += moveDist;
       });
       if (segment.sway) this.placeSway(segment.sway);
+      segment.movers?.forEach((mover) => this.placeMover(mover, deltaTime));
     });
 
     if (this.segments.length > 0 && this.segments[0].y > CONFIG.CANVAS_HEIGHT) {
@@ -1636,6 +1852,7 @@ export class Track {
       segment.obstacles = [];
       segment.paths = [];
       segment.sway = null;
+      segment.movers = null;
       segment.isPassed = true;
       segment.clearedForRevive = true;
       cleared += 1;
@@ -1674,6 +1891,7 @@ export class Track {
   checkCollision(player) {
     for (const segment of this.segments) {
       for (const obs of segment.obstacles) {
+        if (obs.open) continue; // открытая створка
         if (
           player.x - player.width / 2 < obs.x + obs.width &&
           player.x + player.width / 2 > obs.x &&
@@ -1700,7 +1918,7 @@ export class Track {
     const maxGap = CONFIG.GRAZE.PX;
     for (const segment of this.segments) {
       for (const obs of segment.obstacles) {
-        if (obs.grazed) continue;
+        if (obs.grazed || obs.open) continue;
         const atEdge = obs.x <= CONFIG.TRACK_LEFT + 0.5 || obs.x + obs.width >= CONFIG.TRACK_RIGHT - 0.5;
         if (atEdge && obs.width <= CONFIG.EDGE_WALL_HIDDEN + 0.01) continue;
         // Кот должен быть в ряду по высоте.
@@ -1777,6 +1995,7 @@ export class Track {
       segment.paths = segment.paths.filter((path) => !(path.y + path.height > top && path.y < bottom));
       segment.shieldBroken = true;
       if (segment.sway && !keep.includes(segment.sway)) segment.sway = null;
+      if (segment.movers) segment.movers = segment.movers.filter((mover) => keep.includes(mover));
       if (keep.length === 0) segment.isPassed = true;
     }
     return removed;

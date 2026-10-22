@@ -43,7 +43,7 @@ Current implementation notes:
 - Choices are SAFE/RISK (`TWO_PATHS`) and RISK/RISK (`DUAL_RISK` after 30s). No other Choice types.
 - Intentional RISK grows streak; SAFE on a Choice resets streak and multiplier to 1.0x. Breathing / non-choice does not change streak.
 - Multiplier starts at 1.0x, steps +0.5, caps at 5.0x. Path reward uses the multiplier **before** the step.
-- Coins (changed 2026-10-19, the owner found them too rare): about twice as many (chances ×1.6–2.2, `COIN_REPEAT_CHANCE_SCALE` 0.75, sometimes a second coin along the same wall `COIN_PAIR_CHANCE`), placed closer to the walls of the gap (`COIN_CENTER_WEIGHT`, `COIN_EDGE_POWER`: the share within 12 px of a wall rose from 11% to 27%), every coin still reachable and skippable; skin prices were raised ×1.6 (16 … 290, Halloween 350). Coins are a separate meta counter (+1), not score/streak/multiplier. They persist through Game Over and are spent in the skin shop.
+- Coins (changed 2026-10-19, the owner found them too rare): about twice as many (chances ×1.6–2.2, `COIN_REPEAT_CHANCE_SCALE` 0.75, sometimes a second coin along the same wall `COIN_PAIR_CHANCE`), placed closer to the walls of the gap (`COIN_CENTER_WEIGHT`, `COIN_EDGE_POWER`: the share within 12 px of a wall rose from 11% to 27%), every coin still reachable and skippable; skin prices were raised ×1.6 (16 … 290, Halloween 350); since 2026-10-22 the first skin costs 20 because the golden hour adds coins. Coins are a separate meta counter (+1), not score/streak/multiplier. They persist through Game Over and are spent in the skin shop.
 - `VariationDirector` spaces Choices; reachability remains the source of truth, with fallback.
 - Track patterns use ordered gate rows compiled into the existing obstacle/path rectangles. OFFSET, FUNNEL, OFFSET_GATE, and DOUBLE_GATE vary steering geometry without adding controls or rewards.
 - All four patterns can vary NORMAL; SAFE/RISK supports OFFSET, FUNNEL, and OFFSET_GATE; DUAL_RISK supports OFFSET_GATE. DOUBLE_GATE unlocks after 60 seconds and remains NORMAL-only.
@@ -66,6 +66,8 @@ Current implementation notes:
 | NEW BEST feedback | P1       | DONE   |
 | Close call bonus (+10..30, `Track.checkGraze`) | P1 | DONE (2026-10-01) |
 | Time of day: day, golden hour, dusk, night (fireflies), dawn, with a milestone capsule | P1 | DONE (2026-10-01) |
+| Moving rows (2026-10-22): DOORS (two doorways with gate leaves, one open, frozen near the cat; from 50 s) and CART (a planter that slides across a wide gap; from 70 s), fairness-tested at 300…1050 px/s (`CONFIG.DOORS`, `CONFIG.CART`) | P1 | DONE (2026-10-22) |
+| Golden hour event: a series of 4 narrower rows with a coin in each gap once per golden stage (`CONFIG.GOLDEN`); first skin price 16 → 20 | P1 | DONE (2026-10-22) |
 | Swaying planter: a moving obstacle after 45 s (was 90 s until 2026-10-09; tiers 45 / 90 / 150 s), always a free pocket of 90+ px (`CONFIG.SWAY`, `Track.createSway`) | P1 | DONE (2026-10-05) |
 | Cat skins engine: 8 colourways by recolouring the run frames and the sitting cat (`SkinArt.js`); a 9th, the limited Halloween skin with a witch hat, since 2026-10-19 | P1 | DONE (2026-10-05) |
 | Limited skin: sold for 14 days from each player's first launch (but not after `until`), expensive, owned forever (`CONFIG.SHOP`, `Shop.availability`, cloud key `firstDay` merged by the earlier day) | P1 | DONE (2026-10-19) |
