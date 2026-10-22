@@ -38,11 +38,11 @@ export async function phoneShots(cap, lang) {
   await cap.begin({ seed: 24, assist: 1, tod: 188, skin: 'ribbon' });
   cap.advance(14);
   log.push(await cap.shoot(`${lang}-phone-3-night.jpg`, true));
-  // 4. Качающееся кашпо (появляется после 90-й секунды забега: старт со 100-й).
+  // 4. Подвижная часть на дороге: качающееся кашпо, створки калитки или тележка (после 50-й секунды забега: старт со 100-й).
   g.__risk = false;
   await cap.begin({ seed: 100, assist: 1, tod: 0, start: 100, skin: 'honey' });
-  cap.advance(60, cap.swayAhead(260, 600));
-  log.push(await cap.shoot(`${lang}-phone-4-planter.jpg`, true));
+  cap.advance(60, cap.moverAhead(260, 600));
+  log.push(await cap.shoot(`${lang}-phone-4-moving.jpg`, true));
   // 5. Вечер.
   g.__risk = true;
   await cap.begin({ seed: 2, assist: 1, tod: 126, skin: 'tuxedo' });
@@ -54,7 +54,8 @@ export async function phoneShots(cap, lang) {
   return log;
 }
 
-// Дополнительные кадры: стартовый экран, задания, магазин (это не геймплей, поэтому отдельно от основных).
+// Дополнительные кадры: стартовый экран, задания, достижения, магазин и большое превью скина (это не геймплей, поэтому
+// отдельно от основных).
 export async function extraShots(cap, lang) {
   const g = cap.g;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,9 +72,16 @@ export async function extraShots(cap, lang) {
   await sleep(200);
   log.push(await cap.shoot(`${lang}-extra-quests.jpg`));
   g.closeQuests();
+  g.openAchievements();
+  await sleep(200);
+  log.push(await cap.shoot(`${lang}-extra-achievements.jpg`));
+  g.closeAchievements();
   g.openShop();
   await sleep(2500);
   log.push(await cap.shoot(`${lang}-extra-shop.jpg`));
+  g.tapSkin('siamese');
+  await sleep(200);
+  log.push(await cap.shoot(`${lang}-extra-shop-preview.jpg`));
   g.closeShop();
   return log;
 }

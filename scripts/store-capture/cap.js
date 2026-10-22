@@ -92,6 +92,12 @@ export function install(g) {
     const a = aheadOf(Math.min(...s.obstacles.map((o) => o.y)));
     return a > min && a < max;
   });
+  // Ряд с подвижной частью впереди: качающееся кашпо, створки калиток или тележка (с 50-й секунды забега).
+  const moverAhead = (min = 220, max = 650) => () => g.track.segments.some((s) => {
+    if (!(s.sway || s.movers) || !s.obstacles.length) return false;
+    const a = aheadOf(Math.min(...s.obstacles.map((o) => o.y)));
+    return a > min && a < max;
+  });
   const floatNow = () => g.floatingRewards.some((f) => f.type !== 'COIN' && f.life > f.maxLife * 0.6);
 
   async function save(name, type = 'image/jpeg', quality = 0.92) {
@@ -279,5 +285,5 @@ export function install(g) {
     return state;
   }
 
-  return { g, bot, frames, hi, lo, freeze, begin, advance, forkAhead, swayAhead, floatNow, save, shoot, triptych, record };
+  return { g, bot, frames, hi, lo, freeze, begin, advance, forkAhead, swayAhead, moverAhead, floatNow, save, shoot, triptych, record };
 }
