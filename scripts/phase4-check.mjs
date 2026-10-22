@@ -1379,7 +1379,8 @@ check('NEW BEST only when score beats previous best', () => {
     bestScore: 0,
     player: { x: 0, y: 0 },
     feel,
-    storage: { set(key, value) { this.key = key; this.value = value; } },
+    runTime: 42.26,
+    storage: { writes: [], set(key, value) { this.writes.push([key, value]); } },
     multiplier: 1,
     riskStreak: 0
   };
@@ -1387,7 +1388,9 @@ check('NEW BEST only when score beats previous best', () => {
   assert(win.isNewBest === true, 'first positive score should be NEW BEST');
   assert(win.bestScore === 60, 'best should update');
   assert(feel.hit === true, 'NEW BEST feedback should fire');
-  assert(win.storage.key === 'bestScore' && win.storage.value === 60);
+  // Рекорд и время этого забега (для ленты рекорда, до десятой секунды) сохраняются вместе.
+  assert(win.storage.writes.some(([key, value]) => key === 'bestScore' && value === 60), 'bestScore saved');
+  assert(win.storage.writes.some(([key, value]) => key === 'bestRunTime' && value === 42.3) && win.bestRunTime === 42.3, 'bestRunTime saved');
 });
 
 check('SAFE streak-loss feedback keeps reward rules', () => {

@@ -79,7 +79,7 @@ Publish the game.
 
 Made from the owner's answers to the polish ideas list. Each item is still proposed and approved by the owner before the work starts (see CLAUDE.md, «Workflow»). Everything below is one candidate release «v1.1 polish»; what goes into the first moderation and what into an update is the owner's decision.
 
-**Phase 1 — before sending the game to moderation** — DONE 2026-10-19 (checked, not yet saved to git; the owner tests, then submits the draft)
+**Phase 1 — before sending the game to moderation** — DONE 2026-10-19 (checked, saved to git and merged into `main` on 2026-10-19; the owner tests on a phone, then submits the draft)
 
 1. Bug: after a rewarded ad the cat does not revive (found by the owner on a phone: the ad runs, is closed after ~5 s, nothing happens). Two suspects: (a) `Game.revive()` refuses while `platformPaused` / `hidden` is still true at the moment `onRewarded` arrives (the SDK `game_api_resume` can come after `onClose`), so the reward is lost; (b) the ad was closed before the reward and the game says nothing. Fix: queue a granted reward until the game is unpaused, show a short «no reward: watch the ad to the end» message otherwise, same for «×2 coins». Test with an SDK stub that delays the resume event.
 2. Sharper picture on phones: render the canvas at `devicePixelRatio` (cap 2), keep the logical 540×960 for drawing and input, fall back to 1× automatically if the frame time is too high. Needs a performance check; the store-capture tools must keep working.
@@ -88,13 +88,13 @@ Made from the owner's answers to the polish ideas list. Each item is still propo
 5. Coins: more of them, a part placed in risky spots near the walls (the cat has to leave the line, grab it and come back to the gap), every coin still reachable; skin prices raised to match.
 5a. «В МЕНЮ» on the pause screen (owner request, 2026-10-19: a run started by accident could only be left by dying, and the player could not go and buy a skin). DONE: two taps (the first asks «ЗАВЕРШИТЬ ЗАБЕГ?», the second within 3 s leaves); the run ends quietly like a normal game over.
 
-**Phase 2 — gameplay depth**
+**Phase 2 — gameplay depth** — DONE 2026-10-19 (branch `feat/polish-phase-2`, checked with `scripts/phase2a-check.mjs`; waiting for the owner's test on a phone; rules in `docs/business-rules.md`)
 
 6. Yarn-ball shield (owner's spec, like the board in Subway Surfers): a rare pickup that gives ONE mistake. The first hit does not kill: the shield breaks, the obstacle around the cat «explodes» and disappears, the cat runs on. If no hit happens, the shield expires after 10–15 s (not 6; a timed full invulnerability was called nonsense). Rewards for the broken row are not paid, the multiplier is kept.
 7. A faint record marker on the track (confirmed by the owner: a thin ribbon at the moment where the best run ended; no «record N» text in a corner; needs one more stored number: the best run time, merged by max in the cloud).
 8. A small bubble with the streak multiplier next to the cat when it changes.
 
-**Phase 3 — music and sound** (separate step, the owner listens)
+**Phase 3 — music and sound** — DONE 2026-10-22 (branch `feat/polish-phase-2` on top of Phase 2, checked with `scripts/phase3a-check.mjs`; the owner chose the «Ручей» preview, birds a bit quieter, crickets at night instead of sparkles; rules in `docs/features.md`)
 
 9. New, more memorable melody with a longer form (A–B–A′–C) so it does not tire in long sessions; 2–3 candidates as WAV previews first. Very quiet extras: day birdsong, night sparkles. Nothing intrusive; mute and the stage chime keep working.
 

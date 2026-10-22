@@ -166,6 +166,53 @@ export class GameFeel {
     this.audio?.play('coin', { step: this.coinChain });
   }
 
+  // Клубок подобран: щит включился (искры цвета пряжи и звон вверх).
+  onYarn(x, y) {
+    this.particles.burst({
+      x,
+      y: y - 40,
+      count: 12,
+      color: CONFIG.COLORS.YARN,
+      speed: 60,
+      life: 0.35,
+      size: 2.6
+    });
+    this.playerPulse = Math.max(this.playerPulse, 0.5);
+    this.audio?.play('yarn');
+    this.haptics?.pulse('yarn');
+  }
+
+  // Щит сломался: щепки, листья и нитки разлетаются во все стороны, встряска и вспышка, глухой хруст.
+  onShieldBreak(x, y) {
+    const centre = y - 40;
+    const pieces = [
+      [CONFIG.COLORS.PlanterWood, 12],
+      [CONFIG.COLORS.HedgeSage, 10],
+      [CONFIG.COLORS.YARN, 10]
+    ];
+    for (const [color, count] of pieces) {
+      this.particles.burst({ x, y: centre, count, color, speed: 150, life: 0.5, gravity: 90, size: 3.4 });
+    }
+    this.playerPulse = 0.8;
+    this.triggerShake(CONFIG.FEEL.SHAKE_STREAK, CONFIG.FEEL.SHAKE_DURATION);
+    this.triggerFlash(CONFIG.COLORS.FLASH_RISK, 0.8);
+    this.audio?.play('shieldbreak');
+    this.haptics?.pulse('shield');
+  }
+
+  // Щит погас сам (ошибки не было): тихие нитки и мягкий звук вниз.
+  onShieldEnd(x, y) {
+    this.particles.burst({ x, y: y - 40, count: 6, color: CONFIG.COLORS.YARN_LIGHT, speed: 45, life: 0.3, size: 2.2 });
+    this.audio?.play('shieldend');
+  }
+
+  // Кот пересёк ленту рекорда: пара лёгких искр, без звука и надписей.
+  onRecordMarker(x, y) {
+    this.particles.burst({ x, y: y - 20, count: 10, color: CONFIG.COLORS.SkyPaper, speed: 55, life: 0.4, gravity: 10, size: 2.6 });
+    this.particles.burst({ x, y: y - 20, count: 4, color: CONFIG.COLORS.CoinAmber, speed: 45, life: 0.35, size: 2.2 });
+    this.playerPulse = Math.max(this.playerPulse, 0.3);
+  }
+
   onStreakLost(x, y) {
     this.particles.burst({
       x,

@@ -792,6 +792,8 @@ Coins are garden **buttons** (or button-like discs). They must read as currency 
 
 Do not use fish, yarn balls, or stars as the default collectible. Yarn/leaves belong to **trails**, not currency. The shop later spends these same buttons.
 
+Exception (2026-10-19): the **yarn ball** is not a collectible for the shop but the rare shield power-up (`docs/business-rules.md`). It must never be mistaken for a coin: a round ball with winding lines and a thread tail (not a flat disc), in a dusty terracotta made of two tokens (`CONFIG.COLORS.YARN` = HighRiskClay + SkyPaper 35%, `YARN_LIGHT` 65%, `YARN_DARK` = HighRiskClay), never amber. The same colours give the shield ring around the cat. The record ribbon uses SkyPaper and RiskApricot only.
+
 A coin must never be confused with pollen trails: coins have outline + 18 px; pollen does not.
 
 ---

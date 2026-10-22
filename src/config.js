@@ -132,6 +132,21 @@ export const CONFIG = {
   // BONUS, а при серии таких касаний не позже COMBO_WINDOW секунд друг от друга + COMBO_STEP
   // за каждое следующее, но не больше BONUS_MAX. Бонус не умножается и не зависит от серии рисков.
   GRAZE: { PX: 8, BONUS: 10, COMBO_STEP: 5, BONUS_MAX: 30, COMBO_WINDOW: 2.5 },
+  // Клубок-щит (Track.maybePlaceYarn, Game.breakShield): редкий предмет на дороге. Подобранный клубок даёт
+  // щит на DURATION секунд (владелец просил 10–15). Щит — ОДНА ошибка: первое столкновение его ломает,
+  // ряды в CLEAR_AHEAD px перед котом (и тот, в который он врезался) разлетаются, а кот GRACE секунд
+  // неуязвим, чтобы не задеть остатки. Если ошибки не было, щит гаснет сам. Новый клубок обновляет щит.
+  // Клубки появляются не раньше FIRST_AT секунд забега и не чаще, чем раз в MIN_GAP секунд; в каждом
+  // подходящем обычном ряду шанс CHANCE. SIZE — хитбокс, DRAW_SIZE — размер картинки. Решение о клубке считается
+  // хешем номера ряда (не потоком случайных чисел трассы), поэтому сама трасса не сдвигается: с тем же seed
+  // ряды те же, с клубками и без.
+  SHIELD: { DURATION: 12, BLINK_LAST: 3, FIRST_AT: 20, MIN_GAP: 45, CHANCE: 0.3, SIZE: 26, DRAW_SIZE: 40, CLEAR_AHEAD: 260, GRACE: 0.3 },
+  // Лента рекорда: тонкая лента поперёк дороги там, где закончился лучший забег (нужно время лучшего забега,
+  // Game.bestRunTime). Показывается в обычном забеге, если лучший забег был не короче MIN_TIME секунд.
+  // Лента появляется за SHOW_AHEAD px до места и уходит вниз вместе с трассой, когда кот её пересёк.
+  RECORD_MARKER: { MIN_TIME: 8, SHOW_AHEAD: 2600, THICKNESS: 7, ALPHA: 0.74 },
+  // Пузырь множителя серии рядом с котом: появляется, когда множитель меняется, живёт LIFE секунд.
+  MULT_BUBBLE: { LIFE: 1.5, OFFSET_X: 48, OFFSET_Y: -78 },
   // Помощь новичкам: пока лучший счёт игрока меньше UNTIL_BEST, проходы шире. Помощь линейно
   // тает до нуля (см. getAssist). Полная помощь = ширины до сужения 2026-10-01: обычные проходы
   // 168 / 136 + BREATHING_BONUS = 200 / 168, безопасный путь развилки 176 / 156 / 136 + SAFE_BONUS
@@ -300,7 +315,7 @@ export const CONFIG = {
     // Облачное сохранение (player.getData / setData): что хранится и как часто пишем.
     // Лимит Яндекса — 100 запросов за 5 минут, поэтому запись не чаще раза в CLOUD_SAVE_MIN_INTERVAL_MS.
     // coins — баланс для старых версий игры; coinsEarned / coinsSpent / skinsOwned / skinSelected — магазин.
-    CLOUD_KEYS: ['bestScore', 'coins', 'coinsEarned', 'coinsSpent', 'skinsOwned', 'skinSelected', 'firstDay', 'dailyDay', 'dailyStreak', 'dailyBest', 'questDay', 'questProgress', 'questClaimed', 'choiceHintSeen', 'riskHintSeen'],
+    CLOUD_KEYS: ['bestScore', 'coins', 'coinsEarned', 'coinsSpent', 'skinsOwned', 'skinSelected', 'firstDay', 'bestRunTime', 'dailyDay', 'dailyStreak', 'dailyBest', 'questDay', 'questProgress', 'questClaimed', 'choiceHintSeen', 'riskHintSeen'],
     CLOUD_SAVE_MIN_INTERVAL_MS: 4000,
     // Таблица лидеров: сколько верхних записей и сколько вокруг игрока, сколько хранить ответ.
     LEADERBOARD_TOP: 10,
@@ -359,6 +374,8 @@ export const CONFIG = {
       max: [30, 30, 30, 30, 60],
       lost: 28,
       best: [20, 30, 20],
+      yarn: 12,
+      shield: [30, 20, 50],
       over: [40, 30, 80]
     },
     // Серия звучит выше: ступень серии → нота пентатоники (в тон музыке), не выше последней.
@@ -381,18 +398,52 @@ export const CONFIG = {
     MASTER_SCALE: 2
   },
 
-  // Музыка забега (AudioService + MusicScore): спокойная мелодия без звуковых файлов.
+  // Музыка забега «Ручей» (AudioService + MusicScore): арпеджио и певучая мелодия без звуковых файлов.
   // VOLUME — общая громкость музыки; она тише эффектов, чтобы монеты и удары были слышны.
   // Темп растёт от BPM_START до BPM_MAX вместе со скоростью забега.
+  // VOICES — голоса: форма звука (type), срез фильтра (cutoff, выше — ярче), громкость (amp), нарастание
+  // (attack, с), hold — какая доля длины ноты она звучит; у арпеджио ещё maxSeconds (щипок не длиннее) и
+  // overtone: тихий звук на ratio раз выше, который быстро гаснет (decay, с) и даёт «дерево маримбы».
+  // AMBIENCE — очень тихие добавки по времени суток: STAGES — какой звук в каком этапе (день — птицы, ночь —
+  // сверчки); AMP — громкость (птицы на треть тише, чем в первой пробе: так просил владелец). У птиц GAP_MIN +
+  // случайное до GAP_RANGE секунд между трелями. Сверчки сделаны по записи «пары сверчков», которую дал владелец
+  // (разобрана по числам: почти чистый тон 4,25 кГц, трель из 4–6 импульсов через ~29 мс, у каждого импульса
+  // плавный подъём ~13 мс и быстрый обрыв ~9 мс, внутри трели громкость растёт к третьему импульсу, интервалы
+  // между стрекотами 0,55–1,4 с с редкими паузами, второй сверчок тише и ниже): VOICES — сверчки: freq (Гц),
+  // level — их громкость относительно AMP, period — обычный интервал между стрекотами (с); UNEVEN — разброс
+  // интервала (±40%); PULSES — сколько импульсов в стрекоте (берётся одно из списка, пятёрка чаще);
+  // PULSE_GAP — расстояние между импульсами (с); PROFILE — громкость импульсов по порядку (доля от AMP);
+  // изредка (REST_CHANCE) сверчок молчит ещё REST секунд.
   MUSIC: {
     ENABLED: true,
     VOLUME: 0.8,
-    BPM_START: 100,
-    BPM_MAX: 120,
+    BPM_START: 96,
+    BPM_MAX: 112,
     FADE_IN: 0.9,
     FADE_OUT: 0.7,
     LOOKAHEAD: 0.25,
-    TICK_MS: 50
+    TICK_MS: 50,
+    VOICES: {
+      melody: { type: 'sine', amp: 0.1, cutoff: 3200, attack: 0.05, hold: 0.97 },
+      bass: { type: 'triangle', amp: 0.1, cutoff: 480, attack: 0.02, hold: 0.92 },
+      arp: { type: 'sine', amp: 0.085, cutoff: 4200, attack: 0.004, hold: 0.9, maxSeconds: 0.5, overtone: { ratio: 4, level: 0.35, decay: 0.06 } },
+      pad: { type: 'sine', amp: 0.026, cutoff: 1400, attack: 0.35, hold: 1 }
+    },
+    AMBIENCE: {
+      STAGES: { day: 'birds', night: 'crickets' },
+      FIRST_DELAY: 1.5,
+      BIRDS: { GAP_MIN: 2.8, GAP_RANGE: 4.2, AMP: 0.0175, NOTES_MIN: 2, NOTES_RANGE: 3, FREQ_MIN: 2600, FREQ_RANGE: 1600, VIBRATO_HZ: 38 },
+      CRICKETS: {
+        AMP: 0.012,
+        VOICES: [{ freq: 4255, level: 1, period: 1 }, { freq: 4150, level: 0.55, period: 4 }],
+        PULSES: [4, 5, 5, 6],
+        PULSE_GAP: 0.029,
+        PROFILE: [0.4, 0.8, 1, 0.95, 0.9, 0.6],
+        UNEVEN: 0.4,
+        REST_CHANCE: 0.08,
+        REST: 1
+      }
+    }
   },
 
   // Visual Bible drawing rules (presentation only)
@@ -595,8 +646,22 @@ function bibleColors() {
     FLASH_RISK: hexAlpha(RiskApricot, 0.16),
     FLASH_COIN: hexAlpha(CoinAmber, 0.14),
     FLASH_FAIL: hexAlpha(HighRiskClay, 0.14),
-    FLASH_STREAK_LOSS: hexAlpha(InkBrown, 0.12)
+    FLASH_STREAK_LOSS: hexAlpha(InkBrown, 0.12),
+    // Клубок-щит: пряжа — смесь HighRiskClay и SkyPaper (светлее и темнее по долям), цвет щита вокруг кота тот же.
+    YARN: blendHex(HighRiskClay, SkyPaper, 0.35),
+    YARN_LIGHT: blendHex(HighRiskClay, SkyPaper, 0.65),
+    YARN_DARK: HighRiskClay
   };
+}
+
+// Смесь двух цветов #RRGGBB: share — доля второго (0 — первый, 1 — второй).
+function blendHex(a, b, share) {
+  const mix = (offset) => {
+    const from = parseInt(a.slice(offset, offset + 2), 16);
+    const to = parseInt(b.slice(offset, offset + 2), 16);
+    return Math.round(from + (to - from) * share).toString(16).padStart(2, '0');
+  };
+  return `#${mix(1)}${mix(3)}${mix(5)}`.toUpperCase();
 }
 
 function hexAlpha(hex, alpha) {

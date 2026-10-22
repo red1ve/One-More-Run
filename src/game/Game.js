@@ -1,5 +1,5 @@
 import { t } from '../localization/i18n.js';
-import { CONFIG, getTrackSpeed, getPlayerSpeed, getAssist } from '../config.js';
+import { CONFIG, getTrackSpeed, getTrackDistance, getPlayerSpeed, getAssist } from '../config.js';
 import { Renderer } from '../rendering/Renderer.js';
 import { WorldCamera } from '../rendering/WorldCamera.js';
 import { Player } from './Player.js';
@@ -17,6 +17,17 @@ import { Shop } from './Shop.js';
 import { Daily, dailySeed, gameDay, msUntilNextDay } from './Daily.js';
 import { Quests } from './Quests.js';
 import { FrameGovernor, lowerScale, pickRenderScale } from '../rendering/RenderScale.js';
+
+// Какой тихий звук окружения идёт в этапе суток: 'birds', 'crickets' или null (CONFIG.MUSIC.AMBIENCE.STAGES).
+function ambienceFor(stageName) {
+  return CONFIG.MUSIC.AMBIENCE.STAGES[stageName] ?? null;
+}
+
+// Число секунд из хранилища или облака: конечное и не меньше нуля (иначе 0), с точностью до десятой.
+function cleanSeconds(value) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 10) / 10 : 0;
+}
 
 export class Game {
   constructor(canvas, platformService = null) {
@@ -49,8 +60,13 @@ export class Game {
     this.distanceScore = 0;
     this.pathReward = 0;
     this.bestScore = this.storage.get('bestScore', 0);
+    // Сколько секунд длился лучший забег: по нему на трассе стоит лента рекорда (0 — лучшего забега со временем ещё нет).
+    this.bestRunTime = cleanSeconds(this.storage.get('bestRunTime', 0));
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
+    this.shieldTime = 0; // секунды щита, оставшиеся у кота (0 — щита нет): клубок-щит, см. CONFIG.SHIELD
+    this.multBubble = null; // пузырь множителя рядом с котом: { value, up, age } или null
+    this.recordPassed = false; // кот уже пересёк ленту рекорда в этом забеге
     this.coins = this.storage.getCoins();
     this.shop = new Shop(this.storage, () => this.todayKey());
     this.shopWindow = null; // null — закрыт; иначе { message } (подсказка «не хватает монет»)
@@ -289,6 +305,9 @@ export class Game {
     this.pathReward = 0;
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
+    this.shieldTime = 0;
+    this.multBubble = null;
+    this.recordPassed = false;
     // Только для разработки (?start=100 в адресе): забег начинается с этой секунды, чтобы сразу
     // увидеть то, что открывается поздно (скорость, время суток, качающееся кашпо).
     this.runTime = this.devStartTime || 0;
@@ -302,7 +321,9 @@ export class Game {
     this.coinsDoubled = false;
     this.grazeCombo = 0;
     this.lastGrazeAt = -Infinity;
-    this.stageKey = timeOfDay(this.runTime + (this.todOffset || 0)).key;
+    const stage = timeOfDay(this.runTime + (this.todOffset || 0));
+    this.stageKey = stage.key;
+    this.audio?.setAmbience?.(ambienceFor(stage.name)); // днём птицы, ночью искры (очень тихо)
     this.stageToast = null;
     // Задания дня: плашки прошлого забега гаснут, за заданиями «за один забег» следим с нуля.
     this.questToasts = [];
@@ -434,6 +455,7 @@ export class Game {
     }
 
     this.updateFloating(deltaTime);
+    this.updateMultBubble?.(deltaTime);
     this.updateStage?.(deltaTime);
     this.updateQuests?.();
     this.updateQuestToast?.(deltaTime);
@@ -467,19 +489,87 @@ export class Game {
     if (coinsGained > 0) {
       this.applyCoinPickup(coinsGained);
     }
+    if (this.track.collectPickups?.(this.player).includes('YARN')) this.applyYarnPickup();
+    // Время щита идёт только пока забег идёт; щит погас сам, если ошибки не было.
+    if (this.shieldTime > 0) {
+      this.shieldTime = Math.max(0, this.shieldTime - deltaTime);
+      if (this.shieldTime === 0) this.feel?.onShieldEnd?.(this.player.x, this.player.y);
+    }
+    this.checkRecordMarker?.();
 
     // «Чуть не задел»: пока кот неуязвим (после возрождения), бонус не начисляется.
     if (!(this.invulnerableTime > 0)) {
       for (const graze of this.track.checkGraze?.(this.player) || []) this.applyGraze(graze);
     }
 
-    // После возрождения кот какое-то время неуязвим.
+    // После возрождения (и после поломки щита) кот какое-то время неуязвим.
     if (this.invulnerableTime > 0) {
       this.invulnerableTime = Math.max(0, this.invulnerableTime - deltaTime);
       this.player.invulnerable = this.invulnerableTime;
       return false;
     }
-    return this.track.checkCollision(this.player);
+    const hit = this.track.checkCollision(this.player);
+    // Щит — одна ошибка: удар ломает его и разбивает препятствия, а забег продолжается.
+    if (hit && this.shieldTime > 0) {
+      this.breakShield();
+      return false;
+    }
+    return hit;
+  }
+
+  // ---- клубок-щит (CONFIG.SHIELD)
+
+  // Клубок подобран: щит на DURATION секунд; второй клубок возвращает щиту полное время.
+  applyYarnPickup() {
+    this.shieldTime = CONFIG.SHIELD.DURATION;
+    this.feel?.onYarn?.(this.player.x, this.player.y);
+  }
+
+  // Первая ошибка со щитом: щит ломается, препятствия перед котом разлетаются, кот на GRACE секунд неуязвим.
+  // Награды за разбитые ряды нет (Track.breakAhead), серия и множитель остаются как были.
+  breakShield() {
+    this.shieldTime = 0;
+    this.track.breakAhead(this.player, CONFIG.SHIELD.CLEAR_AHEAD);
+    this.invulnerableTime = Math.max(this.invulnerableTime || 0, CONFIG.SHIELD.GRACE);
+    this.player.invulnerable = this.invulnerableTime;
+    this.feel?.onShieldBreak?.(this.player.x, this.player.y);
+  }
+
+  // ---- лента рекорда (CONFIG.RECORD_MARKER)
+
+  // Нужна ли в этом забеге лента: обычный забег, лучший забег был не короче MIN_TIME секунд.
+  recordMarkerActive() {
+    return !this.dailyRun && this.state === 'PLAYING' && this.bestRunTime >= CONFIG.RECORD_MARKER.MIN_TIME;
+  }
+
+  // Сколько px трассы осталось до ленты (меньше нуля — кот уже её пересёк). Лента стоит там, где у лучшего
+  // забега прошло bestRunTime секунд: путь трассы за это время — getTrackDistance.
+  recordMarkerAhead() {
+    return getTrackDistance(this.bestRunTime) - getTrackDistance(this.runTime);
+  }
+
+  // Логическая y ленты (в тех же координатах, что и ряды: ряд на y кота — кот в нём) или null, если ленту не рисуем.
+  recordMarkerY() {
+    if (!this.recordMarkerActive()) return null;
+    const ahead = this.recordMarkerAhead();
+    if (ahead > CONFIG.RECORD_MARKER.SHOW_AHEAD) return null;
+    return this.player.y - ahead;
+  }
+
+  // Кот пересёк ленту: один раз за забег лёгкие искры.
+  checkRecordMarker() {
+    if (this.recordPassed || !this.recordMarkerActive()) return;
+    if (this.recordMarkerAhead() > 0) return;
+    this.recordPassed = true;
+    this.feel?.onRecordMarker?.(this.player.x, this.player.y);
+  }
+
+  // ---- пузырь множителя (CONFIG.MULT_BUBBLE)
+
+  updateMultBubble(deltaTime) {
+    if (!this.multBubble) return;
+    this.multBubble.age += deltaTime;
+    if (this.multBubble.age >= CONFIG.MULT_BUBBLE.LIFE) this.multBubble = null;
   }
 
   // --- Экран проигрыша: кнопки «за рекламу» (Фаза 5) ---
@@ -516,6 +606,7 @@ export class Game {
   cloudSnapshot() {
     return {
       bestScore: this.bestScore || 0,
+      bestRunTime: this.bestRunTime || 0,
       ...this.shop.snapshot(), // монеты (заработано / потрачено), купленные скины и выбранный
       ...this.daily.snapshot(), // день последнего забега дня, серия и лучший счёт дня
       ...this.quests.snapshot(), // задания: день, прогресс по видам, полученные награды
@@ -538,6 +629,13 @@ export class Game {
     if (best !== (this.bestScore || 0)) {
       this.bestScore = best;
       this.storage.set('bestScore', best);
+      changed = true;
+    }
+    // Время лучшего забега, как и рекорд, — по большему значению.
+    const bestTime = Math.max(this.bestRunTime || 0, cleanSeconds(data.bestRunTime));
+    if (bestTime !== (this.bestRunTime || 0)) {
+      this.bestRunTime = bestTime;
+      this.storage.set('bestRunTime', bestTime);
       changed = true;
     }
     const skinBefore = this.shop.selected();
@@ -669,6 +767,8 @@ export class Game {
     this.pathReward = 0;
     this.multiplier = CONFIG.MULTIPLIER_START;
     this.riskStreak = 0;
+    this.shieldTime = 0;
+    this.multBubble = null;
     this.runTime = 0;
     this.currentSpeed = CONFIG.TRACK_SPEED_START;
     this.floatingRewards = [];
@@ -1120,6 +1220,7 @@ export class Game {
 
     this.pathReward += finalReward;
     this.score = Math.floor(this.distanceScore + this.pathReward);
+    if (this.multiplier !== prevMultiplier) this.multBubble = { value: this.multiplier, up: this.multiplier > prevMultiplier, age: 0 };
     // Для заданий: узкий путь пройден, а множитель мог вырасти.
     this.runMaxMultiplier = Math.max(this.runMaxMultiplier || CONFIG.MULTIPLIER_START, this.multiplier);
     if (isIntentional) this.recordQuest?.('risk', 1);
@@ -1174,6 +1275,7 @@ export class Game {
       this.stageKey = stage.key;
       this.stageToast = { name: stage.name, age: 0 };
       this.feel?.onStage?.();
+      this.audio?.setAmbience?.(ambienceFor(stage.name));
     } else if (this.stageToast) {
       this.stageToast.age += deltaTime;
       if (this.stageToast.age >= CONFIG.TIME_OF_DAY.TOAST_SECONDS) this.stageToast = null;
@@ -1236,6 +1338,8 @@ export class Game {
     if (this.isNewBest) {
       this.bestScore = totalScore;
       this.storage.set('bestScore', this.bestScore);
+      this.bestRunTime = cleanSeconds(this.runTime);
+      this.storage.set('bestRunTime', this.bestRunTime);
       const submission = this.platform?.submitScore?.(totalScore);
       Promise.resolve(submission).catch(() => {});
     }
@@ -1271,11 +1375,13 @@ export class Game {
     this.renderer.drawBackdrop(time);
     this.renderer.drawFarWorld(camera);
     this.renderer.beginWorld({ x: 0, y: camera ? camera.gameplayShift() : 0 });
+    this.renderer.setRecordMarker?.(this.recordMarkerY());
     this.renderer.drawWorld(camera, this.track.segments, this.player.y);
     this.renderer.drawSegments(this.track.segments);
-    this.renderer.drawPlayer(this.player, this.feel);
+    this.renderer.drawPlayer(this.player, this.feel, this.shieldTime > 0 ? { left: this.shieldTime, total: CONFIG.SHIELD.DURATION } : null);
     this.renderer.drawParticles(this.feel?.particles.particles);
     this.renderer.drawFloatingRewards(this.floatingRewards);
+    if (this.multBubble && this.state === 'PLAYING') this.renderer.drawMultBubble?.(this.multBubble, this.player);
     this.renderer.endWorld();
 
     // Время суток лежит поверх сада (не поверх HUD). На стартовом экране всегда день.

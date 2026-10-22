@@ -90,20 +90,19 @@ check('the meow is gone from files, settings and code', () => {
 });
 
 // ---- (б) партитура
-check('score: 128 steps, melody notes from the allowed set, no overlaps, loop closes', () => {
-  assert(LOOP_STEPS === 128 && STEP_EVENTS.length === LOOP_STEPS, 'loop must be 8 bars of 16 steps');
-  const allowed = new Set([72, 74, 76, 79, 81, 84]);
+check('score: 512 steps (32 bars), melody notes from the pentatonic scale, no overlaps, calm voices only, loop closes', () => {
+  assert(LOOP_STEPS === 512 && STEP_EVENTS.length === LOOP_STEPS, 'the form is 32 bars of 16 steps');
+  const pentatonic = new Set([0, 2, 4, 7, 9]);
   const melody = [];
   STEP_EVENTS.forEach((events, step) => {
     for (const event of events) {
       if (event.voice === 'melody') {
-        assert(allowed.has(event.midi), `melody note ${event.midi} is not in the pentatonic set`);
+        assert(pentatonic.has(event.midi % 12), `melody note ${event.midi} is not in the pentatonic set`);
+        assert(event.midi >= 72 && event.midi <= 88, `melody note ${event.midi} is out of the singing range`);
         melody.push({ step, steps: event.steps });
       }
-      if (event.voice !== 'shaker') {
-        const freq = midiToFreq(event.midi);
-        assert(freq > 60 && freq < 2200, `frequency ${freq.toFixed(0)} Hz is out of range`);
-      }
+      const freq = midiToFreq(event.midi);
+      assert(freq > 60 && freq < 2200, `frequency ${freq.toFixed(0)} Hz is out of range`);
       assert(step + event.steps <= LOOP_STEPS + 1, 'a note runs past the end of the loop');
     }
   });
@@ -111,10 +110,11 @@ check('score: 128 steps, melody notes from the allowed set, no overlaps, loop cl
   for (let i = 1; i < melody.length; i += 1) {
     assert(melody[i - 1].step + melody[i - 1].steps <= melody[i].step, `melody notes overlap at step ${melody[i].step}`);
   }
-  assert(melody.length >= 20 && melody.length <= 30, `melody should be simple: ${melody.length} notes`);
-  // Простота: только мелодия, бас и длинный аккорд (ни арпеджио, ни шейкера).
-  assert(!STEP_EVENTS.flat().some((e) => e.voice === 'arp' || e.voice === 'shaker'), 'too busy for a calm tune');
-  for (let bar = 0; bar < 8; bar += 1) {
+  assert(melody.length >= 80 && melody.length <= 160, `the melody has ${melody.length} notes`);
+  // Спокойная музыка: мелодия, бас, арпеджио и длинный фон; ни барабанов, ни шейкера.
+  const voices = new Set(STEP_EVENTS.flat().map((e) => e.voice));
+  assert([...voices].sort().join() === 'arp,bass,melody,pad', `voices: ${[...voices]}`);
+  for (let bar = 0; bar < 32; bar += 1) {
     const events = STEP_EVENTS[bar * STEPS_PER_BAR];
     assert(events.some((event) => event.voice === 'bass'), `bar ${bar + 1} has no bass on the downbeat`);
   }
@@ -127,29 +127,27 @@ check('tempo: starts at BPM_START, grows with speed, never outside the range', (
 });
 
 // ---- (в) планировщик
-check('scheduler: notes go forward in time, never into the past, whole loop plays', () => {
+check('scheduler: notes go forward in time, never into the past, the whole form plays', () => {
   const audio = makeAudio();
   const ctx = audio.ctx;
+  const voices = [];
+  audio.musicVoice = (type, freq, time, duration, amp, cutoff) => voices.push({ type, freq, time, amp, cutoff, at: ctx.currentTime });
   audio.setMusicActive(true);
-  const seconds = 40;
+  // 32 такта при 96 ударах в минуту — 80 секунд: играем немного дольше.
+  const seconds = 85;
   for (let t = 0; t < seconds; t += 0.05) {
     ctx.currentTime = t;
     audio.tickMusic();
   }
   audio.setMusicActive(false);
-  assert(ctx.starts.length > 80, `only ${ctx.starts.length} notes scheduled in ${seconds} s`);
-  let last = -1;
-  const melodyFreqs = new Set([72, 74, 76, 79, 81, 84].map((midi) => Math.round(midiToFreq(midi))));
-  for (const note of ctx.starts) {
-    assert(note.time >= note.at - 1e-6, 'a note was scheduled in the past');
-    last = note.time;
-  }
-  const heard = new Set(ctx.starts.filter((n) => n.type === 'triangle' && n.freq > 450).map((n) => Math.round(n.freq)));
-  for (const freq of heard) assert(melodyFreqs.has(freq), `unexpected melody pitch ${freq}`);
-  assert(heard.size === melodyFreqs.size, 'not every pentatonic note was played');
-  // 40 секунд при 108 BPM (примерно 14,4 шага/с): круг из 128 шагов (~8,9 с) проходит несколько раз.
-  const bass = ctx.starts.filter((n) => n.freq < 200);
-  assert(bass.length > 20, 'the bass line is missing');
+  assert(voices.length > 420, `only ${voices.length} notes scheduled in ${seconds} s`);
+  for (const note of voices) assert(note.time >= note.at - 1e-6, 'a note was scheduled in the past');
+  const melodyCutoff = CONFIG.MUSIC.VOICES.melody.cutoff;
+  const wanted = new Set(STEP_EVENTS.flat().filter((e) => e.voice === 'melody').map((e) => Math.round(midiToFreq(e.midi))));
+  const heard = new Set(voices.filter((n) => n.cutoff === melodyCutoff).map((n) => Math.round(n.freq)));
+  assert(heard.size === wanted.size && [...heard].every((freq) => wanted.has(freq)), 'the melody pitches do not match the score');
+  assert(voices.filter((n) => n.cutoff === CONFIG.MUSIC.VOICES.bass.cutoff).length > 40, 'the bass line is missing');
+  assert(voices.filter((n) => n.cutoff === CONFIG.MUSIC.VOICES.arp.cutoff).length > 200, 'the arpeggios are missing');
 });
 
 check('scheduler: a stopped clock (pause, ad, muted) does not pile up notes', () => {

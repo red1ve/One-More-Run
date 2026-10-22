@@ -50,6 +50,7 @@ export class Track {
     this.runTime = 0;
     this.lastCoinZone = null;
     this.lastCoinYSlot = null;
+    this.lastYarnTime = -Infinity; // секунда забега, на которой появился последний клубок-щит
     this.assist = 0; // помощь новичку 0..1 (см. CONFIG.ASSIST), задаётся перед забегом
     this.swayClock = 0; // секунды забега для качающихся кашпо (Track.placeSway)
     this.canonical = false; // забег дня: ряды создаются в идеальный момент (Track.addSegmentAt)
@@ -88,6 +89,7 @@ export class Track {
     this.swayClock = 0;
     this.lastCoinZone = null;
     this.lastCoinYSlot = null;
+    this.lastYarnTime = -Infinity;
     this.director.reset();
     this.addSegment(CONFIG.CANVAS_HEIGHT - this.segmentHeight, 'EMPTY');
     this.addSegment(CONFIG.CANVAS_HEIGHT - this.segmentHeight * 2, 'EMPTY');
@@ -613,6 +615,7 @@ export class Track {
     segment.coins = [];
     this.segments.push(segment);
     this.maybePlaceCoin(segment);
+    this.maybePlaceYarn(segment);
     this.director.observe(segment, this.runTime);
 
     if (segment.type === 'NORMAL') {
@@ -1005,7 +1008,7 @@ export class Track {
     const path = segment.coinPath || segment.paths[0];
     if (!path) return null;
 
-    const size = CONFIG.COIN_SIZE;
+    const size = options.size || CONFIG.COIN_SIZE;
     const zone = options.zone || this.pickCoinZone();
     const ySlot = options.ySlot || this.pickCoinYSlot();
     const xJitter = options.xJitter ?? this.random();
@@ -1065,6 +1068,39 @@ export class Track {
         return;
       }
     }
+  }
+
+  // Клубок-щит (CONFIG.SHIELD): редкий предмет в обычном ряду. Подходит та же проверка, что и для монеты
+  // (достижим, не на пути качающегося кашпо, не мешает монетам), поэтому клубок кладётся через tryPlaceCoin,
+  // а потом переезжает из монет в pickups. Случайные числа НЕ берутся из потока трассы (this.random) и из
+  // Math.random: они считаются хешем номера ряда, как картинки препятствий. Поэтому сама трасса не сдвигается
+  // ни с клубками, ни без них, а с одним seed клубки стоят на тех же местах (забег дня одинаков у всех).
+  maybePlaceYarn(segment) {
+    const cfg = CONFIG.SHIELD;
+    if (segment.type !== 'NORMAL' || segment.sway) return null;
+    if (this.runTime < cfg.FIRST_AT || this.runTime - this.lastYarnTime < cfg.MIN_GAP) return null;
+    const unit = (salt) => visualUnit(segment.id * 0.37 + salt * 91.7);
+    if (unit(1) >= cfg.CHANCE) return null;
+
+    const zones = ['LEFT', 'CENTER', 'RIGHT'];
+    const first = Math.floor(unit(2) * zones.length);
+    const saved = { zone: this.lastCoinZone, slot: this.lastCoinYSlot };
+    const xJitter = unit(3);
+    const yJitter = unit(4);
+    for (let i = 0; i < zones.length; i += 1) {
+      const zone = zones[(first + i) % zones.length];
+      const coin = this.tryPlaceCoin(segment, { zone, ySlot: 'MID', xJitter, yJitter, size: cfg.SIZE });
+      if (!coin) continue;
+      segment.coins.pop();
+      this.lastCoinZone = saved.zone;
+      this.lastCoinYSlot = saved.slot;
+      const yarn = { x: coin.x, y: coin.y, width: coin.width, height: coin.height, collected: false, kind: 'YARN' };
+      if (!segment.pickups) segment.pickups = [];
+      segment.pickups.push(yarn);
+      this.lastYarnTime = this.runTime;
+      return yarn;
+    }
+    return null;
   }
 
   choiceDefinitions(segmentType) {
@@ -1506,6 +1542,9 @@ export class Track {
       segment.coins.forEach((coin) => {
         coin.y += moveDist;
       });
+      segment.pickups?.forEach((pickup) => {
+        pickup.y += moveDist;
+      });
       segment.gates?.forEach((gate) => {
         gate.y += moveDist;
       });
@@ -1615,6 +1654,8 @@ export class Track {
       if (!this.hasFullyPassed(segment, player)) continue;
 
       segment.isPassed = true;
+      // Щит разбил препятствия этого ряда: награды за него нет, серия и множитель не трогаются.
+      if (segment.shieldBroken) continue;
 
       if (segment.chosenPathType) {
         if (result.rewardType === null) {
@@ -1695,6 +1736,50 @@ export class Track {
     }
 
     return collected;
+  }
+
+  // Предметы (клубок-щит): список видов подобранных за этот шаг, например ['YARN'].
+  collectPickups(player) {
+    const found = [];
+    const hitbox = {
+      x: player.x - player.width / 2,
+      y: player.y - player.height / 2,
+      width: player.width,
+      height: player.height
+    };
+    for (const segment of this.segments) {
+      for (const pickup of segment.pickups || []) {
+        if (pickup.collected || !this.rectsOverlap(hitbox, pickup)) continue;
+        pickup.collected = true;
+        found.push(pickup.kind);
+      }
+    }
+    return found;
+  }
+
+  // Щит сломался: убрать препятствия от distance px перед котом до его низа (в том числе то, в которое он
+  // врезался), вместе с их путями. Затронутые ряды помечаются shieldBroken: награды за них нет. Если ряд остался без
+  // препятствий, он сразу считается пройденным. Возвращает убранные прямоугольники (для взрыва).
+  breakAhead(player, distance) {
+    const top = player.y - player.height / 2 - distance;
+    const bottom = player.y + player.height / 2;
+    const removed = [];
+    for (const segment of this.segments) {
+      if (segment.isPassed) continue;
+      const keep = [];
+      for (const obs of segment.obstacles) {
+        if (obs.y + obs.height > top && obs.y < bottom) removed.push({ x: obs.x, y: obs.y, width: obs.width, height: obs.height });
+        else keep.push(obs);
+      }
+      if (keep.length === segment.obstacles.length) continue;
+      segment.obstacles = keep;
+      // Пути (подписи «+250» и порожки) в разбитой зоне тоже убираются, иначе они висели бы над пустой дорогой.
+      segment.paths = segment.paths.filter((path) => !(path.y + path.height > top && path.y < bottom));
+      segment.shieldBroken = true;
+      if (segment.sway && !keep.includes(segment.sway)) segment.sway = null;
+      if (keep.length === 0) segment.isPassed = true;
+    }
+    return removed;
   }
 
   reset() {
