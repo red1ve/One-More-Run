@@ -443,7 +443,7 @@ await check('game: buying skins gives "wardrobe" and "full wardrobe"; the season
   game.shopWindow = { message: null };
   game.requestRender = () => {};
   game.applySelectedSkin = () => {};
-  const buy = (id) => game.tapSkin(id);
+  const buy = (id) => { game.tapSkin(id); return game.buySkin(); }; // нажать на скин (откроется превью) и купить
   const regularBuyable = REGULAR.filter((id) => id !== 'classic');
   for (const id of regularBuyable.slice(0, CFG.SKINS_SOME - 2)) buy(id);
   assert(!game.achievements.has('wardrobe'), `${CFG.SKINS_SOME - 1} skins (the free one counts) are not enough`);
@@ -462,7 +462,9 @@ await check('game: buying skins gives "wardrobe" and "full wardrobe"; the season
   some.requestRender = () => {};
   some.applySelectedSkin = () => {};
   some.tapSkin('halloween');
+  some.buySkin();
   some.tapSkin('ginger');
+  some.buySkin();
   assert(!some.achievements.has('fullWardrobe') && !some.achievements.has('wardrobe'), 'classic + ginger + halloween is not five regular skins');
 });
 

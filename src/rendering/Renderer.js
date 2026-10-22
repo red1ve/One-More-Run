@@ -1,7 +1,7 @@
 import { t } from '../localization/i18n.js';
 import { CONFIG, isRiskPathType } from '../config.js';
 import { GardenArt } from './GardenArt.js';
-import { sitSvg, skinPreviewSvg, skinSvg } from './SkinArt.js';
+import { PREVIEW_BOX, sitSvg, skinPreviewSvg, skinSvg } from './SkinArt.js';
 
 // Fredoka — латиница и цифры; русские буквы браузер берёт из 'OMR Cyrillic'
 // (M PLUS Rounded 1c, см. src/localization/fonts.js).
@@ -137,27 +137,43 @@ export class Renderer {
     }
   }
 
-  // Превью скинов для магазина: кадр бега, обрезанный по коту, в окраске каждого скина. Грузятся при
-  // первом открытии магазина; onChange вызывается, когда очередная картинка готова.
+  // Превью скинов для магазина в окраске каждого скина: skinPreviews — кадр бега, обрезанный по коту (кот сзади, как
+  // в забеге; маленькие картинки в клетках и большая в окне покупки), skinSitPreviews — сидящий кот спереди (большая
+  // картинка в окне покупки). Игра запрашивает их заранее, через пару секунд после запуска (Game.preloadSkinPreviews),
+  // и при каждом открытии магазина (повторно ничего не грузится); onChange вызывается, когда очередная картинка готова.
   async loadSkinPreviews(ids, onChange) {
     this.skinPreviews = this.skinPreviews || new Map();
+    this.skinSitPreviews = this.skinSitPreviews || new Map();
     const missing = ids.filter((id) => !this.skinPreviews.has(id));
     if (!missing.length || typeof fetch !== 'function' || typeof Image !== 'function') return;
-    missing.forEach((id) => this.skinPreviews.set(id, { image: null, ready: false }));
+    missing.forEach((id) => {
+      this.skinPreviews.set(id, { image: null, ready: false });
+      this.skinSitPreviews.set(id, { image: null, ready: false });
+    });
     try {
-      const svg = await (await fetch(LOAF_RUN_URLS[0])).text();
-      for (const id of missing) {
-        const entry = this.skinPreviews.get(id);
+      const [runSvg, sitText] = await Promise.all([
+        fetch(LOAF_RUN_URLS[0]).then((response) => response.text()),
+        fetch(LOAF_SIT_URL).then((response) => response.text())
+      ]);
+      const start = (previews, id, svg) => {
+        const entry = previews.get(id);
         const image = new Image();
         image.onload = () => {
           entry.ready = true;
           if (typeof onChange === 'function') onChange();
         };
-        image.src = URL.createObjectURL(new Blob([skinPreviewSvg(svg, id)], { type: 'image/svg+xml' }));
+        image.src = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
         entry.image = image;
+      };
+      for (const id of missing) {
+        start(this.skinPreviews, id, skinPreviewSvg(runSvg, id));
+        start(this.skinSitPreviews, id, sitSvg(sitText, id));
       }
     } catch (error) {
-      missing.forEach((id) => this.skinPreviews.delete(id));
+      missing.forEach((id) => {
+        this.skinPreviews.delete(id);
+        this.skinSitPreviews.delete(id);
+      });
       console.error('Renderer: skin previews failed to load', error);
     }
   }
@@ -930,8 +946,10 @@ export class Renderer {
     this.leaderboardButtons.close = { x: cx - 124, y: cardY + cardH - 84, w: 248, h: 64 };
   }
 
-  // Окно магазина поверх экрана. shop: { skins: [{ id, price, owned, selected }], balance, message }.
-  // Сетка 2 × 4: превью кота в окраске, название и «надето» / «куплено» / цена. Области нажатия — hitShopButton.
+  // Окно магазина поверх экрана. shop: { skins: [{ id, price, owned, selected }], balance, message, preview }.
+  // Сетка 2 × 4: превью кота в окраске, название и «надето» / «куплено» / цена. Если задан shop.preview (игрок нажал на
+  // скин, которого у него нет), вместо сетки рисуется большое превью этого скина с кнопками «купить» и «назад»
+  // (drawShopPreview). Области нажатия — hitShopButton.
   drawShop(shop) {
     const ctx = this.ctx;
     const cx = this.width / 2;
@@ -941,7 +959,11 @@ export class Renderer {
     const compact = Math.ceil(shop.skins.length / 2) > 4;
     const cardY = compact ? 24 : 40;
     const cardH = compact ? 912 : 880;
-    this.shopButtons = { close: null, skins: [] };
+    this.shopButtons = { close: null, skins: [], buy: null, back: null };
+    if (shop.preview) {
+      this.drawShopPreview(shop, cardX, cardY, cardW, cardH);
+      return;
+    }
 
     this.dimScreen(0.45);
     this.garden.plate(cardX, cardY, cardW, cardH, 26);
@@ -991,8 +1013,8 @@ export class Renderer {
       ctx.stroke();
 
       // Кот в окраске скина (пока картинка грузится — тёплое пятно на её месте).
-      const previewW = compact ? 43 : 52;
       const previewH = compact ? 100 : 122;
+      const previewW = (previewH * PREVIEW_BOX.width) / PREVIEW_BOX.height;
       const previewX = x + 12;
       const previewY = y + (compact ? 8 : 10);
       const preview = this.skinPreviews?.get(skin.id);
@@ -1036,10 +1058,83 @@ export class Renderer {
     this.shopButtons.close = { x: cx - 124, y: cardY + cardH - 80, w: 248, h: 64 };
   }
 
-  // Что нажато в окне магазина: { type: 'close' }, { type: 'skin', id } или null.
+  // Большое превью скина, который игрок ещё не купил (в маленькой клетке по нему не оценить окраску): кот сзади, как его
+  // видно в забеге, и спереди, как он сидит на экранах, обе картинки стоят на общей «земле». Название, сколько дней ещё
+  // продаётся (у ограниченного скина), баланс, строка «не хватает монет» (когда их не хватает), кнопка «купить за N» и
+  // кнопка «назад». view = shop.preview: { id, price, limited, balance, missing }. Пока картинки грузятся — пятна.
+  drawShopPreview(shop, cardX, cardY, cardW, cardH) {
+    const ctx = this.ctx;
+    const cx = this.width / 2;
+    const view = shop.preview;
+    this.dimScreen(0.45);
+    this.garden.plate(cardX, cardY, cardW, cardH, 26);
+    this.fitText(t(`skin.${view.id}`), cx, cardY + 58, 700, 40, cardW - 56, CONFIG.COLORS.UI_TEXT);
+
+    const balanceY = cardY + 104;
+    this.screenPill(cx, balanceY, 170, 42, CONFIG.COLORS.FloorSand);
+    this.garden.hudCoinIcon(cx - 85 + 26, balanceY, 14);
+    this.fitText(`${shop.balance}`, cx + 14, balanceY + 8, 700, 24, 100, CONFIG.COLORS.UI_TEXT);
+    if (view.limited) {
+      const text = view.limited <= 1 ? t('shop.limitedLast') : t('shop.limited', { n: view.limited });
+      this.fitText(text, cx, cardY + 157, 700, 17, cardW - 56, CONFIG.COLORS.HighRiskClay);
+    }
+
+    // Две картинки на одной линии «земли»: кот сзади (узкий и высокий) и кот спереди.
+    const groundY = cardY + cardH - 240;
+    const runH = 450;
+    const runW = (runH * PREVIEW_BOX.width) / PREVIEW_BOX.height;
+    const sitW = 214;
+    const sitH = (sitW * 360) / 300;
+    const gap = 12;
+    const left = cx - (runW + gap + sitW) / 2;
+    const scene = [
+      { entry: this.skinPreviews?.get(view.id), x: left, w: runW, h: runH },
+      { entry: this.skinSitPreviews?.get(view.id), x: left + runW + gap, w: sitW, h: sitH }
+    ];
+    for (const item of scene) {
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = CONFIG.COLORS.ShadowDust;
+      ctx.beginPath();
+      ctx.ellipse(item.x + item.w / 2, groundY + 4, item.w * 0.48, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      if (item.entry?.ready) {
+        ctx.drawImage(item.entry.image, item.x, groundY - item.h, item.w, item.h);
+      } else {
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = CONFIG.COLORS.ShadowDust;
+        ctx.beginPath();
+        ctx.ellipse(item.x + item.w / 2, groundY - item.h / 2, item.w / 2.4, item.h / 2.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Строка «не хватает монет» (или подсказка после покупки) над кнопкой.
+    const note = shop.message || (view.missing > 0 ? t('shop.missing', { n: view.missing }) : null);
+    if (note) {
+      this.screenPill(cx, cardY + cardH - 204, cardW - 60, 36, CONFIG.COLORS.RiskApricot);
+      this.fitText(note, cx, cardY + cardH - 197, 700, 18, cardW - 90, CONFIG.COLORS.UI_TEXT);
+    }
+    const buyY = cardY + cardH - 130;
+    const affordable = view.missing === 0;
+    this.screenPill(cx, buyY, 320, 64, affordable ? CONFIG.COLORS.CoinAmber : CONFIG.COLORS.SkyPaper);
+    this.garden.hudCoinIcon(cx - 160 + 36, buyY, 15);
+    this.fitText(t('shop.buyFor', { n: view.price }), cx + 16, buyY + 9, 700, 26, 320 - 96, CONFIG.COLORS.UI_TEXT);
+    const backY = cardY + cardH - 48;
+    this.screenPill(cx, backY, 240, 56, CONFIG.COLORS.SkyPaper);
+    this.fitText(t('shop.back'), cx, backY + 9, 700, 24, 210, CONFIG.COLORS.UI_TEXT);
+    this.shopButtons.buy = { x: cx - 164, y: buyY - 38, w: 328, h: 76 };
+    this.shopButtons.back = { x: cx - 124, y: backY - 32, w: 248, h: 64 };
+  }
+
+  // Что нажато в окне магазина: { type: 'close' }, { type: 'skin', id }, а в окне большого превью ещё { type: 'buy' } и
+  // { type: 'back' }; null — мимо кнопок.
   hitShopButton(x, y) {
     const buttons = this.shopButtons;
     if (!buttons) return null;
+    if (Renderer.inRect(buttons.buy, x, y)) return { type: 'buy' };
+    if (Renderer.inRect(buttons.back, x, y)) return { type: 'back' };
     if (Renderer.inRect(buttons.close, x, y)) return { type: 'close' };
     const cell = buttons.skins.find((r) => Renderer.inRect(r, x, y));
     return cell ? { type: 'skin', id: cell.id } : null;

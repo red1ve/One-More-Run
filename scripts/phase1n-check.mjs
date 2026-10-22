@@ -303,11 +303,21 @@ await check('game: while the shop is open taps belong to it; a restart is refuse
   assert(game.tryLaunch() === true && game.started === 1, 'the game starts again after closing');
 });
 
-await check('game: tapping an unbought skin buys and wears it, saves to the cloud; tapping a bought one wears it', () => {
+// Кнопка «купить» в окне большого превью (после нажатия на клетку скина окно нужно перерисовать, как в игре).
+function tapBuy(game) {
+  game.renderer.drawShop(game.shopView());
+  const buy = game.renderer.shopButtons.buy;
+  return game.handleShopTap(buy.x + buy.w / 2, buy.y + buy.h / 2);
+}
+
+await check('game: tapping an unbought skin opens its preview (nothing is bought by looking); the buy button buys, wears and saves to the cloud; tapping a bought one wears it', () => {
   const { game, log } = makeShopGame({ coins: 30 });
   game.openShop();
   game.renderer.drawShop(game.shopView());
-  assert(tapCell(game, 'ginger') === true, 'the purchase must report a change');
+  assert(tapCell(game, 'ginger') === true && game.shopWindow.preview === 'ginger', 'the first tap opens the preview');
+  assert(game.coins === 30 && game.shop.owned().join() === 'classic' && log.saves.length === 0 && !log.sounds.includes('buy'), 'looking costs nothing');
+  assert(tapBuy(game) === true, 'the purchase must report a change');
+  assert(game.shopWindow.preview === null, 'after a purchase the window is back to the grid');
   assert(game.coins === 20 && game.shop.selected() === 'ginger' && log.skins.at(-1) === 'ginger', 'bought, coins down, skin put on the cat');
   assert(log.sounds.includes('buy'), 'a purchase sound');
   assert(log.saves.length === 1 && log.saves[0].coinsSpent === 10 && log.saves[0].skinSelected === 'ginger' && log.saves[0].skinsOwned.includes('ginger'), 'the purchase goes to the cloud at once');
@@ -324,7 +334,8 @@ await check('game: not enough coins shows how many are missing, spends nothing, 
     const { game, log } = makeShopGame({ coins: 7 });
     game.openShop();
     game.renderer.drawShop(game.shopView());
-    assert(tapCell(game, 'honey') === false, 'a poor purchase reports no change');
+    assert(tapCell(game, 'honey') === true && game.shopWindow.preview === 'honey', 'a poor player may still look at the skin');
+    assert(tapBuy(game) === false && game.shopWindow.preview === 'honey', 'a poor purchase reports no change and the preview stays');
     assert(game.coins === 7 && game.shop.owned().join() === 'classic' && log.saves.length === 0, 'nothing is spent, nothing is saved');
     assert(game.shopWindow.message && game.shopView().message.includes('18'), `message: ${game.shopWindow.message}`);
     assert(log.sounds.includes('nope') && !log.sounds.includes('buy'), 'a soft "no" sound');

@@ -478,10 +478,15 @@ export function sitSvg(svg, skinId) {
   return out;
 }
 
+// Размер картинки превью (кадр бега, обрезанный по коту): ширина × высота в единицах рисунка 1024 × 1024. Поля шире
+// самого кота примерно на 15 единиц с каждой стороны, иначе кончики полей шляпы Хэллоуина срезались бы по краю.
+export const PREVIEW_BOX = { x: 325, y: 96, width: 390, height: 850 };
+
 // Кадр бега, обрезанный по коту, для превью в магазине: у картинки свой размер (а не 1024 × 1024),
 // поэтому в рамку магазина она ложится ровно и остаётся чёткой.
 export function skinPreviewSvg(frameSvg, skinId) {
+  const { x, y, width, height } = PREVIEW_BOX;
   return skinSvg(frameSvg, skinId)
-    .replace(/viewBox="0 0 1024 1024"/, 'viewBox="340 96 360 850"')
-    .replace(/width="100%" height="auto"/, 'width="360" height="850"');
+    .replace(/viewBox="0 0 1024 1024"/, `viewBox="${x} ${y} ${width} ${height}"`)
+    .replace(/width="100%" height="auto"/, `width="${width}" height="${height}"`);
 }

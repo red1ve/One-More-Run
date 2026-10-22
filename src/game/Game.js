@@ -120,6 +120,9 @@ export class Game {
     this.applySelectedSkin();
     // Накопленное до этой версии (монеты, скины, серия) тоже считается: достижения выдаются без плашки.
     this.checkAchievements({ silent: true });
+    // Превью скинов для магазина готовятся заранее, не задерживая запуск.
+    const previewTimer = setTimeout(() => this.preloadSkinPreviews(), CONFIG.SHOP.PREVIEW_PRELOAD_MS);
+    previewTimer.unref?.();
   }
 
   unlockAudio() {
@@ -876,10 +879,17 @@ export class Game {
     Promise.resolve(this.renderer?.setSkin?.(id)).then(() => this.requestRender?.()).catch(() => {});
   }
 
+  // Превью скинов (Renderer.loadSkinPreviews): повторно ничего не грузится, так что можно вызывать и при запуске, и при
+  // каждом открытии магазина.
+  preloadSkinPreviews() {
+    this.renderer?.loadSkinPreviews?.(this.shop.ids(), () => this.requestRender());
+  }
+
+  // shopWindow: { message, preview } — подсказка в окне и скин, чьё большое превью открыто сейчас (null — сетка скинов).
   openShop() {
     if (this.shopWindow || this.achievementsWindow || (this.state !== 'START' && this.state !== 'GAMEOVER')) return false;
-    this.shopWindow = { message: null };
-    this.renderer?.loadSkinPreviews?.(this.shop.ids(), () => this.requestRender());
+    this.shopWindow = { message: null, preview: null };
+    this.preloadSkinPreviews();
     this.requestRender();
     return true;
   }
@@ -900,7 +910,12 @@ export class Game {
   }
 
   shopView() {
-    return { skins: this.shop.list(), balance: this.shop.balance(), message: this.shopWindow?.message || null };
+    const skins = this.shop.list();
+    const balance = this.shop.balance();
+    // Большое превью только у скина, которого у игрока ещё нет и который ещё продаётся (иначе — сетка).
+    const entry = this.shopWindow?.preview ? skins.find((skin) => skin.id === this.shopWindow.preview && !skin.owned) : null;
+    const preview = entry ? { id: entry.id, price: entry.price, limited: entry.limited, balance, missing: Math.max(0, entry.price - balance) } : null;
+    return { skins, balance, message: this.shopWindow?.message || null, preview };
   }
 
   handleShopTap(x, y) {
@@ -908,41 +923,74 @@ export class Game {
     if (!hit) return false;
     if (hit.type === 'close') return this.closeShop();
     if (hit.type === 'skin') return this.tapSkin(hit.id);
+    if (hit.type === 'buy') return this.buySkin();
+    if (hit.type === 'back') return this.closeShopPreview();
     return false;
   }
 
-  // Купленный скин надевается, неоплаченный покупается (если хватает монет) и сразу надевается.
+  // Нажатие на клетку скина. Купленный скин надевается сразу. Скин, которого ещё нет, с первого нажатия не покупается:
+  // открывается его большое превью (shopWindow.preview), где видно, что именно покупаешь, и есть кнопки «купить» и
+  // «назад». Скин, которого нет в продаже (сезон кончился) или которого не существует, игнорируется.
   tapSkin(id) {
     if (!this.shopWindow) return false;
-    const owned = this.shop.isOwned(id);
-    let changed = false;
-    let earned = []; // достижения, которые выполнила эта покупка
-    if (owned) {
-      changed = this.shop.select(id);
-    } else {
-      const result = this.shop.buy(id);
-      if (!result.ok && result.reason === 'unavailable') return false;
-      if (!result.ok) {
-        if (result.reason === 'poor') {
-          this.showShopMessage(t('shop.missing', { n: result.missing }));
-          this.audio?.play?.('nope');
-        }
-        return false;
-      }
-      changed = true;
-      this.audio?.play?.('buy');
-      this.haptics?.pulse?.('best');
-      earned = this.checkAchievements?.({ silent: true }) || [];
-      // Покупка сразу уходит в облако: монеты и скин не должны потеряться, если игрок закроет игру.
-      this.platform?.saveCloudData?.(this.cloudSnapshot());
+    if (this.shop.isOwned(id)) {
+      const changed = this.shop.select(id);
+      this.coins = this.storage.getCoins();
+      if (changed) this.applySelectedSkin();
+      this.shopWindow.message = null;
+      this.requestRender();
+      return changed;
     }
+    const check = this.shop.canBuy(id);
+    if (!check.ok && (check.reason === 'unavailable' || check.reason === 'unknown')) return false;
+    this.shopWindow.preview = id;
+    this.shopWindow.message = null;
+    this.requestRender();
+    return true;
+  }
+
+  // Кнопка «купить» в окне большого превью (id — скин из превью). Монет не хватает: подсказка и мягкий звук, окно
+  // остаётся. Куплено: скин надет, окно возвращается к сетке. Скин уже куплен или больше не продаётся — тоже к сетке.
+  buySkin(id = this.shopWindow?.preview) {
+    if (!this.shopWindow || !id) return false;
+    const result = this.shop.buy(id);
+    if (!result.ok) {
+      if (result.reason === 'poor') {
+        this.showShopMessage(t('shop.missing', { n: result.missing }));
+        this.audio?.play?.('nope');
+      } else {
+        this.shopWindow.preview = null;
+        this.requestRender();
+      }
+      return false;
+    }
+    this.audio?.play?.('buy');
+    this.haptics?.pulse?.('best');
+    const earned = this.checkAchievements?.({ silent: true }) || []; // достижения, которые выполнила эта покупка
+    // Покупка сразу уходит в облако: монеты и скин не должны потеряться, если игрок закроет игру.
+    this.platform?.saveCloudData?.(this.cloudSnapshot());
     this.coins = this.storage.getCoins();
-    if (changed) this.applySelectedSkin();
+    this.applySelectedSkin();
+    this.shopWindow.preview = null;
     this.shopWindow.message = null;
     this.requestRender();
     // В магазине плашке негде висеть: о новом достижении («5 скинов», «все скины») говорит строка подсказки.
     if (earned.length) this.showShopMessage(t('achievements.toast', { name: t(`achievements.name.${earned[0]}`) }));
-    return changed;
+    return true;
+  }
+
+  // «Назад» из окна большого превью к сетке скинов. false — превью не открыто.
+  closeShopPreview() {
+    if (!this.shopWindow?.preview) return false;
+    this.shopWindow.preview = null;
+    this.shopWindow.message = null;
+    this.requestRender();
+    return true;
+  }
+
+  // Esc: из большого превью — к сетке, из сетки — закрыть магазин.
+  backFromShop() {
+    return this.closeShopPreview() || this.closeShop();
   }
 
   // Подсказка в окне магазина гаснет через CONFIG.SHOP.MESSAGE_SECONDS.

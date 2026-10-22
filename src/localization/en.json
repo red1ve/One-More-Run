@@ -5,7 +5,7 @@
   "start": {
     "title": "ONE MORE RUN",
     "play": "TAP TO START",
-    "controls": "A/D or ←/→  •  TAP LEFT/RIGHT"
+    "controls": "A/D or ←/→  •  MOVE A FINGER, THE CAT FOLLOWS"
   },
   "hint": {
     "choice": "WIDER = SAFER  •  NARROWER = MORE POINTS"
@@ -36,7 +36,9 @@
   "shop": {
     "button": "SHOP",
     "title": "SHOP",
-    "hint": "TAP A CAT TO BUY OR WEAR IT",
+    "hint": "TAP A CAT TO PREVIEW OR WEAR IT",
+    "buyFor": "BUY FOR {n}",
+    "back": "BACK",
     "selected": "WEARING",
     "owned": "OWNED",
     "missing": "{n} MORE COINS NEEDED",
