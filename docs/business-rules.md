@@ -106,6 +106,30 @@ Completion pays at once: `storage.addCoins(reward)` (normal earned coins), once 
 
 Storage / cloud: keys `questDay`, `questProgress` (by kind, never above the biggest goal of that kind, absent for a claimed kind), `questClaimed` (kinds already paid). A record of another day reads as empty, so every new day starts clean. Merge (`Quests.merge`): only today's cloud record matters; per kind the bigger progress wins (so the same coin is not counted twice, the smaller of two devices is lost), claims are united. A claim arriving from the cloud pays nothing: the coins come with the shared earned-coin counters (`Shop.merge`, bigger value wins), so two devices completing the same quest at once pay once. A day from the future (wrong clock) is ignored.
 
+## Achievements (2026-10-22, polish phase 5)
+
+Ten goals for the whole game (`Achievements.js`, `CONFIG.ACHIEVEMENTS`), the owner's list. No coins for them (owner's decision, 2026-10-22): the reward is a badge in the list and a capsule «ДОСТИЖЕНИЕ: НАЗВАНИЕ». They are earned once and stay for good. The START screen has a button «ДОСТИЖЕНИЯ» (a star on a gold disc; green when all ten are earned) between the quests and the leaderboard; it opens a window with ten rows: a round badge (a green check when earned, an empty circle otherwise), the name, a description with its number («МНОЖИТЕЛЬ ×5») and, only for the cumulative goals that are not earned yet, the counter on the right («120 / 500»). Esc or «ЗАКРЫТЬ» shuts it; a tap or R / Space / Enter does not start a run behind it; no other window opens over it. The button is on START only (the Game over screen has no room).
+
+In-run goals (given by `Game` at the moment the goal is reached, `Achievements.unlock`):
+- «ДОЛГИЙ ЗАБЕГ» (`longRun`): 80 seconds in one run (the dev start offset `?start=` does not count).
+- «СМЕЛЫЙ КОТ» (`bold`): 3 narrow (risky) paths in a row (`riskStreak`, a safe choice at a fork breaks it; one more than the 2 that already grow the multiplier).
+- «ТОНКИЙ РАСЧЁТ» (`closeCalls`): 5 close calls in a row, i.e. the close-call combo (`grazeCombo`, each within `GRAZE.COMBO_WINDOW` 2.5 s of the previous one) reaches 5.
+- «ЧИСТЫЙ БЕГ» (`cleanRun`): ONE MINUTE of one run in a row without picking up a coin (counted from the start of the run or from the last coin, `Game.lastCoinAt`). The first version was 30 s, but on 2026-10-22 a measurement showed that coins lie near the walls, so anybody who drives the middle and survives 30 s got it almost always (a simple middle-driving bot reached it in every run that lasted 30 s); the owner raised it to a minute «so there is a challenge»: now the player must survive 60 s and deliberately leave every coin (the golden hour at 16–32 s lays a coin in each of four narrow rows).
+- «ПРЕДЕЛ» (`topMultiplier`): the top multiplier `CONFIG.MULTIPLIER_MAX` (×5, nine risky passes in a row from a safe start).
+
+Cumulative goals (`Achievements.evaluate(Game.achievementStats())`, checked at a coin pick-up, a shop purchase, the end of a run, a quest completion and a cloud merge, so also what was earned before this version or on another device):
+- «ЗАПАСЛИВЫЙ КОТ» (`piggyBank`): 500 coins earned over the whole game (the `coinsEarned` counter, which includes quest and daily rewards and the ×2 ad; spending does not take it back).
+- «ГАРДЕРОБ» (`wardrobe`): 5 skins in the collection, the free «классик» counts.
+- «ПОЛНЫЙ ГАРДЕРОБ» (`fullWardrobe`): every skin except the seasonal one (the seasonal skin is on sale for a limited time, «all skins» would become impossible after the season; it counts neither towards 5 nor towards all).
+- «ПРИЛЕЖНЫЙ КОТ» (`diligent`): all three daily quests done on 3 Moscow game days in a row. A separate small record (`achQuestDay`, `achQuestStreak`): when the last of the three quests is done (`Game.onQuestDone` → `noteQuestsForAchievements`) the streak grows by a day (same day again changes nothing, a missed day restarts it at 1, a day from the future is ignored).
+- «НЕДЕЛЯ ЗАБЕГОВ» (`weekStreak`): the daily-run streak reaches 7 days (`daily.streakAt(today)`).
+
+The descriptions use no word forms that depend on the number («ДНЕЙ ПОДРЯД: 3»), so a goal can be changed in the config without rewriting strings. The numbers live in `CONFIG.ACHIEVEMENTS` (`SURVIVE_SECONDS` 80, `RISK_STREAK` 3, `GRAZE_COMBO` 5, `CLEAN_SECONDS` 60, `COINS_TOTAL` 500, `SKINS_SOME` 5, `QUEST_DAYS` 3, `DAILY_STREAK` 7, `TOAST_SECONDS` 3); `scripts/phase5a-check.mjs` keeps them sensible. Measured on a simple wall-hugging bot (4 px from the wall; it dies in 9 s on average): a combo of 5 close calls in 15 of 40 runs, so «ТОНКИЙ РАСЧЁТ» needs intent but not mastery.
+
+The capsule: in a run under the time-of-day capsule (under the quest capsule when both show), on Game over above the card (stacked with the «no reward» note and the quest capsule, 48 px apart); a chime and a pulse accompany it (the same ones as for a quest). A purchase that earns one («5 skins», «all skins») says so in the shop's hint line instead, because a capsule would be hidden behind the shop window. What is earned without a run (old data on start, the cloud) is given silently: no capsule, no sound.
+
+Storage / cloud: keys `achievements` (the list of earned ids), `achQuestDay`, `achQuestStreak`. Merge (`Achievements.merge`): the lists are united (nothing earned on any device is lost), the quest streak follows the daily-run rules (the later day wins, the same day takes the bigger streak, an older day and a day from the future are ignored). Not on the leaderboard: Yandex has no achievements API that the game would use, so they are local plus the cloud save.
+
 ## Rewarded advertising
 
 Rewarded advertising is not part of the current release. There is no continue, revive, score reward, or Coin reward for watching an ad.

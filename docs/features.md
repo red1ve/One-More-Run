@@ -79,6 +79,7 @@ Current implementation notes:
 | «В МЕНЮ» on Game Over: back to the START screen (daily run, quests, shortcut), the first start after loading has no ad but a later start through the menu does (`Game.openMenu`) | P1 | DONE (2026-10-05) |
 | Store card kit: RU/EN texts with limit checks, 20 screenshots, two 27 s videos, icon and covers (Gemini background plus the Loaf vector), `npm run pack` zip (`docs/store/`, `scripts/store-capture/`, `scripts/pack-zip.mjs`) | P1 | DONE (2026-10-05) |
 | Daily quests: three a day (3 / 5 / 8 coins) drawn from 8 kinds by the date, progress and payment at the moment of completion, a window on START (`Quests.js`) | P1 | DONE (2026-10-05) |
+| Achievements: ten goals for the whole game, no coin rewards, a badge list on START and a capsule when one is earned; in-run goals, cumulative goals and two day streaks (`Achievements.js`, `CONFIG.ACHIEVEMENTS`) | P2 | DONE (2026-10-22) |
 | Vibration on events (`HapticsService`, follows the sound switch) | P2 | DONE (2026-10-01) |
 | Streak and coin-chain pitch (pentatonic, in tune with the music) | P2 | DONE (2026-10-01) |
 

@@ -410,6 +410,24 @@ export class GardenArt {
     ctx.lineCap = 'butt';
   }
 
+  // Звезда для кнопки «достижения»: золотой диск и коричневая пятиконечная звезда.
+  hudStarIcon(cx, cy, r) {
+    const ctx = this.ctx;
+    this.hudIconDisc(cx, cy, r, this.coinGold);
+    ctx.fillStyle = this.c.InkBrown;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i += 1) {
+      const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+      const radius = i % 2 === 0 ? r * 0.66 : r * 0.28;
+      const px = cx + Math.cos(angle) * radius;
+      const py = cy + r * 0.06 + Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
   hudStreakIcon(cx, cy, r, active) {
     const ctx = this.ctx;
     const bg = active ? this.c.CatGinger : mixHex(this.c.FloorSand, this.c.SkyPaper, 0.3);

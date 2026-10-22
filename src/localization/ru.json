@@ -77,6 +77,38 @@
       "multiplier": "ДОСТИГНИ МНОЖИТЕЛЯ"
     }
   },
+  "achievements": {
+    "button": "ДОСТИЖЕНИЯ",
+    "title": "ДОСТИЖЕНИЯ",
+    "count": "ПОЛУЧЕНО {done} ИЗ {total}",
+    "close": "ЗАКРЫТЬ",
+    "toast": "ДОСТИЖЕНИЕ: {name}",
+    "progress": "{p} / {n}",
+    "name": {
+      "longRun": "ДОЛГИЙ ЗАБЕГ",
+      "bold": "СМЕЛЫЙ КОТ",
+      "closeCalls": "ТОНКИЙ РАСЧЁТ",
+      "cleanRun": "ЧИСТЫЙ БЕГ",
+      "topMultiplier": "ПРЕДЕЛ",
+      "piggyBank": "ЗАПАСЛИВЫЙ КОТ",
+      "wardrobe": "ГАРДЕРОБ",
+      "fullWardrobe": "ПОЛНЫЙ ГАРДЕРОБ",
+      "diligent": "ПРИЛЕЖНЫЙ КОТ",
+      "weekStreak": "НЕДЕЛЯ ЗАБЕГОВ"
+    },
+    "desc": {
+      "longRun": "СЕКУНД В ОДНОМ ЗАБЕГЕ: {n}",
+      "bold": "УЗКИХ ПРОХОДОВ ПОДРЯД: {n}",
+      "closeCalls": "ВПРИТИРКУ ПОДРЯД: {n}",
+      "cleanRun": "СЕКУНД БЕЗ МОНЕТ: {n}",
+      "topMultiplier": "МНОЖИТЕЛЬ ×{n}",
+      "piggyBank": "МОНЕТ ЗА ВСЁ ВРЕМЯ: {n}",
+      "wardrobe": "СКИНОВ В КОЛЛЕКЦИИ: {n}",
+      "fullWardrobe": "ВСЕ СКИНЫ, КРОМЕ СЕЗОННЫХ",
+      "diligent": "ВСЕ ЗАДАНИЯ, ДНЕЙ ПОДРЯД: {n}",
+      "weekStreak": "ЗАБЕГ ДНЯ, ДНЕЙ ПОДРЯД: {n}"
+    }
+  },
   "skin": {
     "classic": "КЛАССИК",
     "ginger": "РЫЖИК",

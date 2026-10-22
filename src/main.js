@@ -110,6 +110,7 @@ window.addEventListener('DOMContentLoaded', () => {
       // Esc сначала закрывает окно магазина, заданий или таблицы лидеров, если оно открыто.
       if (game.shopWindow) game.closeShop();
       else if (game.questsWindow) game.closeQuests();
+      else if (game.achievementsWindow) game.closeAchievements();
       else if (game.leaderboard) game.closeLeaderboard();
       else game.togglePause();
       return;
