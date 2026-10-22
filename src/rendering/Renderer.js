@@ -310,7 +310,8 @@ export class Renderer {
     });
   }
 
-  drawPlayer(player, feel = null) {
+  // shield — { left, total } секунд щита от клубка или null (CONFIG.SHIELD).
+  drawPlayer(player, feel = null, shield = null) {
     const time = feel ? feel.time || 0 : 0;
     const pulse = feel ? feel.playerPulse || 0 : 0;
     const stretchY = 1 + pulse * 0.18;
@@ -360,6 +361,77 @@ export class Renderer {
     }
 
     this.ctx.restore();
+
+    if (shield) this.drawShieldRing(player, shield, time);
+  }
+
+  // Щит от клубка: овальный пузырь вокруг кота из тонкой пунктирной «нитки» и дуга-таймер, которая убывает по
+  // часовой стрелке. В последние BLINK_LAST секунд щит мигает. Цвета пряжи — смеси палитры (CONFIG.COLORS.YARN*).
+  drawShieldRing(player, shield, time) {
+    const cfg = CONFIG.SHIELD;
+    const colors = CONFIG.COLORS;
+    const ctx = this.ctx;
+    const blink = shield.left <= cfg.BLINK_LAST && Math.floor(time * 6) % 2 === 1;
+    const fade = blink ? 0.3 : 1;
+    const rx = 40;
+    const ry = 72;
+    const fraction = Math.max(0, Math.min(1, shield.left / Math.max(0.001, shield.total)));
+    const ellipse = (from, to) => {
+      if (typeof ctx.ellipse === 'function') ctx.ellipse(0, 0, rx, ry, 0, from, to);
+      else ctx.arc(0, 0, Math.max(rx, ry), from, to);
+    };
+    ctx.save();
+    ctx.translate(player.x, player.y - 48);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ellipse(0, Math.PI * 2);
+    ctx.globalAlpha = 0.14 * fade;
+    ctx.fillStyle = colors.YARN_LIGHT;
+    ctx.fill();
+    ctx.globalAlpha = 0.8 * fade;
+    ctx.strokeStyle = colors.YARN;
+    ctx.lineWidth = 2.5;
+    if (typeof ctx.setLineDash === 'function') {
+      ctx.setLineDash([9, 6]);
+      ctx.lineDashOffset = -time * 18;
+    }
+    ctx.stroke();
+    if (typeof ctx.setLineDash === 'function') ctx.setLineDash([]);
+    ctx.beginPath();
+    ellipse(-Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fraction);
+    ctx.globalAlpha = fade;
+    ctx.strokeStyle = colors.YARN_DARK;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Пузырь множителя серии рядом с котом: выскакивает при смене множителя и растворяется. Растёт — тёплый цвет,
+  // сбросился — серый. Сторона — та, где больше места (у правого края перекидывается налево).
+  drawMultBubble(bubble, player) {
+    const cfg = CONFIG.MULT_BUBBLE;
+    const ctx = this.ctx;
+    const age = bubble.age;
+    const pop = Math.min(1, age / 0.18);
+    const back = pop - 1;
+    const ease = 1 + 2.70158 * back * back * back + 1.70158 * back * back; // «выскакивание» с лёгким перелётом
+    const scale = 0.55 + 0.45 * ease;
+    const alpha = Math.max(0, Math.min(1, (cfg.LIFE - age) / 0.35));
+    const side = player.x > this.width - 120 ? -1 : 1;
+    const cx = player.x + side * cfg.OFFSET_X;
+    const cy = player.y + cfg.OFFSET_Y - age * 8;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    this.screenPill(0, 0, 58, 30, bubble.up ? CONFIG.COLORS.CoinAmber : CONFIG.COLORS.ShadowDust);
+    this.fitText(`x${bubble.value.toFixed(1)}`, 0, 6, 700, 17, 50, CONFIG.COLORS.UI_TEXT);
+    ctx.restore();
+  }
+
+  // Лента рекорда: y кота-ряда, где закончился лучший забег, или null (ленты нет). Сам рисунок — в GardenArt.
+  setRecordMarker(y) {
+    this.garden.recordMarkerY = Number.isFinite(y) ? y : null;
   }
 
   drawParticles(particles) {

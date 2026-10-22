@@ -69,7 +69,7 @@ const LEGACY_FAMILY_MAP = {
 const VIEW_CULL_MARGIN = 56;
 
 // Порядок рисования в одном ряду: ящики и ворота, затем монеты поверх.
-const ROLE_LAYER = { planter: 6, coin: 7 };
+const ROLE_LAYER = { ribbon: 4, planter: 6, coin: 7, yarn: 7 };
 // Качающееся кашпо кренится в сторону движения: на самой большой скорости на столько радиан.
 const SWAY_LEAN = 0.1;
 
@@ -640,6 +640,7 @@ export class GardenArt {
     prop.familySeed = 0;
     prop.classScale = 1;
     prop.coin = null;
+    prop.pickup = null;
     prop.side = 0;
     prop.spans = null;
     prop.sways = null;
@@ -657,6 +658,8 @@ export class GardenArt {
     this.markFenceClearance(segments);
     this.collectFenceRows(segments);
     this.collectCoins(segments);
+    this.collectYarn(segments);
+    this.collectRecordMarker();
 
     const props = this.worldProps;
     props.sort((a, b) => (
@@ -672,6 +675,8 @@ export class GardenArt {
   drawWorldProp(prop) {
     if (!prop) return;
     if (prop.kind === 'coin') this.drawCoin(prop.coin);
+    else if (prop.kind === 'yarn') this.drawYarn(prop.pickup);
+    else if (prop.kind === 'record') this.drawRecordMarker(prop);
     else if (prop.kind === 'fence-row') this.drawFenceRow(prop);
   }
 
@@ -1021,6 +1026,187 @@ export class GardenArt {
         prop.layer = ROLE_LAYER.coin;
       });
     });
+  }
+
+  // Клубки-щиты (segment.pickups): как монеты, отдельный вид предмета.
+  collectYarn(segments) {
+    (segments || []).forEach((segment) => {
+      (segment.pickups || []).forEach((pickup) => {
+        if (pickup.collected) return;
+        const vis = this.projectTrackRect(pickup.x, pickup.y, pickup.width, pickup.height);
+        if (!vis) return;
+        const size = Math.max(12, CONFIG.SHIELD.DRAW_SIZE * vis.uniformScale);
+        if (this.spriteOffscreen(vis.x + vis.width / 2, vis.groundY, size, size)) return;
+        const prop = this.allocProp();
+        prop.kind = 'yarn';
+        prop.role = 'yarn';
+        prop.pickup = pickup;
+        prop.screenY = vis.screenY;
+        prop.groundY = vis.groundY;
+        prop.worldY = vis.worldY;
+        prop.s = vis.s;
+        prop.scale = vis.s;
+        prop.x = vis.x + vis.width / 2;
+        prop.layer = ROLE_LAYER.yarn;
+      });
+    });
+  }
+
+  // Клубок пряжи: плоский шар с обводкой, тенью снизу справа и несколькими витками, хвостик нитки на земле.
+  drawYarn(pickup) {
+    if (!pickup || pickup.collected) return;
+    const vis = this.projectTrackRect(pickup.x, pickup.y, pickup.width, pickup.height);
+    if (!vis) return;
+    const ctx = this.ctx;
+    const colors = CONFIG.COLORS;
+    const scale = vis.uniformScale || vis.scaleZ || 1;
+    const size = Math.max(12, CONFIG.SHIELD.DRAW_SIZE * scale);
+    const bob = Math.sin((this.animTime || 0) * 2.6 + pickup.x * 0.05) * (1.4 + scale * 0.8);
+    const cx = vis.x + vis.width / 2;
+    const groundY = vis.groundY;
+    const occ = this.beginHorizonReveal(cx, groundY, size, size);
+    if (!occ) return;
+    if (occ.state === 'VISIBLE') this.contactShadow(cx, groundY, size * 0.8, vis.screenY);
+
+    const r = size * 0.4;
+    const cy = groundY - r - size * 0.1 + bob;
+    const line = Math.max(1.4, r * 0.16);
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    // Хвостик нитки: тёмная обводка и нитка сверху.
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.7, cy + r * 0.74);
+    ctx.quadraticCurveTo(cx - r * 1.35, cy + r * 1.05, cx - r * 1.7, cy + r * 0.8);
+    ctx.strokeStyle = colors.InkBrown;
+    ctx.lineWidth = line * 2.4;
+    ctx.stroke();
+    ctx.strokeStyle = colors.YARN;
+    ctx.lineWidth = line * 1.2;
+    ctx.stroke();
+    // Шар: основа, тень и витки внутри круга.
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = colors.YARN;
+    ctx.fill();
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = colors.YARN_DARK;
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.2, cy - r * 0.2, r * 0.98, 0, Math.PI * 2);
+    ctx.fillStyle = colors.YARN;
+    ctx.fill();
+    ctx.strokeStyle = colors.YARN_LIGHT;
+    ctx.lineWidth = line;
+    ctx.beginPath();
+    ctx.moveTo(cx - r, cy - r * 0.2);
+    ctx.quadraticCurveTo(cx, cy - r * 0.95, cx + r, cy + r * 0.1);
+    ctx.moveTo(cx - r, cy + r * 0.3);
+    ctx.quadraticCurveTo(cx - r * 0.1, cy - r * 0.35, cx + r * 0.9, cy + r * 0.65);
+    ctx.moveTo(cx - r * 0.65, cy + r * 0.9);
+    ctx.quadraticCurveTo(cx + r * 0.1, cy + r * 0.15, cx + r * 0.6, cy - r * 0.95);
+    ctx.stroke();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = colors.InkBrown;
+    ctx.lineWidth = Math.max(1.6, r * 0.18);
+    ctx.stroke();
+    // Блик.
+    ctx.fillStyle = colors.SkyPaper;
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    if (typeof ctx.ellipse === 'function') ctx.ellipse(cx - r * 0.38, cy - r * 0.42, r * 0.22, r * 0.14, -0.6, 0, Math.PI * 2);
+    else ctx.arc(cx - r * 0.38, cy - r * 0.42, r * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    this.endHorizonReveal(occ);
+  }
+
+  // Лента рекорда (Game.recordMarkerY): тонкая лента поперёк дороги в том месте, где закончился лучший забег.
+  collectRecordMarker() {
+    const y = this.recordMarkerY;
+    if (!Number.isFinite(y)) return;
+    const thickness = CONFIG.RECORD_MARKER.THICKNESS;
+    const vis = this.projectTrackRect(CONFIG.TRACK_LEFT, y - thickness / 2, CONFIG.TRACK_WIDTH, thickness);
+    if (!vis) return;
+    if (this.spriteOffscreen(vis.roadCenter, vis.groundY, vis.roadWidth, 30)) return;
+    const prop = this.allocProp();
+    prop.kind = 'record';
+    prop.role = 'ribbon';
+    prop.screenY = vis.screenY;
+    prop.groundY = vis.groundY;
+    prop.worldY = vis.worldY;
+    prop.s = vis.s;
+    prop.scale = vis.uniformScale || vis.s;
+    prop.x = vis.roadCenter;
+    prop.layer = ROLE_LAYER.ribbon;
+  }
+
+  // Лента: бледная волнистая полоса от края до края дороги, по краям маленькие банты. Без надписей.
+  drawRecordMarker(prop) {
+    const cfg = CONFIG.RECORD_MARKER;
+    const ctx = this.ctx;
+    const colors = CONFIG.COLORS;
+    const worldY = Number.isFinite(prop.worldY) ? prop.worldY : prop.groundY;
+    const road = this.roadAt(worldY);
+    const scale = Number.isFinite(prop.scale) ? prop.scale : 1;
+    const h = Math.max(2.5, cfg.THICKNESS * scale);
+    const occ = this.beginHorizonReveal(road.roadCenter, prop.groundY, road.roadWidth, h * 4);
+    if (!occ) return;
+    const left = road.roadLeft;
+    const right = road.roadRight;
+    const y = prop.groundY;
+    const time = this.animTime || 0;
+    const wave = (x) => Math.sin(x * 0.045 + time * 1.6) * h * 0.4;
+    const steps = 28;
+    const at = (i) => left + ((right - left) * i) / steps;
+
+    ctx.save();
+    ctx.globalAlpha *= cfg.ALPHA;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i += 1) {
+      const x = at(i);
+      if (i === 0) ctx.moveTo(x, y - h / 2 + wave(x));
+      else ctx.lineTo(x, y - h / 2 + wave(x));
+    }
+    for (let i = steps; i >= 0; i -= 1) {
+      const x = at(i);
+      ctx.lineTo(x, y + h / 2 + wave(x));
+    }
+    ctx.closePath();
+    ctx.fillStyle = colors.SkyPaper;
+    ctx.fill();
+    ctx.strokeStyle = colors.InkBrown;
+    ctx.globalAlpha *= 0.55;
+    ctx.lineWidth = Math.max(1, h * 0.16);
+    ctx.stroke();
+    // Бант на каждом краю: два треугольничка и узелок.
+    ctx.globalAlpha = cfg.ALPHA;
+    ctx.fillStyle = colors.RiskApricot;
+    [left, right].forEach((x, side) => {
+      const dir = side === 0 ? 1 : -1;
+      const bow = h * 2.4;
+      const bx = x + dir * h * 1.2;
+      const by = y + wave(x);
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + dir * bow, by - bow * 0.55);
+      ctx.lineTo(bx + dir * bow, by + bow * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(bx, by, h * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+    this.endHorizonReveal(occ);
   }
 
   groundShadow(x, y, rx, ry) {

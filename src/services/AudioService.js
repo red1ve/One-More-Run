@@ -36,8 +36,12 @@ export class AudioService {
       nextTime: 0,
       intensity: 0,
       timer: null,
-      gain: null
+      gain: null,
+      ambience: null, // 'birds' | 'crickets' | null: что тихо звучит поверх музыки (по времени суток)
+      ambienceTime: 0, // когда поставить следующее событие окружения (птицы) или начать сверчков
+      crickets: null // голоса сверчков: [{ time, freq, period }], создаются при первом стрекоте
     };
+    this.random = Math.random; // для птиц и искр; тест подставляет свой
   }
 
   unlock() {
@@ -153,6 +157,22 @@ export class AudioService {
       this.tone(1318.5, 0.16, 'sine', 0.42, 0.06);
     }
     else if (name === 'nope') this.tone(196, 0.12, 'sine', 0.38);
+    else if (name === 'yarn') {
+      // Клубок подобран: две быстрые ноты вверх.
+      this.tone(659.25, 0.08, 'triangle', 0.45);
+      this.tone(987.77, 0.16, 'sine', 0.42, 0.05);
+    }
+    else if (name === 'shieldbreak') {
+      // Щит сломался: глухой хруст и высокий щелчок.
+      this.tone(170, 0.14, 'sawtooth', 0.5);
+      this.tone(110, 0.2, 'square', 0.4, 0.03);
+      this.tone(1400, 0.05, 'triangle', 0.35, 0.02);
+    }
+    else if (name === 'shieldend') {
+      // Щит погас: мягко вниз.
+      this.tone(440, 0.1, 'sine', 0.3);
+      this.tone(330, 0.14, 'sine', 0.26, 0.06);
+    }
     else if (name === 'streak') {
       this.tone(520, 0.07, 'square', 0.5);
       this.tone(720, 0.1, 'triangle', 0.45, 0.05);
@@ -226,6 +246,7 @@ export class AudioService {
     music.running = true;
     music.step = 0;
     music.nextTime = this.ctx.currentTime + 0.08;
+    music.ambienceTime = this.ctx.currentTime + CONFIG.MUSIC.AMBIENCE.FIRST_DELAY;
     if (!music.gain) {
       music.gain = this.ctx.createGain();
       music.gain.connect(this.output());
@@ -265,6 +286,7 @@ export class AudioService {
       music.nextTime += secondsPerStep(this.musicBpm());
       guard += 1;
     }
+    this.scheduleAmbience(ahead);
   }
 
   scheduleMusicStep(step, time) {
@@ -272,20 +294,18 @@ export class AudioService {
     const stepLength = secondsPerStep(this.musicBpm());
     for (let i = 0; i < events.length; i += 1) {
       const event = events[i];
+      const voice = CONFIG.MUSIC.VOICES[event.voice];
+      if (!voice) continue;
       const length = event.steps * stepLength;
-      if (event.voice === 'melody') {
-        this.musicVoice('triangle', midiToFreq(event.midi), time, length * 0.95, 0.11 * event.accent, 2800, 0.01, false);
-      } else if (event.voice === 'bass') {
-        this.musicVoice('triangle', midiToFreq(event.midi), time, length * 0.92, 0.12 * event.accent, 480, 0.02, false);
-      } else if (event.voice === 'pad') {
-        this.musicVoice('sine', midiToFreq(event.midi), time, length, 0.032 * event.accent, 1400, 0.35, true);
-      }
+      const duration = Math.min(length * voice.hold, voice.maxSeconds ?? Infinity);
+      this.musicVoice(voice.type, midiToFreq(event.midi), time, duration, voice.amp * event.accent, voice.cutoff, voice.attack, event.voice === 'pad', voice.overtone);
     }
   }
 
   // Один звук музыки. Щипок (sustain = false): быстро берётся и затухает. Длинный аккорд
-  // (sustain = true): плавно нарастает, держится и плавно уходит.
-  musicVoice(type, freq, time, duration, amp, cutoff, attack = 0.01, sustain = false) {
+  // (sustain = true): плавно нарастает, держится и плавно уходит. overtone — { ratio, level, decay }: ещё один
+  // тихий звук на ratio раз выше, он быстро гаснет за decay секунд (так звучит дерево маримбы).
+  musicVoice(type, freq, time, duration, amp, cutoff, attack = 0.01, sustain = false, overtone = null) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     const filter = ctx.createBiquadFilter();
@@ -304,9 +324,136 @@ export class AudioService {
       gain.gain.exponentialRampToValueAtTime(0.0001, time + length);
     }
     osc.connect(filter);
+    if (overtone) {
+      const high = ctx.createOscillator();
+      const highGain = ctx.createGain();
+      high.type = 'sine';
+      high.frequency.setValueAtTime(freq * overtone.ratio, time);
+      highGain.gain.setValueAtTime(overtone.level, time);
+      highGain.gain.exponentialRampToValueAtTime(0.0001, time + Math.min(length, overtone.decay * 8));
+      high.connect(highGain);
+      highGain.connect(filter);
+      high.start(time);
+      high.stop(time + length + 0.03);
+    }
     filter.connect(gain);
     gain.connect(this.music.gain);
     osc.start(time);
     osc.stop(time + length + 0.03);
+  }
+
+  // --- Окружение: очень тихие добавки поверх музыки, по времени суток ---
+  // Игра говорит только, какой сейчас этап: 'birds' днём, 'crickets' ночью, null — ничего.
+
+  setAmbience(kind) {
+    const next = kind === 'birds' || kind === 'crickets' ? kind : null;
+    const music = this.music;
+    if (music.ambience === next) return;
+    music.ambience = next;
+    music.crickets = null;
+    // Новый этап: первое событие не сразу, а после небольшой паузы.
+    if (this.ctx) music.ambienceTime = this.ctx.currentTime + CONFIG.MUSIC.AMBIENCE.FIRST_DELAY;
+  }
+
+  // Ставит в расписание события окружения, которые попадают в окно «вперёд до ahead».
+  scheduleAmbience(ahead) {
+    const music = this.music;
+    const kind = music.ambience;
+    if (!kind || !this.ctx) return;
+    if (kind === 'crickets') {
+      this.scheduleCrickets(ahead, CONFIG.MUSIC.AMBIENCE.CRICKETS);
+      return;
+    }
+    const cfg = CONFIG.MUSIC.AMBIENCE.BIRDS;
+    // Если планировщик сильно отстал (вкладка тормозила), не вываливаем кучу звуков разом.
+    if (music.ambienceTime < this.ctx.currentTime - 0.5) music.ambienceTime = this.ctx.currentTime + 0.5;
+    let guard = 0;
+    while (music.ambienceTime < ahead && guard < 4) {
+      this.birdChirp(music.ambienceTime, cfg);
+      music.ambienceTime += cfg.GAP_MIN + this.random() * cfg.GAP_RANGE;
+      guard += 1;
+    }
+  }
+
+  // Сверчки (CONFIG.MUSIC.AMBIENCE.CRICKETS): у каждого своя высота, громкость и ритм; стрекот каждого ставится
+  // заранее, как нота музыки.
+  scheduleCrickets(ahead, cfg) {
+    const music = this.music;
+    const now = this.ctx.currentTime;
+    if (!music.crickets) {
+      music.crickets = cfg.VOICES.map((voice) => ({ ...voice, time: music.ambienceTime + this.random() * voice.period }));
+    }
+    for (const voice of music.crickets) {
+      // Если планировщик сильно отстал (вкладка тормозила), не вываливаем кучу звуков разом.
+      if (voice.time < now - 0.5) voice.time = now + 0.2 + this.random() * 0.5;
+      let guard = 0;
+      while (voice.time < ahead && guard < 4) {
+        this.cricketChirp(voice.time, voice, cfg);
+        // Следующий стрекот: обычный интервал этого сверчка с разбросом, изредка долгая пауза.
+        const uneven = 1 - cfg.UNEVEN + this.random() * 2 * cfg.UNEVEN;
+        voice.time += voice.period * uneven + (this.random() < cfg.REST_CHANCE ? cfg.REST : 0);
+        guard += 1;
+      }
+    }
+  }
+
+  // Один стрекот: 4–6 импульсов одного тона (один осциллятор, усилитель «стучит»). Каждый импульс сначала быстро
+  // набирает треть громкости, потом плавно растёт ~13 мс и быстро обрывается за ~9 мс, как у настоящего сверчка.
+  cricketChirp(time, voice, cfg) {
+    const ctx = this.ctx;
+    const pulses = cfg.PULSES[Math.floor(this.random() * cfg.PULSES.length)];
+    const freq = voice.freq * (1 + (this.random() - 0.5) * 0.01); // каждый стрекот чуть выше или ниже (±0,5%)
+    const level = cfg.AMP * voice.level * (0.9 + this.random() * 0.2);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, time);
+    gain.gain.setValueAtTime(0.0001, time);
+    for (let i = 0; i < pulses; i += 1) {
+      const at = time + i * cfg.PULSE_GAP;
+      const peak = level * cfg.PROFILE[i];
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.linearRampToValueAtTime(peak * 0.35, at + 0.003);
+      gain.gain.linearRampToValueAtTime(peak, at + 0.0125);
+      gain.gain.linearRampToValueAtTime(0.0001, at + 0.022);
+    }
+    osc.connect(gain);
+    gain.connect(this.music.gain);
+    osc.start(time);
+    osc.stop(time + pulses * cfg.PULSE_GAP + 0.02);
+  }
+
+  // Короткая трель: 2–4 ноты, каждая плавно идёт вверх или вниз, с мелким дрожанием голоса.
+  birdChirp(time, cfg) {
+    const ctx = this.ctx;
+    const count = cfg.NOTES_MIN + Math.floor(this.random() * cfg.NOTES_RANGE);
+    const base = cfg.FREQ_MIN + this.random() * cfg.FREQ_RANGE;
+    let at = time;
+    for (let i = 0; i < count; i += 1) {
+      const length = 0.07 + this.random() * 0.05;
+      const slide = this.random() < 0.5 ? 1.28 : 0.72;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const vibrato = ctx.createOscillator();
+      const vibratoGain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(base, at);
+      osc.frequency.linearRampToValueAtTime(base * slide, at + length);
+      vibrato.type = 'sine';
+      vibrato.frequency.setValueAtTime(cfg.VIBRATO_HZ, at);
+      vibratoGain.gain.setValueAtTime(base * 0.012, at);
+      vibrato.connect(vibratoGain);
+      vibratoGain.connect(osc.frequency);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.linearRampToValueAtTime(cfg.AMP, at + length * 0.4);
+      gain.gain.linearRampToValueAtTime(0.0001, at + length);
+      osc.connect(gain);
+      gain.connect(this.music.gain);
+      osc.start(at);
+      vibrato.start(at);
+      osc.stop(at + length + 0.02);
+      vibrato.stop(at + length + 0.02);
+      at += length + 0.03 + this.random() * 0.05;
+    }
   }
 }
