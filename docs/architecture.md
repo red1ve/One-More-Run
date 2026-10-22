@@ -39,7 +39,7 @@ src/
 
 Core gameplay logic.
 
-Rare pickups (the yarn-ball shield) live in `segment.pickups` next to `segment.coins`: `Track.maybePlaceYarn` decides with a hash of the row id (never `this.random` or `Math.random`, so the track itself does not change), `collectPickups` takes them, `breakAhead` removes the walls near the cat when a shield breaks. `Track` keeps semantic segment types (`NORMAL`, `TWO_PATHS`, `DUAL_RISK`) separate from geometric pattern metadata. Non-straight patterns are authored as ordered gate rows and compiled into the same `paths` and `obstacles` rectangles used by rendering and collision.
+Moving parts other than the swaying planter live in `segment.movers` (door leaves with `door`, the cart with `cart`; `Track.placeMover` drives them in `Track.update`; an open leaf has `open = true` and is skipped by collision and close calls). Rare pickups (the yarn-ball shield) live in `segment.pickups` next to `segment.coins`: `Track.maybePlaceYarn` decides with a hash of the row id (never `this.random` or `Math.random`, so the track itself does not change), `collectPickups` takes them, `breakAhead` removes the walls near the cat when a shield breaks. `Track` keeps semantic segment types (`NORMAL`, `TWO_PATHS`, `DUAL_RISK`) separate from geometric pattern metadata. Non-straight patterns are authored as ordered gate rows and compiled into the same `paths` and `obstacles` rectangles used by rendering and collision.
 
 Full-route reachability propagates valid player-center intervals through every row using current track speed, player speed, player width, and the existing safety margin. Invalid patterns fall back to straight geometry without changing segment rewards or Choice semantics.
 

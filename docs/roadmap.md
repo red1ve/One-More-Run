@@ -98,7 +98,7 @@ Made from the owner's answers to the polish ideas list. Each item is still propo
 
 9. New, more memorable melody with a longer form (A–B–A′–C) so it does not tire in long sessions; 2–3 candidates as WAV previews first. Very quiet extras: day birdsong, night sparkles. Nothing intrusive; mute and the stage chime keep working.
 
-**Phase 4 — new obstacles and events**
+**Phase 4 — new obstacles and events** — DONE 2026-10-22 (branch `feat/polish-phase-4`, checked with `scripts/phase4a-check.mjs`; DOORS and CART as the two new row types, the golden-hour event; rules in `docs/business-rules.md`; waiting for the owner's test on a phone; the first skin now costs 20)
 
 10. Two or three new row types (for example gates that open and close, a crossing obstacle), each with its fairness checks at 300…1050 px/s. Golden-hour event: a short series of narrower rows with a coin trail.
 
