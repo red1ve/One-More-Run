@@ -39,7 +39,7 @@ src/
 
 Core gameplay logic.
 
-`Track` keeps semantic segment types (`NORMAL`, `TWO_PATHS`, `DUAL_RISK`) separate from geometric pattern metadata. Non-straight patterns are authored as ordered gate rows and compiled into the same `paths` and `obstacles` rectangles used by rendering and collision.
+Rare pickups (the yarn-ball shield) live in `segment.pickups` next to `segment.coins`: `Track.maybePlaceYarn` decides with a hash of the row id (never `this.random` or `Math.random`, so the track itself does not change), `collectPickups` takes them, `breakAhead` removes the walls near the cat when a shield breaks. `Track` keeps semantic segment types (`NORMAL`, `TWO_PATHS`, `DUAL_RISK`) separate from geometric pattern metadata. Non-straight patterns are authored as ordered gate rows and compiled into the same `paths` and `obstacles` rectangles used by rendering and collision.
 
 Full-route reachability propagates valid player-center intervals through every row using current track speed, player speed, player width, and the existing safety margin. Invalid patterns fall back to straight geometry without changing segment rewards or Choice semantics.
 
@@ -55,7 +55,7 @@ Painted art (hedge clumps, trees, planters, gates, bushes, props, pergola, sky) 
 
 ### services/
 
-External services and browser persistence.
+External services and browser persistence. `AudioService` plays the sounds and the music by Web Audio synthesis (no audio files): `MusicScore.js` holds the music as data (32 bars: melody, bass, arpeggio, long chord; checked by tests, silent), `CONFIG.MUSIC` the voices and the quiet birds (day) and crickets (night).
 
 Examples:
 
@@ -112,7 +112,7 @@ The RAF may continue for rendering, but gameplay updates return early while paus
 
 ### Persistence
 
-`StorageService` remains the immediate persistence and standalone fallback for best score, Coins, and mute. Phase 7 does not add cloud saves or secrets.
+`StorageService` remains the immediate persistence and standalone fallback for best score, the time of the best run (`bestRunTime`, for the record ribbon), Coins, and mute. Phase 7 does not add cloud saves or secrets.
 
 See `docs/yandex-integration.md` for SDK setup and Developer Console requirements.
 
