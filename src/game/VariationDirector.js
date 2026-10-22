@@ -1,5 +1,9 @@
 import { systemRandom } from './Random.js';
-import { CONFIG, getChoiceIntervalRange, getDualRiskChance, getSwayChance } from '../config.js';
+import { CONFIG, getCartChance, getChoiceIntervalRange, getDoorsChance, getDualRiskChance, getSwayChance } from '../config.js';
+import { timeOfDay } from './TimeOfDay.js';
+
+// Особые ряды: подвижные препятствия и золотой час. Два особых подряд не идут (кроме серии золотого часа).
+const SPECIAL_PATTERNS = ['SWAY', 'DOORS', 'CART', 'GOLDEN'];
 
 export class VariationDirector {
   constructor() {
@@ -18,6 +22,28 @@ export class VariationDirector {
     this.forcedPattern = null;
     this.lastDriftDirection = 0;
     this.forcedDriftDirection = 0;
+    this.goldenLeft = 0; // сколько рядов серии золотого часа ещё осталось поставить
+    this.goldenCycle = -1; // в каком по счёту цикле суток серия уже была
+  }
+
+  // Идёт серия золотого часа: следующие ряды обязательно обычные (Track.pickSegmentType).
+  goldenActive() {
+    return this.goldenLeft > 0;
+  }
+
+  // Золотой час: один раз за этап «золотой час» каждого цикла суток серия из CONFIG.GOLDEN.ROWS рядов подряд
+  // (серия начинается с первого подходящего ряда этапа: обычного, не сразу после развилки и особого ряда).
+  goldenStep(runTime, segmentType, lastType) {
+    if (segmentType !== 'NORMAL') return null;
+    if (this.goldenLeft <= 0) {
+      const stage = timeOfDay(runTime);
+      if (stage.name !== 'golden' || stage.cycle === this.goldenCycle) return null;
+      if (lastType === 'TWO_PATHS' || lastType === 'DUAL_RISK' || SPECIAL_PATTERNS.includes(this.lastPattern)) return null;
+      this.goldenCycle = stage.cycle;
+      this.goldenLeft = CONFIG.GOLDEN.ROWS;
+    }
+    this.goldenLeft -= 1;
+    return 'GOLDEN';
   }
 
   observe(segment, runTime) {
@@ -101,16 +127,25 @@ export class VariationDirector {
   choosePattern({ runTime, segmentType, lastType }) {
     if (this.forcedPattern) return this.forcedPattern;
 
-    // Качающееся кашпо: только в обычном ряду, не сразу после развилки (там передышка) и не два
-    // раза подряд. Пока шанс 0 (до CONFIG.SWAY.FROM), случайное число не тратится.
+    // Золотой час: серия узких рядов с монетами (один раз за этап суток).
+    const golden = this.goldenStep(runTime, segmentType, lastType);
+    if (golden) return golden;
+
+    // Особые ряды: только в обычном ряду, не сразу после развилки (там передышка) и не два раза подряд.
+    // Пока шанс 0 (до FROM каждого), случайное число не тратится. Первым проверяется качающееся кашпо (его
+    // порядок и расход случайных чисел не менялись), потом створки и тележка.
     if (
       segmentType === 'NORMAL'
       && lastType !== 'TWO_PATHS'
       && lastType !== 'DUAL_RISK'
-      && this.lastPattern !== 'SWAY'
+      && !SPECIAL_PATTERNS.includes(this.lastPattern)
     ) {
       const swayChance = getSwayChance(runTime);
       if (swayChance > 0 && this.random() < swayChance) return 'SWAY';
+      const doorsChance = getDoorsChance(runTime);
+      if (doorsChance > 0 && this.random() < doorsChance) return 'DOORS';
+      const cartChance = getCartChance(runTime);
+      if (cartChance > 0 && this.random() < cartChance) return 'CART';
     }
 
     let weights;

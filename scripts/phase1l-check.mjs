@@ -77,6 +77,9 @@ function drawPatterns(runTime, { count = 4000, segmentType = 'NORMAL', lastType 
   const counts = {};
   for (let i = 0; i < count; i += 1) {
     director.lastPattern = lastPattern;
+    // Золотой час (серия рядов раз за этап суток, шлифовка фаза 4) здесь не проверяется: он не тратит случайных чисел.
+    director.goldenCycle = Math.floor(runTime / CONFIG.TIME_OF_DAY.CYCLE);
+    director.goldenLeft = 0;
     const pattern = director.choosePattern({ runTime, segmentType, lastType });
     counts[pattern] = (counts[pattern] || 0) + 1;
   }
@@ -93,6 +96,7 @@ check('choice: no swaying row before 45 s and no extra random numbers are used',
   let calls = 0;
   const inner = createSeededRandom(1);
   director.random = () => { calls += 1; return inner(); };
+  director.goldenCycle = 0; // золотой час (фаза 4) выбирает ряд без случайных чисел и здесь не проверяется: цикл 0 «уже был»
   for (let i = 0; i < 200; i += 1) director.choosePattern({ runTime: 30, segmentType: 'NORMAL', lastType: 'NORMAL' });
   assert(calls === 200, `before 45 s each row must use exactly one random number, used ${calls / 200}`);
 });

@@ -127,13 +127,17 @@ for (const mode of ['schedule', 'autopilot']) {
 // Обновлены 2026-10-19 после «монеты чаще и у стен» (шлифовка, фаза 1): монеты берут числа из того же генератора случайных
 // чисел, поэтому трассы после первых монет другие (автопилот живёт 28.5 с, пройдено 63). schedule не изменился. На 60 и
 // 120 FPS вылет в одном и том же ряду (28.47 и 28.45 с, очки те же); монета, подобранная в последний кадр, считается у них по-разному.
+// Обновлены 2026-10-22 после «золотого часа» (шлифовка, фаза 4): серия из четырёх узких рядов на 16–32 с берёт случайные
+// числа из того же генератора, поэтому трасса после неё другая. Автопилот теперь вылетает на 30.3 с в обычной развилке
+// (не в новом ряду; ряды створок и тележки начинаются позже, с 50 с) и на всех трёх частотах кадров в одном и том же
+// месте (раньше на 10 FPS он доживал до 59 с). schedule не изменился.
 const EXPECTED = [
   { mode: 'schedule', fps: 60, crashAt: 5.5833, passed: 2, score: 65, coins: 0 },
   { mode: 'schedule', fps: 10, crashAt: 5.575, passed: 2, score: 65, coins: 0 },
   { mode: 'schedule', fps: 120, crashAt: 5.5833, passed: 2, score: 65, coins: 0 },
-  { mode: 'autopilot', fps: 60, crashAt: 28.4667, passed: 63, score: 504, coins: 1 },
-  { mode: 'autopilot', fps: 10, crashAt: 59.025, passed: 225, score: 1365, coins: 5 },
-  { mode: 'autopilot', fps: 120, crashAt: 28.45, passed: 63, score: 504, coins: 0 }
+  { mode: 'autopilot', fps: 60, crashAt: 30.2833, passed: 67, score: 542, coins: 1 },
+  { mode: 'autopilot', fps: 10, crashAt: 30.2667, passed: 67, score: 552, coins: 0 },
+  { mode: 'autopilot', fps: 120, crashAt: 30.275, passed: 67, score: 542, coins: 0 }
 ];
 
 if (process.argv.includes('--print')) {

@@ -983,16 +983,27 @@ export class GardenArt {
     if (!(x1 > x0)) return;
     const ctx = this.ctx;
     const mid = (x0 + x1) / 2;
-    const sway = planter.sway;
-    const peak = (sway.range / 2) * ((Math.PI * 2) / sway.period);
-    const lean = Math.max(-1, Math.min(1, (planter.vx || 0) / peak)) * SWAY_LEAN;
-    if (occ.state === 'VISIBLE') this.contactShadow(mid, groundY + 1, Math.max(16, x1 - x0), prop.screenY);
+    // Подвижные препятствия рисуются одинаково: качающееся кашпо (sway), тележка (cart) и створка калитки (door).
+    // Кашпо и тележка наклоняются по ходу движения; створка не наклоняется, а опускается и бледнеет, когда открыта
+    // (rise 1 — закрыта, 0 — открыта): кот проходит по ней, и на картинке она уже «в земле».
+    let lean = 0;
+    if (planter.cart) {
+      const peak = CONFIG.CART.SWEEP * CONFIG.TRACK_SPEED_MAX;
+      lean = Math.max(-1, Math.min(1, (planter.vx || 0) / peak)) * SWAY_LEAN;
+    } else if (!planter.door) {
+      const sway = planter.sway;
+      const peak = (sway.range / 2) * ((Math.PI * 2) / sway.period);
+      lean = Math.max(-1, Math.min(1, (planter.vx || 0) / peak)) * SWAY_LEAN;
+    }
+    const rise = planter.door ? Math.max(0, Math.min(1, Number.isFinite(planter.rise) ? planter.rise : 1)) : 1;
+    if (occ.state === 'VISIBLE' && rise > 0.5) this.contactShadow(mid, groundY + 1, Math.max(16, x1 - x0), prop.screenY);
     ctx.save();
+    if (rise < 1) ctx.globalAlpha *= 0.4 + 0.6 * rise;
     ctx.translate(mid, groundY);
     ctx.rotate(lean);
     ctx.translate(-mid, -groundY);
-    this.obstacleArt.drawSpan('planter', x0, x1, groundY, this.catH(), scale, prop.lookSeed + 11.3,
-      road.roadLeft, road.roadRight);
+    this.obstacleArt.drawSpan(planter.door ? 'gate' : 'planter', x0, x1, groundY, this.catH(), scale * (0.22 + 0.78 * rise),
+      prop.lookSeed + 11.3 + (planter.door ? planter.door.index * 3.1 : 0), road.roadLeft, road.roadRight);
     ctx.restore();
   }
 
