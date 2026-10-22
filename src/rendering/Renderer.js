@@ -801,7 +801,7 @@ export class Renderer {
     return Renderer.inRect(this.dailyButton, x, y);
   }
 
-  // Кнопки под звуком: «магазин», «задания», «таблица лидеров», «ярлык» и «в меню». «Лидеры» и «ярлык» рисуются,
+  // Кнопки под звуком: «магазин», «задания», «достижения», «таблица лидеров», «ярлык» и «в меню». «Лидеры» и «ярлык» рисуются,
   // только если платформа их разрешает; «задания» — когда передан show.quests ({ done, total }), а когда выполнены
   // все, кнопка зелёная; «в меню» — на экране проигрыша (show.menu). По две в ряд, а при show.perRow = 3 по три:
   // тогда ряд из трёх кнопок уже, без значков (экран проигрыша тесный, второго ряда на нём нет).
@@ -810,6 +810,7 @@ export class Renderer {
     const items = [];
     if (show.shop) items.push('shop');
     if (show.quests) items.push('quests');
+    if (show.achievements) items.push('achievements');
     if (show.leaderboard) items.push('leaderboard');
     if (show.shortcut) items.push('shortcut');
     if (show.menu) items.push('menu');
@@ -829,7 +830,7 @@ export class Renderer {
       const left = cx - (w * row.length + gap * (row.length - 1)) / 2;
       row.forEach((name, index) => {
         const x = left + index * (w + gap) + w / 2;
-        const allDone = name === 'quests' && show.quests.done >= show.quests.total;
+        const allDone = (name === 'quests' || name === 'achievements') && show[name].done >= show[name].total;
         this.screenPill(x, y, w, h, allDone ? CONFIG.COLORS.SafeLawn : CONFIG.COLORS.SkyPaper);
         if (compact) {
           const label = name === 'quests'
@@ -842,6 +843,9 @@ export class Renderer {
         } else if (name === 'quests') {
           this.garden.hudCheckIcon(x - w / 2 + 28, y, 14);
           this.fitText(t('quest.button', { done: show.quests.done, total: show.quests.total }), x + 14, y + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
+        } else if (name === 'achievements') {
+          this.garden.hudStarIcon(x - w / 2 + 28, y, 14);
+          this.fitText(t('achievements.button'), x + 14, y + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
         } else if (name === 'shop') {
           this.garden.hudCoinIcon(x - w / 2 + 28, y, 14);
           this.fitText(t('shop.button'), x + 14, y + 7, 600, 19, w - 76, CONFIG.COLORS.UI_TEXT);
@@ -1068,24 +1072,7 @@ export class Renderer {
     const inner = 20;
     view.quests.forEach((quest, index) => {
       const y = top + index * rowStep;
-      ctx.fillStyle = CONFIG.COLORS.ShadowDust;
-      this.garden.roundedRectPath(cellX + 3, y + 4, cellW, cellH, 18);
-      ctx.fill();
-      ctx.fillStyle = CONFIG.COLORS.FloorSand;
-      this.garden.roundedRectPath(cellX, y, cellW, cellH, 18);
-      ctx.fill();
-      if (quest.done) {
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = CONFIG.COLORS.SafeLawn;
-        this.garden.roundedRectPath(cellX, y, cellW, cellH, 18);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-      ctx.strokeStyle = CONFIG.COLORS.InkBrown;
-      ctx.lineWidth = 3;
-      ctx.lineJoin = 'round';
-      this.garden.roundedRectPath(cellX, y, cellW, cellH, 18);
-      ctx.stroke();
+      this.drawListCell(cellX, y, cellW, cellH, quest.done, 18);
 
       // Название и «за день / за один забег» слева, награда или «готово» справа.
       const pillW = 116;
@@ -1135,6 +1122,80 @@ export class Renderer {
   // Нажата кнопка «закрыть» в окне заданий?
   hitQuestsButton(x, y) {
     return Renderer.inRect(this.questsButtons?.close, x, y);
+  }
+
+  // Клетка списка в окнах заданий и достижений: тень, песочная заливка, зелёный налёт у выполненного, обводка.
+  drawListCell(x, y, w, h, done, radius) {
+    const ctx = this.ctx;
+    ctx.fillStyle = CONFIG.COLORS.ShadowDust;
+    this.garden.roundedRectPath(x + 3, y + 4, w, h, radius);
+    ctx.fill();
+    ctx.fillStyle = CONFIG.COLORS.FloorSand;
+    this.garden.roundedRectPath(x, y, w, h, radius);
+    ctx.fill();
+    if (done) {
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = CONFIG.COLORS.SafeLawn;
+      this.garden.roundedRectPath(x, y, w, h, radius);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.strokeStyle = CONFIG.COLORS.InkBrown;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    this.garden.roundedRectPath(x, y, w, h, radius);
+    ctx.stroke();
+  }
+
+  // Окно достижений поверх стартового экрана. view: { items: [{ id, done, progress, target, number }], done, total }.
+  // Десять строк: значок (галочка у полученного, пустой кружок у остальных), название, описание с числом цели и,
+  // у накопительных ещё не полученных, числа «сколько уже / сколько нужно» справа.
+  drawAchievements(view) {
+    const cx = this.width / 2;
+    const cardX = 36;
+    const cardW = this.width - cardX * 2;
+    const cardY = 80;
+    const cardH = 800;
+    this.achievementsButtons = { close: null };
+
+    this.dimScreen(0.45);
+    this.garden.plate(cardX, cardY, cardW, cardH, 26);
+    this.fitText(t('achievements.title'), cx, cardY + 62, 700, 40, cardW - 56, CONFIG.COLORS.UI_TEXT);
+    this.fitText(t('achievements.count', { done: view.done, total: view.total }), cx, cardY + 108, 600, 17, cardW - 56, CONFIG.COLORS.UI_HUD);
+
+    const cellX = cardX + 14;
+    const cellW = cardW - 28;
+    const cellH = 52;
+    const rowStep = 58;
+    const top = cardY + 132;
+    const inner = 16;
+    const badgeR = 15;
+    const textOffset = inner + badgeR * 2 + 14;
+    view.items.forEach((item, index) => {
+      const y = top + index * rowStep;
+      this.drawListCell(cellX, y, cellW, cellH, item.done, 16);
+      const badgeX = cellX + inner + badgeR;
+      const badgeY = y + cellH / 2;
+      if (item.done) this.garden.hudCheckIcon(badgeX, badgeY, badgeR);
+      else this.garden.hudIconDisc(badgeX, badgeY, badgeR, CONFIG.COLORS.SkyPaper);
+
+      // Числа справа только у накопительных, которые ещё не получены.
+      const numbers = !item.done && item.target ? t('achievements.progress', { p: item.progress, n: item.target }) : null;
+      const numbersW = numbers ? 96 : 0;
+      const textW = cellW - textOffset - inner - (numbers ? numbersW + 8 : 0);
+      this.fitText(t(`achievements.name.${item.id}`), cellX + textOffset, y + 23, 700, 20, textW, CONFIG.COLORS.UI_TEXT, 'left');
+      this.fitText(t(`achievements.desc.${item.id}`, { n: item.number }), cellX + textOffset, y + 43, 600, 15, textW, CONFIG.COLORS.UI_HUD, 'left');
+      if (numbers) this.fitText(numbers, cellX + cellW - inner, y + 32, 700, 18, numbersW, CONFIG.COLORS.UI_TEXT, 'right');
+    });
+
+    this.screenPill(cx, cardY + cardH - 48, 240, 56, CONFIG.COLORS.CoinAmber);
+    this.fitText(t('achievements.close'), cx, cardY + cardH - 39, 700, 24, 210, CONFIG.COLORS.UI_TEXT);
+    this.achievementsButtons.close = { x: cx - 124, y: cardY + cardH - 80, w: 248, h: 64 };
+  }
+
+  // Нажата кнопка «закрыть» в окне достижений?
+  hitAchievementsButton(x, y) {
+    return Renderer.inRect(this.achievementsButtons?.close, x, y);
   }
 
   // Строка, обрезанная до ширины maxWidth (px) с многоточием.

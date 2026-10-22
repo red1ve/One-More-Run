@@ -77,6 +77,38 @@
       "multiplier": "REACH A MULTIPLIER"
     }
   },
+  "achievements": {
+    "button": "ACHIEVEMENTS",
+    "title": "ACHIEVEMENTS",
+    "count": "EARNED {done} OF {total}",
+    "close": "CLOSE",
+    "toast": "ACHIEVEMENT: {name}",
+    "progress": "{p} / {n}",
+    "name": {
+      "longRun": "LONG RUN",
+      "bold": "BOLD CAT",
+      "closeCalls": "CLOSE SHAVE",
+      "cleanRun": "CLEAN RUN",
+      "topMultiplier": "MAXED OUT",
+      "piggyBank": "COIN HOARDER",
+      "wardrobe": "WARDROBE",
+      "fullWardrobe": "FULL WARDROBE",
+      "diligent": "BUSY CAT",
+      "weekStreak": "WEEK OF RUNS"
+    },
+    "desc": {
+      "longRun": "SECONDS IN ONE RUN: {n}",
+      "bold": "NARROW PATHS IN A ROW: {n}",
+      "closeCalls": "CLOSE CALLS IN A ROW: {n}",
+      "cleanRun": "SECONDS WITHOUT A COIN: {n}",
+      "topMultiplier": "MULTIPLIER x{n}",
+      "piggyBank": "COINS EARNED IN TOTAL: {n}",
+      "wardrobe": "SKINS IN THE COLLECTION: {n}",
+      "fullWardrobe": "ALL SKINS EXCEPT SEASONAL",
+      "diligent": "ALL QUESTS, DAYS IN A ROW: {n}",
+      "weekStreak": "DAILY RUN, DAYS IN A ROW: {n}"
+    }
+  },
   "skin": {
     "classic": "CLASSIC",
     "ginger": "GINGER",
